@@ -81,3 +81,14 @@ func (e *Entry) add(path []string, revReplica string, revGeneration int, modTime
 		return nil
 	}
 }
+
+// Get returns the named child, or nil if it doesn't exist.
+func (e *Entry) Get(name string) *Entry {
+	return e.children[name]
+}
+
+// Equal returns true if both entries are of the same revision (replica and
+// generation).
+func (e *Entry) Equal(e2 *Entry) bool {
+	return e.revReplica == e2.revReplica && e.revGeneration == e2.revGeneration
+}

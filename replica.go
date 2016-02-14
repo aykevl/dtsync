@@ -183,3 +183,7 @@ func (r *Replica) load(file io.Reader) error {
 
 	return nil
 }
+
+func (r *Replica) Root() *Entry {
+	return r.rootEntry
+}

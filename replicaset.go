@@ -34,13 +34,11 @@ import (
 
 // ReplicaSet is a combination of two replicas
 type ReplicaSet struct {
-	set map[string]*Replica
+	set [2]*Replica
 }
 
 func LoadReplicaSet(file1, file2 io.Reader) (*ReplicaSet, error) {
-	rs := &ReplicaSet{
-		set: make(map[string]*Replica, 2),
-	}
+	rs := &ReplicaSet{}
 	replica1, err := loadReplica(rs, file1)
 	if err != nil {
 		return nil, err
@@ -49,7 +47,12 @@ func LoadReplicaSet(file1, file2 io.Reader) (*ReplicaSet, error) {
 	if err != nil {
 		return nil, err
 	}
-	rs.set[replica1.identity] = replica1
-	rs.set[replica2.identity] = replica2
+	rs.set[0] = replica1
+	rs.set[1] = replica2
 	return rs, nil
+}
+
+// Get returns the replica by index
+func (rs *ReplicaSet) Get(index int) *Replica {
+	return rs.set[index]
 }

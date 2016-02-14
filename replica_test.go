@@ -40,7 +40,7 @@ Peers: second
 
 path	modtime	replica	generation
 file1.txt	2013-01-03T19:04:31.721713001Z	0	1
-quite-long-filename.html	2012-12-18T20:25:21.119862001Z	0	2
+file2.html	2012-12-18T20:25:21.119862001Z	0	2
 file3.jpeg	2012-12-18T20:25:21.099852001Z	1	1
 `
 
@@ -51,8 +51,8 @@ Peers: first
 
 path	modtime	replica	generation
 file1.txt	2013-01-03T19:04:31.721713001Z	1	1
-quite-long-filename.html	2012-12-18T20:25:21.119862001Z	1	2
-file3.jpeg	2012-12-18T20:25:21.099852001Z	0	1
+file2.html	2012-12-18T20:25:21.119862001Z	1	1
+file3.jpeg	2012-12-18T20:25:21.099852001Z	0	2
 new.txt	2016-02-14T16:30:26.719348761+01:00	0	5
 `
 
@@ -64,5 +64,17 @@ func TestReplica(t *testing.T) {
 	if err != nil {
 		t.Fatal("failed to load replicas:", err)
 	}
-	_ = rs
+
+	root1 := rs.Get(0).Root()
+	root2 := rs.Get(1).Root()
+
+	if !root1.Get("file1.txt").Equal(root2.Get("file1.txt")) {
+		t.Error("file1.txt is expected to be equal")
+	}
+
+	for _, fn := range []string{"file2.html", "file3.jpeg"} {
+		if root1.Get(fn).Equal(root2.Get(fn)) {
+			t.Error(fn + " is expected to be unequal")
+		}
+	}
 }
