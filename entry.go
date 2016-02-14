@@ -92,3 +92,22 @@ func (e *Entry) Get(name string) *Entry {
 func (e *Entry) Equal(e2 *Entry) bool {
 	return e.revReplica == e2.revReplica && e.revGeneration == e2.revGeneration
 }
+
+// After returns true if this entry was modified after the other.
+func (e *Entry) After(e2 *Entry) bool {
+	otherGeneration, ok := e2.replica.peerGenerations[e.revReplica]
+	if !ok {
+		return true
+	}
+	return e.revGeneration > otherGeneration
+}
+
+// Before returns true if this entry is modified before the other.
+func (e *Entry) Before(e2 *Entry) bool {
+	return e2.After(e)
+}
+
+// Conflict returns true if both entries are modified.
+func (e *Entry) Conflict(e2 *Entry) bool {
+	return e.After(e2) && e2.After(e)
+}

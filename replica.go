@@ -44,6 +44,7 @@ var (
 	ErrNoIdentity             = errors.New("rtdiff: no Identity header")
 	ErrInvalidGeneration      = errors.New("rtdiff: invalid or missing Generation header")
 	ErrInvalidPeers           = errors.New("rtdiff: invalid or missing Peers header")
+	ErrInvalidPeerGenerations = errors.New("rtdiff: invalid or missing PeerGenerations header")
 	ErrColumns                = errors.New("rtdiff: missing columns")
 	ErrInvalidReplicaIndex    = errors.New("rtdiff: invalid or missing replica index in entry row")
 	ErrInvalidEntryGeneration = errors.New("rtdiff: invalid generation number in entry row")
@@ -61,8 +62,7 @@ type Replica struct {
 
 func loadReplica(replicaSet *ReplicaSet, file io.Reader) (*Replica, error) {
 	r := &Replica{
-		peerGenerations: make(map[string]int, 2),
-		replicaSet:      replicaSet,
+		replicaSet: replicaSet,
 		rootEntry: &Entry{
 			children: make(map[string]*Entry),
 		},
@@ -112,15 +112,37 @@ func (r *Replica) load(file io.Reader) error {
 	}
 	r.generation = generation
 
+	// Get peers with generations
 	peersString := msg.Header.Get("Peers")
 	if peersString == "" {
 		return ErrInvalidPeers
 	}
 	peersList := strings.Split(peersString, ",")
-	peers := make([]string, len(peersList)+1)
+	peerGenerationsString := msg.Header.Get("PeerGenerations")
+	if peerGenerationsString == "" {
+		return ErrInvalidPeerGenerations
+	}
+	peerGenerationsList := strings.Split(peerGenerationsString, ",")
+	if len(peersList) != len(peerGenerationsList) {
+		return ErrInvalidPeerGenerations
+	}
+
+	// Create the temporary map of {index: id}
+	peers := make(map[int]string, len(peersList)+1)
 	peers[0] = identity
 	for i, peerString := range peersList {
 		peers[i+1] = peerString
+	}
+
+	// Make the {peer: generation} map
+	r.peerGenerations = make(map[string]int, len(peersList)+1)
+	r.peerGenerations[identity] = generation
+	for i, peerGenerationString := range peerGenerationsList {
+		gen, err := strconv.Atoi(peerGenerationString)
+		if err != nil {
+			return ErrInvalidPeerGenerations
+		}
+		r.peerGenerations[peersList[i]] = gen
 	}
 
 	reader := textproto.NewReader(msg.Body.(*bufio.Reader))
@@ -164,7 +186,7 @@ func (r *Replica) load(file io.Reader) error {
 		}
 		revReplica := peers[revReplicaIndex]
 		revGeneration, err := strconv.Atoi(fields[columns["generation"]])
-		if err != nil {
+		if err != nil || revGeneration < 1 || revGeneration > r.peerGenerations[peers[revReplicaIndex]] {
 			return ErrInvalidEntryGeneration
 		}
 		// Note: in the future, we might want to use time.RFC3339Nano

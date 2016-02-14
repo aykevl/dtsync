@@ -37,22 +37,26 @@ var status1 = `Content-Type: text/tab-separated-values
 Identity: first
 Generation: 2
 Peers: second
+PeerGenerations: 1
 
 path	modtime	replica	generation
 file1.txt	2013-01-03T19:04:31.721713001Z	0	1
 file2.html	2012-12-18T20:25:21.119862001Z	0	2
 file3.jpeg	2012-12-18T20:25:21.099852001Z	1	1
+conflict.txt	2016-02-14T19:10:10.327687803+01:00	0	2
 `
 
 var status2 = `Content-Type: text/tab-separated-values
 Identity: second
 Generation: 5
 Peers: first
+PeerGenerations: 1
 
 path	modtime	replica	generation
 file1.txt	2013-01-03T19:04:31.721713001Z	1	1
 file2.html	2012-12-18T20:25:21.119862001Z	1	1
 file3.jpeg	2012-12-18T20:25:21.099852001Z	0	2
+conflict.txt	2016-02-14T19:10:10.327687803+01:00	0	3
 new.txt	2016-02-14T16:30:26.719348761+01:00	0	5
 `
 
@@ -68,13 +72,33 @@ func TestReplica(t *testing.T) {
 	root1 := rs.Get(0).Root()
 	root2 := rs.Get(1).Root()
 
-	if !root1.Get("file1.txt").Equal(root2.Get("file1.txt")) {
-		t.Error("file1.txt is expected to be equal")
+	equalityTests := []struct {
+		name     string
+		equal    bool
+		after    bool
+		before   bool
+		conflict bool
+	}{
+		{"file1.txt", true, false, false, false},
+		{"file2.html", false, true, false, false},
+		{"file3.jpeg", false, false, true, false},
+		{"conflict.txt", false, true, true, true},
 	}
 
-	for _, fn := range []string{"file2.html", "file3.jpeg"} {
-		if root1.Get(fn).Equal(root2.Get(fn)) {
-			t.Error(fn + " is expected to be unequal")
+	for _, tc := range equalityTests {
+		file1 := root1.Get(tc.name)
+		file2 := root2.Get(tc.name)
+		if file1.Equal(file2) != tc.equal {
+			t.Error(tc.name+": expected .Equal:", tc.equal)
+		}
+		if file1.After(file2) != tc.after {
+			t.Error(tc.name+": expected .After:", tc.after)
+		}
+		if file1.Before(file2) != tc.before {
+			t.Error(tc.name+": expected .Before:", tc.before)
+		}
+		if file1.Conflict(file2) != tc.conflict {
+			t.Error(tc.name+": expected .Conflict:", tc.conflict)
 		}
 	}
 }
