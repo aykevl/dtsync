@@ -29,8 +29,8 @@
 package rtdiff
 
 import (
-	"testing"
 	"strings"
+	"testing"
 )
 
 var status1 = `Content-Type: text/tab-separated-values
