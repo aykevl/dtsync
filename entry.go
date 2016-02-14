@@ -1,4 +1,4 @@
-// rtdiff_test.go
+// entry.go
 //
 // Copyright (c) 2016, Ayke van Laethem
 // All rights reserved.
@@ -27,3 +27,57 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 package rtdiff
+
+import (
+	"time"
+)
+
+// An Entry is one object (row) in a Replica. It belongs to one Replica.
+type Entry struct {
+	name string
+	// rev*: replica and it's generation at that moment where this Entry last changed
+	revReplica    string
+	revGeneration int
+	modTime       time.Time
+	children      map[string]*Entry
+	parent        *Entry
+	replica       *Replica
+}
+
+// String function, for debugging purposes
+func (e *Entry) String() string {
+	return "Entry(" + e.name + ")"
+}
+
+// Add new entry by recursively finding the parent
+func (e *Entry) add(path []string, revReplica string, revGeneration int, modTime time.Time) error {
+	if path[0] == "" {
+		return ErrInvalidPath
+	}
+	if len(path) > 1 {
+		child, ok := e.children[path[0]]
+		if !ok {
+			// child does not exist
+			// or: the path has a parent that hasn't yet been scanned
+			return ErrInvalidPath
+		}
+		return child.add(path[1:], revReplica, revGeneration, modTime)
+	} else {
+		_, ok := e.children[path[0]]
+		if ok {
+			// duplicate path
+			return ErrInvalidPath
+		}
+		newEntry := &Entry{
+			name:          path[0],
+			revReplica:    revReplica,
+			revGeneration: revGeneration,
+			modTime:       modTime,
+			children:      make(map[string]*Entry),
+			parent:        e,
+			replica:       e.replica,
+		}
+		e.children[newEntry.name] = newEntry
+		return nil
+	}
+}

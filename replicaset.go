@@ -1,4 +1,4 @@
-// rtdiff.go
+// replicaset.go
 //
 // Copyright (c) 2016, Ayke van Laethem
 // All rights reserved.
@@ -28,3 +28,28 @@
 
 package rtdiff
 
+import (
+	"io"
+)
+
+// ReplicaSet is a combination of two replicas
+type ReplicaSet struct {
+	set map[string]*Replica
+}
+
+func LoadReplicaSet(file1, file2 io.Reader) (*ReplicaSet, error) {
+	rs := &ReplicaSet{
+		set: make(map[string]*Replica, 2),
+	}
+	replica1, err := loadReplica(rs, file1)
+	if err != nil {
+		return nil, err
+	}
+	replica2, err := loadReplica(rs, file2)
+	if err != nil {
+		return nil, err
+	}
+	rs.set[replica1.identity] = replica1
+	rs.set[replica2.identity] = replica2
+	return rs, nil
+}
