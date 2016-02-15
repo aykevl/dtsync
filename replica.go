@@ -33,6 +33,7 @@ import (
 	"errors"
 	"io"
 	"net/textproto"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -75,6 +76,10 @@ func loadReplica(replicaSet *ReplicaSet, file io.Reader) (*Replica, error) {
 	}
 
 	return r, nil
+}
+
+func (r *Replica) String() string {
+	return "Replica(" + r.identity + "," + strconv.Itoa(r.generation) + ")"
 }
 
 func (r *Replica) Set() *ReplicaSet {
@@ -199,4 +204,86 @@ func (r *Replica) load(file io.Reader) error {
 
 func (r *Replica) Root() *Entry {
 	return r.rootEntry
+}
+
+func (r *Replica) Serialize(out io.Writer) error {
+	peerList := make([]string, 0, len(r.peerGenerations)-1)
+	peerGenerationList := make([]string, 0, len(r.peerGenerations)-1)
+	peerIndex := make(map[string]int, len(r.peerGenerations)-1)
+	for id, gen := range r.peerGenerations {
+		if id == r.identity {
+			// Do not save ourselves as a peer
+			continue
+		}
+		peerList = append(peerList, id)
+		peerGenerationList = append(peerGenerationList, strconv.Itoa(gen))
+		peerIndex[id] = len(peerList) // peer index, starting with 1 (0 means ourself)
+	}
+
+	writer := bufio.NewWriter(out)
+	// Don't look at the error return values, errors will be caught in .Flush().
+	writeKeyValue(writer, "Content-Type", "text/tab-separated-values")
+	writeKeyValue(writer, "Identity", r.identity)
+	writeKeyValue(writer, "Generation", strconv.Itoa(r.generation))
+	writeKeyValue(writer, "Peers", strings.Join(peerList, ""))
+	writeKeyValue(writer, "PeerGenerations", strings.Join(peerGenerationList, ""))
+	writer.WriteByte('\n')
+
+	tsvWriter, err := unitsv.NewWriter(writer, []string{"path", "modtime", "replica", "generation"})
+	if err != nil {
+		return err
+	}
+
+	err = r.rootEntry.serializeChildren(tsvWriter, peerIndex, "")
+	if err != nil {
+		return err
+	}
+
+	// unitsv uses a bufio internally. bufio.NewBuffer does not return a new
+	// buffer if none is needed, so this call isn't really necessary.
+	err = tsvWriter.Flush()
+	if err != nil {
+		return err
+	}
+
+	// only now look at the error
+	return writer.Flush()
+}
+
+// Write the children of this entry recursively to the TSV file.
+// It has this odd way of functioning (writing the children without writing
+// itself) because that makes it easier to write the root entry without copying
+// (DRY).
+func (e *Entry) serializeChildren(tsvWriter *unitsv.Writer, peerIndex map[string]int, path string) error {
+	// Put this function in replica.go as it is most closely related to the
+	// parsing and serializing code here.
+
+	names := make([]string, 0, len(e.children))
+	for name, _ := range e.children {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		child := e.children[name]
+		var childpath string
+		if path == "" {
+			childpath = name
+		} else {
+			childpath = path + "/" + name
+		}
+		err := tsvWriter.WriteRow([]string{childpath, child.modTime.Format(time.RFC3339Nano), strconv.Itoa(peerIndex[child.revReplica]), strconv.Itoa(child.revGeneration)})
+		err = e.children[name].serializeChildren(tsvWriter, peerIndex, childpath)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// Write a simple MIME key/value line to the output.
+// The line ends in \n, while most text based protocols use \r\n.
+func writeKeyValue(out *bufio.Writer, key, value string) error {
+	_, err := out.WriteString(key + ": " + value + "\n")
+	return err
 }

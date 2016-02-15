@@ -40,10 +40,12 @@ Peers: second
 PeerGenerations: 1
 
 path	modtime	replica	generation
+conflict.txt	2016-02-14T19:10:10.327687803+01:00	0	2
+dir	2016-02-15T19:17:51.35414374+01:00	0	1
+dir/file.txt	2016-02-15T19:18:18.290458876+01:00	0	1
 file1.txt	2013-01-03T19:04:31.721713001Z	0	1
 file2.html	2012-12-18T20:25:21.119862001Z	0	2
 file3.jpeg	2012-12-18T20:25:21.099852001Z	1	1
-conflict.txt	2016-02-14T19:10:10.327687803+01:00	0	2
 `
 
 var status2 = `Content-Type: text/tab-separated-values
@@ -53,10 +55,12 @@ Peers: first
 PeerGenerations: 1
 
 path	modtime	replica	generation
+conflict.txt	2016-02-14T19:10:10.327687803+01:00	0	3
+dir	2016-02-15T19:17:51.35414374+01:00	0	1
+dir/file.txt	2016-02-15T19:18:18.290458876+01:00	0	1
 file1.txt	2013-01-03T19:04:31.721713001Z	1	1
 file2.html	2012-12-18T20:25:21.119862001Z	1	1
 file3.jpeg	2012-12-18T20:25:21.099852001Z	0	2
-conflict.txt	2016-02-14T19:10:10.327687803+01:00	0	3
 new.txt	2016-02-14T16:30:26.719348761+01:00	0	5
 `
 
@@ -99,6 +103,23 @@ func TestReplica(t *testing.T) {
 		}
 		if file1.Conflict(file2) != tc.conflict {
 			t.Error(tc.name+": expected .Conflict:", tc.conflict)
+		}
+	}
+
+	saveTests := []struct {
+		replica *Replica
+		output  string
+	}{
+		{rs.Get(0), status1},
+		{rs.Get(1), status2},
+	}
+
+	for _, tc := range saveTests {
+		buf := &bytes.Buffer{}
+		tc.replica.Serialize(buf)
+		output := buf.Bytes()
+		if !bytes.Equal(output, []byte(tc.output)) {
+			t.Errorf("replica %s does not have the expected output.\n\n*** Expected:\n%s\n\n*** Actual:\n%s", tc.replica, tc.output, string(output))
 		}
 	}
 }
