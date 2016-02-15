@@ -33,10 +33,11 @@ import (
 	"errors"
 	"io"
 	"net/mail"
-	"net/textproto"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/aykevl/unitsv"
 )
 
 var (
@@ -45,7 +46,6 @@ var (
 	ErrInvalidGeneration      = errors.New("rtdiff: invalid or missing Generation header")
 	ErrInvalidPeers           = errors.New("rtdiff: invalid or missing Peers header")
 	ErrInvalidPeerGenerations = errors.New("rtdiff: invalid or missing PeerGenerations header")
-	ErrColumns                = errors.New("rtdiff: missing columns")
 	ErrInvalidReplicaIndex    = errors.New("rtdiff: invalid or missing replica index in entry row")
 	ErrInvalidEntryGeneration = errors.New("rtdiff: invalid generation number in entry row")
 	ErrInvalidPath            = errors.New("rtdiff: invalid or missing path in entry row")
@@ -145,39 +145,28 @@ func (r *Replica) load(file io.Reader) error {
 		r.peerGenerations[peersList[i]] = gen
 	}
 
-	reader := textproto.NewReader(msg.Body.(*bufio.Reader))
+	const (
+		TSV_PATH = iota
+		TSV_MODTIME
+		TSV_REPLICA
+		TSV_GENERATION
+	)
 
-	header, err := reader.ReadLine()
-	if err != nil && err != io.EOF {
-		return err
-	}
-	columns := make(map[string]int, 4)
-	fields, err := splitTsvFields(header)
+	tsvReader, err := unitsv.NewReader(msg.Body.(*bufio.Reader), []string{"path", "modtime", "replica", "generation"})
 	if err != nil {
 		return err
 	}
-	for i, column := range fields {
-		columns[column] = i
-	}
-
-	// ensure all required columns are present
-	for _, column := range []string{"path", "modtime", "replica", "generation"} {
-		if _, ok := columns[column]; !ok {
-			return ErrColumns
-		}
-	}
 
 	// now actually parse this thing
-	for line, err := reader.ReadLine(); err != io.EOF; line, err = reader.ReadLine() {
+	for {
+		fields, err := tsvReader.ReadRow()
 		if err != nil {
+			if err == io.EOF {
+				break
+			}
 			return err
 		}
-		fields, err := splitTsvFields(line)
-		if err != nil {
-			return err
-		}
-
-		revReplicaIndex, err := strconv.Atoi(fields[columns["replica"]])
+		revReplicaIndex, err := strconv.Atoi(fields[TSV_REPLICA])
 		if err != nil {
 			return ErrInvalidReplicaIndex
 		}
@@ -185,16 +174,16 @@ func (r *Replica) load(file io.Reader) error {
 			return ErrInvalidReplicaIndex
 		}
 		revReplica := peers[revReplicaIndex]
-		revGeneration, err := strconv.Atoi(fields[columns["generation"]])
+		revGeneration, err := strconv.Atoi(fields[TSV_GENERATION])
 		if err != nil || revGeneration < 1 || revGeneration > r.peerGenerations[peers[revReplicaIndex]] {
 			return ErrInvalidEntryGeneration
 		}
 		// Note: in the future, we might want to use time.RFC3339Nano
-		modTime, err := time.Parse(time.RFC3339, fields[columns["modtime"]])
+		modTime, err := time.Parse(time.RFC3339, fields[TSV_MODTIME])
 		if err != nil {
 			return err
 		}
-		path := strings.Split(fields[columns["path"]], "/")
+		path := strings.Split(fields[TSV_PATH], "/")
 
 		// now add this entry
 		err = r.rootEntry.add(path, revReplica, revGeneration, modTime)
