@@ -32,7 +32,7 @@ import (
 	"bufio"
 	"errors"
 	"io"
-	"net/mail"
+	"net/textproto"
 	"strconv"
 	"strings"
 	"time"
@@ -87,22 +87,24 @@ func (r *Replica) load(file io.Reader) error {
 		panic("replica already loaded")
 	}
 
-	msg, err := mail.ReadMessage(file)
+	reader := bufio.NewReader(file)
+
+	header, err := textproto.NewReader(reader).ReadMIMEHeader()
 	if err != nil {
 		return err
 	}
 
-	if msg.Header.Get("Content-Type") != "text/tab-separated-values" {
+	if header.Get("Content-Type") != "text/tab-separated-values" {
 		return ErrContentType
 	}
 
-	identity := msg.Header.Get("Identity")
+	identity := header.Get("Identity")
 	if identity == "" {
 		return ErrNoIdentity
 	}
 	r.identity = identity
 
-	generationString := msg.Header.Get("Generation")
+	generationString := header.Get("Generation")
 	if generationString == "" {
 		return ErrInvalidGeneration
 	}
@@ -113,12 +115,12 @@ func (r *Replica) load(file io.Reader) error {
 	r.generation = generation
 
 	// Get peers with generations
-	peersString := msg.Header.Get("Peers")
+	peersString := header.Get("Peers")
 	if peersString == "" {
 		return ErrInvalidPeers
 	}
 	peersList := strings.Split(peersString, ",")
-	peerGenerationsString := msg.Header.Get("PeerGenerations")
+	peerGenerationsString := header.Get("PeerGenerations")
 	if peerGenerationsString == "" {
 		return ErrInvalidPeerGenerations
 	}
@@ -152,7 +154,7 @@ func (r *Replica) load(file io.Reader) error {
 		TSV_GENERATION
 	)
 
-	tsvReader, err := unitsv.NewReader(msg.Body.(*bufio.Reader), []string{"path", "modtime", "replica", "generation"})
+	tsvReader, err := unitsv.NewReader(reader, []string{"path", "modtime", "replica", "generation"})
 	if err != nil {
 		return err
 	}

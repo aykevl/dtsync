@@ -29,7 +29,7 @@
 package rtdiff
 
 import (
-	"strings"
+	"bytes"
 	"testing"
 )
 
@@ -61,8 +61,8 @@ new.txt	2016-02-14T16:30:26.719348761+01:00	0	5
 `
 
 func TestReplica(t *testing.T) {
-	file1 := strings.NewReader(status1)
-	file2 := strings.NewReader(status2)
+	file1 := bytes.NewBufferString(status1)
+	file2 := bytes.NewBufferString(status2)
 
 	rs, err := LoadReplicaSet(file1, file2)
 	if err != nil {
