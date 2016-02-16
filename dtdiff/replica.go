@@ -26,7 +26,7 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-package rtdiff
+package dtdiff
 
 import (
 	"bufio"
@@ -42,14 +42,14 @@ import (
 )
 
 var (
-	ErrContentType            = errors.New("rtdiff: wrong content type")
-	ErrNoIdentity             = errors.New("rtdiff: no Identity header")
-	ErrInvalidGeneration      = errors.New("rtdiff: invalid or missing Generation header")
-	ErrInvalidPeers           = errors.New("rtdiff: invalid or missing Peers header")
-	ErrInvalidPeerGenerations = errors.New("rtdiff: invalid or missing PeerGenerations header")
-	ErrInvalidReplicaIndex    = errors.New("rtdiff: invalid or missing replica index in entry row")
-	ErrInvalidEntryGeneration = errors.New("rtdiff: invalid generation number in entry row")
-	ErrInvalidPath            = errors.New("rtdiff: invalid or missing path in entry row")
+	ErrContentType            = errors.New("dtdiff: wrong content type")
+	ErrNoIdentity             = errors.New("dtdiff: no Identity header")
+	ErrInvalidGeneration      = errors.New("dtdiff: invalid or missing Generation header")
+	ErrInvalidPeers           = errors.New("dtdiff: invalid or missing Peers header")
+	ErrInvalidPeerGenerations = errors.New("dtdiff: invalid or missing PeerGenerations header")
+	ErrInvalidReplicaIndex    = errors.New("dtdiff: invalid or missing replica index in entry row")
+	ErrInvalidEntryGeneration = errors.New("dtdiff: invalid generation number in entry row")
+	ErrInvalidPath            = errors.New("dtdiff: invalid or missing path in entry row")
 )
 
 type Replica struct {
