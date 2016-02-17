@@ -52,13 +52,13 @@ func TestFilesystem(t *testing.T) {
 	if err != nil {
 		t.Error("could not add file:", err)
 	}
-	checkList1(t, root1, file1)
+	checkFile(t, root1, file1, 0, 1)
 
 	file2, err := file1.CopyTo(root2)
 	if err != nil {
 		t.Errorf("failed to copy file %s to %s: %s", file1, root2, err)
 	}
-	checkList1(t, root2, file2)
+	checkFile(t, root2, file2, 0, 1)
 
 	if !root1.Equal(root2) {
 		t.Error("root1 is not equal to root2")
@@ -77,18 +77,54 @@ func TestFilesystem(t *testing.T) {
 		t.Error("root1 is not equal to root2 after update")
 	}
 
-	// TODO: create directory with and without contents
+	dir1, err := root1.CreateDir("dir")
+	if err != nil {
+		t.Error("could not create directory 1:", err)
+	}
+	dir2, err := root2.CreateDir("dir")
+	if err != nil {
+		t.Error("could not create directory 2:", err)
+	}
+	checkFile(t, root1, dir1, 0, 2)
+	checkFile(t, root2, dir2, 0, 2)
 
-	for i, root := range []*Entry{root1, root2} {
-		if root.Size() != 1 {
-			t.Errorf("root %d .Size() is %d while zero was expected after delete", i, root.Size())
+	if !root1.Equal(root2) {
+		t.Error("root1 is not equal to root2 after CreateDir")
+	}
+
+	child1, err := dir1.(*Entry).AddRegular("file2.txt", []byte("My ship is full of eels."))
+	if err != nil {
+		t.Fatalf("could not create child in directory %s: %s", dir1, err)
+	}
+	child2, err := child1.CopyTo(dir2)
+	if err != nil {
+		t.Errorf("could not copy entry %s to dir %s: %s", child2, dir2, err)
+	}
+
+	if !root1.Equal(root2) {
+		t.Error("root1 is not equal to root2 after adding files to a subdirectory")
+	}
+
+	removeTests := []struct {
+		entry      *Entry
+		name       string
+		sizeBefore int64
+	}{
+		{root1, "file.txt", 2},
+		{root2, "file.txt", 2},
+		{root1, "dir", 1},
+		{root2, "dir", 1},
+	}
+	for _, tc := range removeTests {
+		if tc.entry.Size() != tc.sizeBefore {
+			t.Errorf("entry %s .Size() is %d while %d was expected before delete", tc.entry, tc.entry.Size(), tc.sizeBefore)
 		}
-		err = root.Remove("file.txt")
+		err = tc.entry.Remove(tc.name)
 		if err != nil {
-			t.Errorf("could not remove file from root %d: %s", i, err)
+			t.Errorf("could not remove file from entry %s: %s", tc.entry, err)
 		}
-		if root.Size() != 0 {
-			t.Errorf("root %d .Size() is non-zero (%d) while zero was expected after delete", i, root.Size())
+		if tc.entry.Size() != tc.sizeBefore-1 {
+			t.Errorf("entry %s .Size() is %d while %d was expected after delete", tc.entry, tc.entry.Size(), tc.sizeBefore-1)
 		}
 	}
 
@@ -97,17 +133,19 @@ func TestFilesystem(t *testing.T) {
 	}
 }
 
-// checkList1 checks the length of the list of the directory (must be 1) and
-// whether the provided file is indeed the one in the list.
-func checkList1(t *testing.T, root *Entry, file tree.Entry) {
-	l, err := root.List()
+// checkFile tests whether the file exists at a place in the index and checks
+// the number of children the directory has.
+func checkFile(t *testing.T, dir *Entry, file tree.Entry, index, length int) {
+	l, err := dir.List()
 	if err != nil {
 		t.Error("could not list directory:", err)
+		return
 	}
-	if len(l) != 1 {
-		t.Fatalf("len(List()): expected length=1, got %d", len(l))
+	if len(l) != length {
+		t.Fatalf("len(List()): expected length=%d, got %d, for directory %s and file %s (list %s)", length, len(l), dir, file, l)
+		return
 	}
-	if l[0] != file {
-		t.Errorf("root1.List()[0] (%s) is not the same as the file added (%s)", l[0], file)
+	if l[index] != file {
+		t.Errorf("root1.List()[%d] (%s) is not the same as the file added (%s)", index, l[index], file)
 	}
 }

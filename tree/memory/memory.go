@@ -187,36 +187,53 @@ func (e *Entry) removeSelf() error {
 	return nil
 }
 
+// CreateDir creates a directory with the given name.
 func (e *Entry) CreateDir(name string) (tree.Entry, error) {
-	return nil, ErrNotImplemented
+	child := &Entry{
+		fileType: tree.TYPE_DIRECTORY,
+		name:     name,
+	}
+	err := e.addChild(child)
+	if err != nil {
+		return nil, err
+	}
+	return child, nil
 }
 
 // CreateFile is part of tree.FileEntry. It returns the created entry, a
 // WriteCloser to write the data to, and possibly an error.
 // The file's contents is stored when the returned WriteCloser is closed.
 func (e *Entry) CreateFile(name string, modTime time.Time) (tree.Entry, io.WriteCloser, error) {
-	if e.fileType != tree.TYPE_DIRECTORY {
-		return nil, nil, ErrNoDirectory
-	}
-	if e.children == nil {
-		e.children = make(map[string]*Entry)
-	}
-	if _, ok := e.children[name]; ok {
-		return nil, nil, ErrAlreadyExists
-	}
-
 	child := &Entry{
 		fileType: tree.TYPE_REGULAR,
 		modTime:  modTime,
 		name:     name,
 	}
-	e.children[name] = child
+	err := e.addChild(child)
+	if err != nil {
+		return nil, nil, err
+	}
 
 	file := newFileCopier(func(buffer *bytes.Buffer) {
 		child.contents = buffer.Bytes()
 	})
 
 	return child, file, nil
+}
+
+func (e *Entry) addChild(child *Entry) error {
+	if e.fileType != tree.TYPE_DIRECTORY {
+		return ErrNoDirectory
+	}
+	if e.children == nil {
+		e.children = make(map[string]*Entry)
+	}
+	if _, ok := e.children[child.Name()]; ok {
+		return ErrAlreadyExists
+	}
+
+	e.children[child.Name()] = child
+	return nil
 }
 
 // UpdateFile is part of tree.FileEntry and implements replacing a file.
