@@ -33,7 +33,7 @@ import (
 	"testing"
 )
 
-var status1 = `Content-Type: text/tab-separated-values
+const status1 = `Content-Type: text/tab-separated-values
 Identity: first
 Generation: 2
 Peers: second
@@ -48,7 +48,7 @@ file2.html	2012-12-18T20:25:21.119862001Z	0	2
 file3.jpeg	2012-12-18T20:25:21.099852001Z	1	1
 `
 
-var status2 = `Content-Type: text/tab-separated-values
+const status2 = `Content-Type: text/tab-separated-values
 Identity: second
 Generation: 5
 Peers: first
