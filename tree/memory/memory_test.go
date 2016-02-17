@@ -64,9 +64,23 @@ func TestFilesystem(t *testing.T) {
 		t.Error("root1 is not equal to root2")
 	}
 
-	file1.SetContents([]byte("The quick brown fox jumps over the lazy dog.\n"))
+	quickBrowFox := "The quick brown fox jumps over the lazy dog.\n"
+	file1.SetContents([]byte(quickBrowFox))
 	if root1.Equal(root2) {
 		t.Error("root1 is equal to root2 after file1 got updated")
+	}
+
+	f, err := root1.GetFile("file.txt")
+	if err != nil {
+		t.Fatalf("failed to get contents of file.txt: %s", err)
+	}
+	buf := make([]byte, 1024)
+	n, err := f.Read(buf)
+	if err != nil {
+		t.Fatalf("failed to read contents of file %s: %s", file1, err)
+	}
+	if string(buf[:n]) != quickBrowFox {
+		t.Errorf("expected to get %#v but instead got %#v when reading from %s", quickBrowFox, string(buf[:n]), file1)
 	}
 
 	err = file1.Update(file2)

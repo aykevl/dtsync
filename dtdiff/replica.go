@@ -70,6 +70,14 @@ func loadReplica(replicaSet *ReplicaSet, file io.Reader) (*Replica, error) {
 	}
 	r.rootEntry.replica = r
 
+	if file == nil {
+		// This replica is new
+		r.generation = 1
+		r.identity = makeRandomString(24)
+		r.peerGenerations = make(map[string]int, 1)
+		return r, nil
+	}
+
 	err := r.load(file)
 	if err != nil {
 		return nil, err

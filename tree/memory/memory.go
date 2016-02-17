@@ -33,19 +33,10 @@ package memory
 
 import (
 	"bytes"
-	"errors"
 	"io"
 	"time"
 
 	"github.com/aykevl/dtsync/tree"
-)
-
-var (
-	ErrNotImplemented = errors.New("memory: not implemented")
-	ErrNoDirectory    = errors.New("memory: this is not a directory")
-	ErrNoRegular      = errors.New("memory: this is not a regular file")
-	ErrAlreadyExists  = errors.New("memory: file already exists")
-	ErrNotFound       = errors.New("memory: file not found")
 )
 
 // Entry is one file or directory.
@@ -102,7 +93,7 @@ func (e *Entry) ModTime() time.Time {
 // when attempting to list something other than a directory.
 func (e *Entry) List() ([]tree.Entry, error) {
 	if e.fileType != tree.TYPE_DIRECTORY {
-		return nil, ErrNoDirectory
+		return nil, tree.ErrNoDirectory
 	}
 
 	ret := make([]tree.Entry, 0, len(e.children))
@@ -118,7 +109,7 @@ func (e *Entry) List() ([]tree.Entry, error) {
 func (e *Entry) CopyTo(otherParent tree.Entry) (tree.Entry, error) {
 	file, ok := otherParent.(tree.FileEntry)
 	if !ok {
-		return nil, ErrNotImplemented
+		return nil, tree.ErrNotImplemented
 	}
 	other, out, err := file.CreateFile(e.name, e.modTime)
 	if err != nil {
@@ -139,7 +130,7 @@ func (e *Entry) CopyTo(otherParent tree.Entry) (tree.Entry, error) {
 func (e *Entry) Update(other tree.Entry) error {
 	file, ok := other.(tree.FileEntry)
 	if !ok {
-		return ErrNotImplemented
+		return tree.ErrNotImplemented
 	}
 	out, err := file.UpdateFile(e.modTime)
 	if err != nil {
@@ -162,11 +153,11 @@ func (e *Entry) Update(other tree.Entry) error {
 // Remove removes this file or directory tree, recursively.
 func (e *Entry) Remove(name string) error {
 	if e.fileType != tree.TYPE_DIRECTORY {
-		return ErrNoDirectory
+		return tree.ErrNoDirectory
 	}
 	child, ok := e.children[name]
 	if !ok {
-		return ErrNotFound
+		return tree.ErrNotFound
 	}
 	delete(e.children, name)
 	return child.removeSelf()
@@ -185,6 +176,24 @@ func (e *Entry) removeSelf() error {
 		}
 	}
 	return nil
+}
+
+// GetFile returns a file handle (io.ReadCloser) that can be used to read a
+// status file.
+func (e *Entry) GetFile(name string) (io.ReadCloser, error) {
+	if entry, ok := e.children[name]; ok {
+		return newReadCloseBuffer(entry.contents), nil
+	} else {
+		return nil, tree.ErrNotFound
+	}
+}
+
+// SetFile returns a file handle (io.WriteCloser) to a newly created/replaced
+// child file that can be used to save the replica state.
+func (e *Entry) SetFile(name string) (io.WriteCloser, error) {
+	return newFileCopier(func(buf *bytes.Buffer) {
+		e.AddRegular(name, buf.Bytes())
+	}), nil
 }
 
 // CreateDir creates a directory with the given name.
@@ -223,13 +232,13 @@ func (e *Entry) CreateFile(name string, modTime time.Time) (tree.Entry, io.Write
 
 func (e *Entry) addChild(child *Entry) error {
 	if e.fileType != tree.TYPE_DIRECTORY {
-		return ErrNoDirectory
+		return tree.ErrNoDirectory
 	}
 	if e.children == nil {
 		e.children = make(map[string]*Entry)
 	}
 	if _, ok := e.children[child.Name()]; ok {
-		return ErrAlreadyExists
+		return tree.ErrAlreadyExists
 	}
 
 	e.children[child.Name()] = child
@@ -240,7 +249,7 @@ func (e *Entry) addChild(child *Entry) error {
 // When closing the returned WriteCloser, the file is actually replaced.
 func (e *Entry) UpdateFile(modTime time.Time) (io.WriteCloser, error) {
 	if e.fileType != tree.TYPE_REGULAR {
-		return nil, ErrNoRegular
+		return nil, tree.ErrNoRegular
 	}
 	file := newFileCopier(func(buffer *bytes.Buffer) {
 		e.modTime = modTime
@@ -253,13 +262,13 @@ func (e *Entry) UpdateFile(modTime time.Time) (io.WriteCloser, error) {
 // This function only exists for testing purposes.
 func (e *Entry) AddRegular(name string, contents []byte) (*Entry, error) {
 	if e.fileType != tree.TYPE_DIRECTORY {
-		return nil, ErrNoDirectory
+		return nil, tree.ErrNoDirectory
 	}
 	if e.children == nil {
 		e.children = make(map[string]*Entry)
 	}
 	if _, ok := e.children[name]; ok {
-		return nil, ErrAlreadyExists
+		return nil, tree.ErrAlreadyExists
 	}
 	child := &Entry{
 		fileType: tree.TYPE_REGULAR,

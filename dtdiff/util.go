@@ -1,4 +1,4 @@
-// files.go
+// util.go
 //
 // Copyright (c) 2016, Ayke van Laethem
 // All rights reserved.
@@ -26,50 +26,23 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-package memory
+package dtdiff
 
 import (
-	"bytes"
+	"math/rand"
+	"time"
 )
 
-// fileCopier implements an io.WriteCloser with a callback that's called when
-// the file is closed. It uses bytes.Buffer internally.
-type fileCopier struct {
-	bytes.Buffer
-	callback func(*bytes.Buffer)
-}
+var letters = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
 
-// newFileCopier returns a new fileCopier with the given callback.
-func newFileCopier(callback func(*bytes.Buffer)) *fileCopier {
-	return &fileCopier{
-		callback: callback,
+func makeRandomString(n int) string {
+	b := make([]rune, n)
+	for i := range b {
+		b[i] = letters[rand.Intn(len(letters))]
 	}
+	return string(b)
 }
 
-// Close calls the callback. bytes.Buffer doesn't have a .Close() method, so we
-// don't need to call that one.
-func (fc *fileCopier) Close() error {
-	fc.callback(&fc.Buffer)
-	return nil
-}
-
-// readCloseBuffer wraps a bytes.Buffer, only exposing Read, and adding a Close
-// function (that doesn't do anything)
-type readCloseBuffer struct {
-	buf *bytes.Buffer
-}
-
-func newReadCloseBuffer(data []byte) *readCloseBuffer {
-	return &readCloseBuffer{bytes.NewBuffer(data)}
-}
-
-// Read is just a pass-through function for Buffer.Read()
-func (b *readCloseBuffer) Read(p []byte) (int, error) {
-	return b.buf.Read(p)
-}
-
-// Close doesn't do anything (returns nil), just to implement io.ReadCloser (we
-// don't need to actually close a bytes.Buffer object).
-func (b *readCloseBuffer) Close() error {
-	return nil
+func init() {
+	rand.Seed(time.Now().UnixNano())
 }

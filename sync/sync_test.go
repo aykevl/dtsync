@@ -1,4 +1,4 @@
-// files.go
+// sync_test.go
 //
 // Copyright (c) 2016, Ayke van Laethem
 // All rights reserved.
@@ -26,50 +26,30 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-package memory
+package sync
 
 import (
-	"bytes"
+	"testing"
+
+	"github.com/aykevl/dtsync/tree/memory"
 )
 
-// fileCopier implements an io.WriteCloser with a callback that's called when
-// the file is closed. It uses bytes.Buffer internally.
-type fileCopier struct {
-	bytes.Buffer
-	callback func(*bytes.Buffer)
-}
+func TestSync(t *testing.T) {
+	fs1 := memory.NewRoot()
+	fs2 := memory.NewRoot()
 
-// newFileCopier returns a new fileCopier with the given callback.
-func newFileCopier(callback func(*bytes.Buffer)) *fileCopier {
-	return &fileCopier{
-		callback: callback,
+	result, err := Sync(fs1, fs2)
+	if err != nil {
+		t.Fatal("could not start sync:", err)
 	}
-}
-
-// Close calls the callback. bytes.Buffer doesn't have a .Close() method, so we
-// don't need to call that one.
-func (fc *fileCopier) Close() error {
-	fc.callback(&fc.Buffer)
-	return nil
-}
-
-// readCloseBuffer wraps a bytes.Buffer, only exposing Read, and adding a Close
-// function (that doesn't do anything)
-type readCloseBuffer struct {
-	buf *bytes.Buffer
-}
-
-func newReadCloseBuffer(data []byte) *readCloseBuffer {
-	return &readCloseBuffer{bytes.NewBuffer(data)}
-}
-
-// Read is just a pass-through function for Buffer.Read()
-func (b *readCloseBuffer) Read(p []byte) (int, error) {
-	return b.buf.Read(p)
-}
-
-// Close doesn't do anything (returns nil), just to implement io.ReadCloser (we
-// don't need to actually close a bytes.Buffer object).
-func (b *readCloseBuffer) Close() error {
-	return nil
+	err = result.SaveStatus()
+	if err != nil {
+		t.Error("could not save replica state:", err)
+	}
+	if fs1.Size() != 1 {
+		t.Error("replica state wasn't saved for fs1")
+	}
+	if fs2.Size() != 1 {
+		t.Error("replica state wasn't saved for fs2")
+	}
 }

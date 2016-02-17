@@ -36,6 +36,7 @@ import (
 	"io"
 	"sort"
 	"time"
+	"errors"
 )
 
 // The type used for TYPE_* constants
@@ -45,6 +46,15 @@ type Type int
 const (
 	TYPE_REGULAR   Type = iota
 	TYPE_DIRECTORY Type = iota
+)
+
+// Error codes that can be used by any filesystem implementation
+var (
+	ErrNotImplemented = errors.New("tree: not implemented")
+	ErrNoDirectory    = errors.New("tree: this is not a directory")
+	ErrNoRegular      = errors.New("tree: this is not a regular file")
+	ErrAlreadyExists  = errors.New("tree: file already exists")
+	ErrNotFound       = errors.New("tree: file not found")
 )
 
 // Entry is one object tree, e.g. a file or directory. It can also be something
@@ -70,6 +80,12 @@ type Entry interface {
 	Update(Entry) error
 	// Delete the child file or directory tree (recursively)
 	Remove(name string) error
+
+	// Get this file. This only exists to read the status file, not to implement
+	// copying in the syncer!
+	GetFile(name string) (io.ReadCloser, error)
+	// SetFile is analogous to GetFile
+	SetFile(name string) (io.WriteCloser, error)
 }
 
 // FileEntry is a data object, e.g. either a file (blob of data), a directory

@@ -47,6 +47,11 @@ func LoadReplicaSet(file1, file2 io.Reader) (*ReplicaSet, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	// let them know of each other
+	notifyReplica(replica1, replica2)
+	notifyReplica(replica2, replica1)
+
 	rs.set[0] = replica1
 	rs.set[1] = replica2
 	return rs, nil
@@ -55,4 +60,10 @@ func LoadReplicaSet(file1, file2 io.Reader) (*ReplicaSet, error) {
 // Get returns the replica by index
 func (rs *ReplicaSet) Get(index int) *Replica {
 	return rs.set[index]
+}
+
+func notifyReplica(replica, other *Replica) {
+	if _, ok := replica.peerGenerations[other.identity]; !ok {
+		replica.peerGenerations[other.identity] = 0
+	}
 }
