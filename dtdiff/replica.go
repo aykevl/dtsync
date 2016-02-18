@@ -206,7 +206,7 @@ func (r *Replica) load(file io.Reader) error {
 		return err
 	}
 
-	// now actually parse this thing
+	// now actually parse the file list
 	for {
 		fields, err := tsvReader.ReadRow()
 		if err != nil {

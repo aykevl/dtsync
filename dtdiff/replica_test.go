@@ -90,7 +90,7 @@ func TestReplica(t *testing.T) {
 		{"file2.html", false, false, true, false, true, false, false},
 		{"file3.jpeg", false, true, false, false, false, true, false},
 		{"conflict.txt", false, false, false, false, true, true, true},
-		{"new.txt", true, false, false, false, false, false, false}, // everything after 'isnew' doesn't really matter anymore
+		{"new.txt", true, false, false, false, false, false, false}, // everything after 'isnew' is not looked at
 	}
 
 	for _, tc := range equalityTests {
