@@ -50,6 +50,7 @@ var (
 	ErrInvalidReplicaIndex    = errors.New("dtdiff: invalid or missing replica index in entry row")
 	ErrInvalidEntryGeneration = errors.New("dtdiff: invalid generation number in entry row")
 	ErrInvalidPath            = errors.New("dtdiff: invalid or missing path in entry row")
+	ErrExists                 = errors.New("dtdiff: already exists")
 )
 
 type Replica struct {

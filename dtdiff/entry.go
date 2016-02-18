@@ -79,7 +79,7 @@ func (e *Entry) add(path []string, revReplica string, revGeneration int, modTime
 func (e *Entry) addChild(name string, revReplica string, revGeneration int, modTime time.Time) (*Entry, error) {
 	if _, ok := e.children[name]; ok {
 		// duplicate path
-		return nil, ErrInvalidPath
+		return nil, ErrExists
 	}
 	newEntry := &Entry{
 		name:          name,
