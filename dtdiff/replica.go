@@ -265,8 +265,8 @@ func (r *Replica) Serialize(out io.Writer) error {
 	writeKeyValue(writer, "Content-Type", "text/tab-separated-values")
 	writeKeyValue(writer, "Identity", r.identity)
 	writeKeyValue(writer, "Generation", strconv.Itoa(r.generation))
-	writeKeyValue(writer, "Peers", strings.Join(peerList, ""))
-	writeKeyValue(writer, "PeerGenerations", strings.Join(peerGenerationList, ""))
+	writeKeyValue(writer, "Peers", strings.Join(peerList, ","))
+	writeKeyValue(writer, "PeerGenerations", strings.Join(peerGenerationList, ","))
 	writer.WriteByte('\n')
 
 	tsvWriter, err := unitsv.NewWriter(writer, []string{"path", "modtime", "replica", "generation"})
