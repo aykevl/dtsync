@@ -55,6 +55,7 @@ var (
 type Replica struct {
 	// generation starts at 1, 0 means 'no generation'
 	generation      int
+	isChanged       bool // true if there was a change
 	identity        string
 	peerGenerations map[string]int
 	replicaSet      *ReplicaSet
@@ -90,8 +91,40 @@ func (r *Replica) String() string {
 	return "Replica(" + r.identity + "," + strconv.Itoa(r.generation) + ")"
 }
 
+// Set returns the ReplicaSet for this replica.
 func (r *Replica) Set() *ReplicaSet {
 	return r.replicaSet
+}
+
+// Root returns the root entry.
+func (r *Replica) Root() *Entry {
+	return r.rootEntry
+}
+
+func (r *Replica) other() *Replica {
+	if r.replicaSet.set[0] == r {
+		return r.replicaSet.set[1]
+	} else if r.replicaSet.set[1] == r {
+		return r.replicaSet.set[0]
+	} else {
+		return nil
+	}
+}
+
+func (r *Replica) markChanged() {
+	if !r.isChanged {
+		r.isChanged = true
+		r.generation++
+		r.peerGenerations[r.identity] = r.generation
+	}
+}
+
+func (r *Replica) include(other *Replica) {
+	for id, gen := range other.peerGenerations {
+		if r.peerGenerations[id] < gen {
+			r.peerGenerations[id] = gen
+		}
+	}
 }
 
 // load assumes this replica hasn't yet been loaded
@@ -208,10 +241,6 @@ func (r *Replica) load(file io.Reader) error {
 	}
 
 	return nil
-}
-
-func (r *Replica) Root() *Entry {
-	return r.rootEntry
 }
 
 func (r *Replica) Serialize(out io.Writer) error {

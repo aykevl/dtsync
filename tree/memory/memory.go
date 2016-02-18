@@ -151,20 +151,20 @@ func (e *Entry) Update(other tree.Entry) error {
 }
 
 // Remove removes this file or directory tree, recursively.
-func (e *Entry) Remove(name string) error {
+func (e *Entry) Remove(child tree.Entry) error {
 	if e.fileType != tree.TYPE_DIRECTORY {
 		return tree.ErrNoDirectory
 	}
-	child, ok := e.children[name]
-	if !ok {
+	if e.children[child.Name()] != child {
 		return tree.ErrNotFound
 	}
-	delete(e.children, name)
-	return child.removeSelf()
+	delete(e.children, child.Name())
+	return child.(*Entry).removeSelf()
 }
 
 // removeSelf removes this file, but does not remove the entry from the parent
 // map.
+// TODO unnecessary?
 func (e *Entry) removeSelf() error {
 	if e.fileType == tree.TYPE_DIRECTORY {
 		list, err := e.List()
@@ -191,9 +191,15 @@ func (e *Entry) GetFile(name string) (io.ReadCloser, error) {
 // SetFile returns a file handle (io.WriteCloser) to a newly created/replaced
 // child file that can be used to save the replica state.
 func (e *Entry) SetFile(name string) (io.WriteCloser, error) {
-	return newFileCopier(func(buf *bytes.Buffer) {
-		e.AddRegular(name, buf.Bytes())
-	}), nil
+	if child, ok := e.children[name]; ok {
+		return newFileCopier(func(buf *bytes.Buffer) {
+			child.contents = buf.Bytes()
+		}), nil
+	} else {
+		return newFileCopier(func(buf *bytes.Buffer) {
+			e.AddRegular(name, buf.Bytes())
+		}), nil
+	}
 }
 
 // CreateDir creates a directory with the given name.
@@ -282,6 +288,7 @@ func (e *Entry) AddRegular(name string, contents []byte) (*Entry, error) {
 
 // SetContents sets the internal contents of the file, for debugging.
 func (e *Entry) SetContents(contents []byte) {
+	e.modTime = time.Now()
 	e.contents = contents
 }
 

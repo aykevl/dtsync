@@ -1,4 +1,4 @@
-// replicaset.go
+// util.go
 //
 // Copyright (c) 2016, Ayke van Laethem
 // All rights reserved.
@@ -26,52 +26,16 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-package dtdiff
+package sync
 
-import (
-	"io"
-)
-
-// ReplicaSet is a combination of two replicas
-type ReplicaSet struct {
-	set [2]*Replica
-}
-
-func LoadReplicaSet(file1, file2 io.Reader) (*ReplicaSet, error) {
-	rs := &ReplicaSet{}
-	replica1, err := loadReplica(rs, file1)
-	if err != nil {
-		return nil, err
+// leastName returns the alphabetically first name in the list that is not the
+// empty string.
+func leastName(names []string) string {
+	name := ""
+	for _, s := range names {
+		if s != "" && s < name || name == "" {
+			name = s
+		}
 	}
-	replica2, err := loadReplica(rs, file2)
-	if err != nil {
-		return nil, err
-	}
-
-	// let them know of each other
-	notifyReplica(replica1, replica2)
-	notifyReplica(replica2, replica1)
-
-	rs.set[0] = replica1
-	rs.set[1] = replica2
-	return rs, nil
-}
-
-// Get returns the replica by index
-func (rs *ReplicaSet) Get(index int) *Replica {
-	return rs.set[index]
-}
-
-// notifyReplica adds the replica to the list of known replicas
-func notifyReplica(replica, other *Replica) {
-	if _, ok := replica.peerGenerations[other.identity]; !ok {
-		replica.peerGenerations[other.identity] = 0
-	}
-}
-
-// MarkSynced sets the generation as including each other. This is done after
-// they have been cleanly synchronized.
-func (rs *ReplicaSet) MarkSynced() {
-	rs.set[0].include(rs.set[1])
-	rs.set[1].include(rs.set[0])
+	return name
 }

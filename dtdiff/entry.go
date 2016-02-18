@@ -29,7 +29,10 @@
 package dtdiff
 
 import (
+	"sort"
 	"time"
+
+	"github.com/aykevl/dtsync/tree"
 )
 
 // An Entry is one object (row) in a Replica. It belongs to one Replica.
@@ -46,7 +49,12 @@ type Entry struct {
 
 // String function, for debugging purposes
 func (e *Entry) String() string {
-	return "Entry(" + e.name + ")"
+	return "dtdiff.Entry(" + e.name + ")"
+}
+
+// Name returns the name of this entry
+func (e *Entry) Name() string {
+	return e.name
 }
 
 // Add new entry by recursively finding the parent
@@ -63,23 +71,27 @@ func (e *Entry) add(path []string, revReplica string, revGeneration int, modTime
 		}
 		return child.add(path[1:], revReplica, revGeneration, modTime)
 	} else {
-		_, ok := e.children[path[0]]
-		if ok {
-			// duplicate path
-			return ErrInvalidPath
-		}
-		newEntry := &Entry{
-			name:          path[0],
-			revReplica:    revReplica,
-			revGeneration: revGeneration,
-			modTime:       modTime,
-			children:      make(map[string]*Entry),
-			parent:        e,
-			replica:       e.replica,
-		}
-		e.children[newEntry.name] = newEntry
-		return nil
+		_, err := e.addChild(path[0], revReplica, revGeneration, modTime)
+		return err
 	}
+}
+
+func (e *Entry) addChild(name string, revReplica string, revGeneration int, modTime time.Time) (*Entry, error) {
+	if _, ok := e.children[name]; ok {
+		// duplicate path
+		return nil, ErrInvalidPath
+	}
+	newEntry := &Entry{
+		name:          name,
+		revReplica:    revReplica,
+		revGeneration: revGeneration,
+		modTime:       modTime,
+		children:      make(map[string]*Entry),
+		parent:        e,
+		replica:       e.replica,
+	}
+	e.children[newEntry.name] = newEntry
+	return newEntry, nil
 }
 
 // Get returns the named child, or nil if it doesn't exist.
@@ -116,4 +128,66 @@ func (e *Entry) Before(e2 *Entry) bool {
 // Conflict returns true if both entries are modified.
 func (e *Entry) Conflict(e2 *Entry) bool {
 	return e.After(e2) && e2.After(e)
+}
+
+func (e *Entry) List() []*Entry {
+	list := make([]*Entry, 0, len(e.children))
+	for _, entry := range e.children {
+		list = append(list, entry)
+	}
+	sortEntries(list)
+	return list
+}
+
+// Add a new status entry.
+func (e *Entry) Add(file tree.Entry) (*Entry, error) {
+	e.replica.markChanged()
+	return e.addChild(file.Name(), e.replica.identity, e.replica.generation, file.ModTime())
+}
+
+// AddCopy copies the status entry to here, keeping the revision.
+func (e *Entry) AddCopy(other *Entry) (*Entry, error) {
+	e.replica.markChanged()
+	return e.addChild(other.name, other.revReplica, other.revGeneration, other.modTime)
+}
+
+// Update updates the revision if the file was changed.
+func (e *Entry) Update(file tree.Entry) {
+	if e.modTime != file.ModTime() {
+		e.replica.markChanged()
+		e.revReplica = e.replica.identity
+		e.revGeneration = e.replica.generation
+	}
+}
+
+// SetRevision sets this entry to the revision of the other entry.
+func (e *Entry) SetRevision(other *Entry) {
+	e.replica.markChanged()
+	e.revReplica = other.revReplica
+	e.revGeneration = other.revGeneration
+}
+
+// Remove this entry.
+func (e *Entry) Remove() {
+	e.replica.markChanged()
+	// simply make it unreachable
+	delete(e.parent.children, e.name)
+}
+
+type entrySlice []*Entry
+
+func (es entrySlice) Len() int {
+	return len(es)
+}
+
+func (es entrySlice) Less(i, j int) bool {
+	return es[i].name < es[j].name
+}
+
+func (es entrySlice) Swap(i, j int) {
+	es[i], es[j] = es[j], es[i]
+}
+
+func sortEntries(list []*Entry) {
+	sort.Sort(entrySlice(list))
 }

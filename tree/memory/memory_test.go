@@ -133,7 +133,7 @@ func TestFilesystem(t *testing.T) {
 		if tc.entry.Size() != tc.sizeBefore {
 			t.Errorf("entry %s .Size() is %d while %d was expected before delete", tc.entry, tc.entry.Size(), tc.sizeBefore)
 		}
-		err = tc.entry.Remove(tc.name)
+		err = tc.entry.Remove(getFile(tc.entry, tc.name))
 		if err != nil {
 			t.Errorf("could not remove file from entry %s: %s", tc.entry, err)
 		}
@@ -162,4 +162,18 @@ func checkFile(t *testing.T, dir *Entry, file tree.Entry, index, length int) {
 	if l[index] != file {
 		t.Errorf("root1.List()[%d] (%s) is not the same as the file added (%s)", index, l[index], file)
 	}
+}
+
+// getFile returns the entry for the file with that name in the parent.
+func getFile(parent *Entry, name string) *Entry {
+	list, err := parent.List()
+	if err != nil {
+		panic(err) // must not happen
+	}
+	for _, child := range list {
+		if child.Name() == name {
+			return child.(*Entry)
+		}
+	}
+	return nil
 }

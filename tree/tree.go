@@ -79,7 +79,7 @@ type Entry interface {
 	// Copy over the other entry, possibly using an optimized algorithm.
 	Update(Entry) error
 	// Delete the child file or directory tree (recursively)
-	Remove(name string) error
+	Remove(Entry) error
 
 	// Get this file. This only exists to read the status file, not to implement
 	// copying in the syncer!
