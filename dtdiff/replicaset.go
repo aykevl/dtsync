@@ -48,6 +48,10 @@ func LoadReplicaSet(file1, file2 io.Reader) (*ReplicaSet, error) {
 		return nil, err
 	}
 
+	if replica1.identity == replica2.identity {
+		return nil, ErrSameIdentity
+	}
+
 	// let them know of each other
 	notifyReplica(replica1, replica2)
 	notifyReplica(replica2, replica1)
