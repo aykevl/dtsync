@@ -76,6 +76,7 @@ func loadReplica(replicaSet *ReplicaSet, file io.Reader) (*Replica, error) {
 		r.generation = 1
 		r.identity = makeRandomString(24)
 		r.peerGenerations = make(map[string]int, 1)
+		r.peerGenerations[r.identity] = r.generation
 		return r, nil
 	}
 
