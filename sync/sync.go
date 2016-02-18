@@ -32,10 +32,18 @@
 package sync
 
 import (
+	"errors"
 	"io"
 
 	"github.com/aykevl/dtsync/dtdiff"
 	"github.com/aykevl/dtsync/tree"
+)
+
+var (
+	ErrConflict       = errors.New("sync: job: unresolved conflict")
+	ErrUnimplemented  = errors.New("sync: job: unimplemented")
+	ErrAlreadyApplied = errors.New("sync: job: already applied")
+	ErrSameRoot       = errors.New("sync: trying to synchronize the same directory")
 )
 
 // File where current status of the tree is stored.
@@ -49,6 +57,10 @@ type Result struct {
 }
 
 func Sync(dir1, dir2 tree.Entry) (*Result, error) {
+	if dir1 == dir2 {
+		return nil, ErrSameRoot
+	}
+
 	// Load replica status
 	statusFile1, err := getStatus(dir1)
 	if err != nil {

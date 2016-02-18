@@ -29,16 +29,8 @@
 package sync
 
 import (
-	"errors"
-
 	"github.com/aykevl/dtsync/dtdiff"
 	"github.com/aykevl/dtsync/tree"
-)
-
-var (
-	ErrConflict       = errors.New("sync: job: unresolved conflict")
-	ErrUnimplemented  = errors.New("sync: job: unimplemented")
-	ErrAlreadyApplied = errors.New("sync: job: already applied")
 )
 
 // Action is the type for the ACTION_* constants
