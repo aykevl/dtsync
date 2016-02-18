@@ -87,6 +87,12 @@ func (e *Entry) Get(name string) *Entry {
 	return e.children[name]
 }
 
+// HasRevision returns true if this file (actually, this replica) includes the
+// revision the other entry is at.
+func (e *Entry) HasRevision(other *Entry) bool {
+	return e.replica.peerGenerations[other.revReplica] >= other.revGeneration
+}
+
 // Equal returns true if both entries are of the same revision (replica and
 // generation).
 func (e *Entry) Equal(e2 *Entry) bool {
