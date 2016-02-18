@@ -74,6 +74,21 @@ type Job struct {
 	direction int
 }
 
+// String returns a representation of this job for debugging.
+func (j *Job) String() string {
+	action := "action?"
+	switch j.action {
+	case ACTION_COPY:
+		action = "copy"
+	case ACTION_UPDATE:
+		action = "update"
+	case ACTION_REMOVE:
+		action = "remove"
+	}
+
+	return "Job(" + action + "," + j.file1.Name() + ")"
+}
+
 // Apply this job (copying, updating, or removing).
 func (j *Job) Apply() error {
 	if j.applied {
