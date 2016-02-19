@@ -128,6 +128,15 @@ func runTestCase(t *testing.T, tc *testCase, fs1, fs2 *memory.Entry) {
 		t.Errorf("could not sync after: %s %s: %s", tc.action, tc.file, err)
 		return
 	}
+
+	if len(result.jobs) != 1 {
+		t.Errorf("list of jobs is expected to be 1, but actually is %d", len(result.jobs))
+	} else {
+		if result.jobs[0].action != tc.action || result.jobs[0].file1.Name() != tc.file {
+			t.Errorf("expected a %s job for file %s, but got %s", tc.action, tc.file, result.jobs[0])
+		}
+	}
+
 	if err := result.SyncAll(); err != nil {
 		t.Errorf("could not sync all: %s", err)
 		return
