@@ -200,7 +200,7 @@ func assert(err error) {
 }
 
 func TestLeastName(t *testing.T) {
-	testCases := []struct{
+	testCases := []struct {
 		input  []string
 		output string
 	}{
