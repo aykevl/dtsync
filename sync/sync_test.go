@@ -126,21 +126,23 @@ func runTestCase(t *testing.T, tc *testCase, fs1, fs2 *memory.Entry) {
 	result, err := Sync(fs1, fs2)
 	if err != nil {
 		t.Errorf("could not sync after: %s %s: %s", tc.action, tc.file, err)
+		return
+	}
+	if err := result.SyncAll(); err != nil {
+		t.Errorf("could not sync all: %s", err)
+		return
+	}
+	if !fsEqual(fs1, fs2) {
+		t.Errorf("directory trees are not equal after: %s %s", tc.action, tc.file)
 	} else {
-		if err := result.SyncAll(); err != nil {
-			t.Errorf("could not sync all: %s", err)
-		}
-		if !fsEqual(fs1, fs2) {
-			t.Errorf("directory trees are not equal after: %s %s", tc.action, tc.file)
-		}
 		result.MarkFullySynced()
 		if err := result.SaveStatus(); err != nil {
 			t.Errorf("could not save status: %s", err)
 		}
+	}
 
-		if fs1.Size() != tc.fileCount || fs2.Size() != tc.fileCount {
-			t.Errorf("unexpected number of files after first sync (expected %d): fs1=%d fs2=%d", tc.fileCount, fs1.Size(), fs2.Size())
-		}
+	if fs1.Size() != tc.fileCount || fs2.Size() != tc.fileCount {
+		t.Errorf("unexpected number of files after first sync (expected %d): fs1=%d fs2=%d", tc.fileCount, fs1.Size(), fs2.Size())
 	}
 }
 
