@@ -45,8 +45,7 @@ var (
 	ErrContentType            = errors.New("dtdiff: wrong content type")
 	ErrNoIdentity             = errors.New("dtdiff: no Identity header")
 	ErrInvalidGeneration      = errors.New("dtdiff: invalid or missing Generation header")
-	ErrInvalidPeers           = errors.New("dtdiff: invalid or missing Peers header")
-	ErrInvalidPeerGenerations = errors.New("dtdiff: invalid or missing PeerGenerations header")
+	ErrInvalidPeerHeaders     = errors.New("dtdiff: invalid peer headers")
 	ErrInvalidReplicaIndex    = errors.New("dtdiff: invalid or missing replica index in entry row")
 	ErrInvalidEntryGeneration = errors.New("dtdiff: invalid generation number in entry row")
 	ErrInvalidPath            = errors.New("dtdiff: invalid or missing path in entry row")
@@ -165,17 +164,17 @@ func (r *Replica) load(file io.Reader) error {
 
 	// Get peers with generations
 	peersString := header.Get("Peers")
-	if peersString == "" {
-		return ErrInvalidPeers
+	var peersList []string
+	if peersString != "" {
+		peersList = strings.Split(peersString, ",")
 	}
-	peersList := strings.Split(peersString, ",")
 	peerGenerationsString := header.Get("PeerGenerations")
-	if peerGenerationsString == "" {
-		return ErrInvalidPeerGenerations
+	var peerGenerationsList []string
+	if peerGenerationsString != "" {
+		peerGenerationsList = strings.Split(peerGenerationsString, ",")
 	}
-	peerGenerationsList := strings.Split(peerGenerationsString, ",")
 	if len(peersList) != len(peerGenerationsList) {
-		return ErrInvalidPeerGenerations
+		return ErrInvalidPeerHeaders
 	}
 
 	// Create the temporary map of {index: id}
@@ -191,7 +190,7 @@ func (r *Replica) load(file io.Reader) error {
 	for i, peerGenerationString := range peerGenerationsList {
 		gen, err := strconv.Atoi(peerGenerationString)
 		if err != nil {
-			return ErrInvalidPeerGenerations
+			return ErrInvalidPeerHeaders
 		}
 		r.peerGenerations[peersList[i]] = gen
 	}

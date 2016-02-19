@@ -69,6 +69,24 @@ func TestSync(t *testing.T) {
 		{"file1.txt", ACTION_REMOVE, nil, 1},
 	}
 
+	fs1 = memory.NewRoot()
+	fs2 = memory.NewRoot()
+	fsNames := []struct {
+		name string
+		fs   *memory.Entry
+	}{
+		{"fs1", fs1},
+		{"fs2", fs2},
+	}
+	for _, fs := range fsNames {
+		fs.fs.AddRegular(STATUS_FILE, []byte(`Content-Type: text/tab-separated-values
+Identity: `+fs.name+`
+Generation: 1
+
+path	modtime	replica	generation
+`))
+	}
+
 	runTests(t, fs1, fs2, false, testCases)
 	runTests(t, fs1, fs2, true, testCases)
 	runTests(t, fs2, fs1, false, testCases)
