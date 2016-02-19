@@ -32,6 +32,7 @@ import (
 	"io/ioutil"
 	"testing"
 
+	"github.com/aykevl/dtsync/tree"
 	"github.com/aykevl/dtsync/tree/memory"
 )
 
@@ -188,17 +189,24 @@ func fsEqual(fs1, fs2 *memory.Entry) bool {
 
 // readStatuses returns the contents of the status files in the provided
 // directories.
-func readStatuses(t *testing.T, fs1, fs2 *memory.Entry) (statusData [2][]byte) {
-	for i, fs := range []*memory.Entry{fs1, fs2} {
+func readStatuses(t *testing.T, roots ...*memory.Entry) [][]byte {
+	statusData := make([][]byte, len(roots))
+	for i, fs := range roots {
+		if fs == nil {
+			continue
+		}
 		statusFile, err := fs.GetFile(STATUS_FILE)
 		if err != nil {
+			if err == tree.ErrNotFound {
+				continue
+			}
 			t.Fatal("could not get status file:", err)
 		}
 		status, err := ioutil.ReadAll(statusFile)
 		statusData[i] = status
 		assert(err)
 	}
-	return
+	return statusData
 }
 
 // Assert panicks when the error is non-nil.
