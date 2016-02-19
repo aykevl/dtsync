@@ -201,3 +201,29 @@ func assert(err error) {
 		panic("assert: " + err.Error())
 	}
 }
+
+func TestLeastName(t *testing.T) {
+	testCases := []struct{
+		input  []string
+		output string
+	}{
+		{[]string{""}, ""},
+		{[]string{"a"}, "a"},
+		{[]string{"a", "b"}, "a"},
+		{[]string{"b", "a"}, "a"},
+		{[]string{"a", ""}, "a"},
+		{[]string{"", "a"}, "a"},
+		{[]string{"a", "", "b"}, "a"},
+		{[]string{"", "a", "b"}, "a"},
+		{[]string{"", "b", "a"}, "a"},
+		{[]string{"a", "", "b"}, "a"},
+		{[]string{"aba", "abc"}, "aba"},
+		{[]string{"a", "aba"}, "a"},
+	}
+	for _, tc := range testCases {
+		name := leastName(tc.input)
+		if name != tc.output {
+			t.Errorf("expected %#v but got %#v for input %#v", tc.output, name, tc.input)
+		}
+	}
+}
