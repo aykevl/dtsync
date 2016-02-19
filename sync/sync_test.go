@@ -154,20 +154,31 @@ func getFile(parent *memory.Entry, name string) *memory.Entry {
 	return nil
 }
 
+func getEntriesExcept(parent *memory.Entry, except string) []*memory.Entry {
+	list, err := parent.List()
+	assert(err)
+
+	listEntries := make([]*memory.Entry, 0, len(list)-1)
+	for _, entry := range list {
+		if entry.Name() == except {
+			continue
+		}
+		listEntries = append(listEntries, entry.(*memory.Entry))
+	}
+	return listEntries
+}
+
 func fsEqual(fs1, fs2 *memory.Entry) bool {
-	list1, err := fs1.List()
-	assert(err)
-	list2, err := fs2.List()
-	assert(err)
+	list1 := getEntriesExcept(fs1, STATUS_FILE)
+	list2 := getEntriesExcept(fs2, STATUS_FILE)
+
 	if len(list1) != len(list2) {
 		return false
 	}
-	for i := 0; i < len(list1); i++ {
-		file1 := list1[i].(*memory.Entry)
-		file2 := list2[i].(*memory.Entry)
-		if file1.Name() == STATUS_FILE && file2.Name() == STATUS_FILE {
-			continue
-		}
+
+	for i, _ := range list1 {
+		file1 := list1[i]
+		file2 := list2[i]
 		if !file1.Equal(file2) {
 			return false
 		}
