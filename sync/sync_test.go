@@ -37,7 +37,7 @@ import (
 
 type testCase struct {
 	file     string
-	action   string
+	action   Action
 	contents []byte
 }
 
@@ -62,9 +62,9 @@ func TestSync(t *testing.T) {
 	}
 
 	testCases := []testCase{
-		{"file1.txt", "add", []byte("The quick brown fox...")},
-		{"file1.txt", "update", []byte("The quick brown fox jumps over the lazy dog.")},
-		{"file1.txt", "remove", nil},
+		{"file1.txt", ACTION_COPY, []byte("The quick brown fox...")},
+		{"file1.txt", ACTION_UPDATE, []byte("The quick brown fox jumps over the lazy dog.")},
+		{"file1.txt", ACTION_REMOVE, nil},
 	}
 
 	runTests(t, fs1, fs2, false, testCases)
@@ -83,16 +83,16 @@ func runTests(t *testing.T, fs1, fs2 *memory.Entry, swap bool, cases []testCase)
 
 		var err error
 		switch tc.action {
-		case "add":
+		case ACTION_COPY: // add
 			fileCount++
 			_, err = fs1.AddRegular(tc.file, tc.contents)
-		case "update":
+		case ACTION_UPDATE:
 			child := getFile(fs1, tc.file)
 			if child == nil {
 				t.Fatalf("could not find file %s to update", tc.file)
 			}
 			child.SetContents(tc.contents)
-		case "remove":
+		case ACTION_REMOVE:
 			fileCount--
 			child := getFile(fs1, tc.file)
 			if child == nil {
@@ -100,7 +100,7 @@ func runTests(t *testing.T, fs1, fs2 *memory.Entry, swap bool, cases []testCase)
 			}
 			err = fs1.Remove(child)
 		default:
-			t.Fatal("unknown action: " + tc.action)
+			t.Fatalf("unknown action: %d", tc.action)
 		}
 		if err != nil {
 			t.Fatalf("could not %s file %s: %s", tc.action, tc.file, err)
