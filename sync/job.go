@@ -62,6 +62,7 @@ type Job struct {
 	action        Action
 	status1       *dtdiff.Entry
 	status2       *dtdiff.Entry
+	statusParent1 *dtdiff.Entry
 	statusParent2 *dtdiff.Entry
 	file1         tree.Entry
 	file2         tree.Entry
@@ -73,15 +74,39 @@ type Job struct {
 	// delete, and delete becomes copy).
 	//
 	// Values:
-	//   0 left-to-right (file1 → file2)
-	//   1 right-to-left (file2 → file1)
-	//  -1 conflict (user must choose)
+	//   1 left-to-right aka forwards (file1 → file2)
+	//   0 undecided (conflict, user must choose)
+	//  -1 right-to-left aka backwards (file1 ← file2)
 	direction int
 }
 
 // String returns a representation of this job for debugging.
 func (j *Job) String() string {
-	return "Job(" + j.action.String() + "," + j.file1.Name() + ")"
+	return "Job(" + j.action.String() + "," + j.Name() + ")"
+}
+
+// Name returns the filename of the file to be copied, updated, or removed.
+func (j *Job) Name() string {
+	var name1, name2 string
+	if j.file1 != nil {
+		name1 = j.file1.Name()
+	}
+	if j.file2 != nil {
+		name2 = j.file2.Name()
+	}
+	if j.action == ACTION_REMOVE {
+		name1, name2 = name2, name1
+	}
+	switch j.direction {
+	case 1:
+		return name1
+	case 0:
+		return name1 + "," + name2
+	case -1:
+		return name2
+	default:
+		panic("unknown direction")
+	}
 }
 
 // Apply this job (copying, updating, or removing).
@@ -89,25 +114,49 @@ func (j *Job) Apply() error {
 	if j.applied {
 		return ErrAlreadyApplied
 	}
+
+	status1 := j.status1
+	status2 := j.status2
+	statusParent1 := j.statusParent1
+	statusParent2 := j.statusParent2
+	file1 := j.file1
+	file2 := j.file2
+	parent1 := j.parent1
+	parent2 := j.parent2
+
+	switch j.direction {
+	case 1:
+		// don't swap
+	case 0:
+		return ErrConflict
+	case -1:
+		// swap: we're going the opposite direction
+		status1, status2 = status2, status1
+		statusParent1, statusParent2 = statusParent2, statusParent1
+		file1, file2 = file2, file1
+		parent1, parent2 = parent2, parent1
+	default:
+		panic("unknown direction")
+	}
 	j.applied = true
 
 	var err error
 	switch j.action {
 	case ACTION_COPY:
-		j.file2, err = j.file1.CopyTo(j.parent2)
+		file2, err = file1.CopyTo(parent2)
 		if err == nil {
-			_, err = j.statusParent2.AddCopy(j.status1)
+			_, err = statusParent2.AddCopy(status1)
 		}
 	case ACTION_UPDATE:
-		err = j.file1.Update(j.file2)
+		err = file1.Update(file2)
 		if err == nil {
-			j.status2.SetRevision(j.status1)
+			status2.SetRevision(status1)
 		}
 	case ACTION_REMOVE:
-		err = j.parent1.Remove(j.file1)
+		err = parent2.Remove(file2)
 		if err == nil {
-			j.status1.Remove()
-			j.status2.Remove()
+			status2.Remove()
+			status1.Remove() // TODO status1 may be nil
 		}
 	default:
 		panic("unknown action (must not happen)")

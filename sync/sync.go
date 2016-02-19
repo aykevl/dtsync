@@ -122,10 +122,36 @@ func (r *Result) syncDirs(dir1, dir2 tree.Entry, statusDir1, statusDir2 *dtdiff.
 			if status2 != nil {
 				status2.Remove()
 			}
-		} else if file1 == nil {
-			r.syncSingle(1, file2, status2, status1, statusDir1, dir2, dir1)
+			continue
+		}
+		job := &Job{
+			status1:       status1,
+			status2:       status2,
+			statusParent1: statusDir1,
+			statusParent2: statusDir2,
+			file1:         file1,
+			file2:         file2,
+			parent1:       dir1,
+			parent2:       dir2,
+		}
+		if file1 == nil {
+			if !statusDir1.HasRevision(status2) {
+				job.action = ACTION_COPY
+				job.direction = -1
+			} else {
+				job.action = ACTION_REMOVE
+				job.direction = 1
+			}
+			r.jobs = append(r.jobs, job)
 		} else if file2 == nil {
-			r.syncSingle(0, file1, status1, status2, statusDir2, dir1, dir2)
+			if !statusDir2.HasRevision(status1) {
+				job.action = ACTION_COPY
+				job.direction = 1
+			} else {
+				job.action = ACTION_REMOVE
+				job.direction = -1
+			}
+			r.jobs = append(r.jobs, job)
 		} else {
 			// All four (file1, file2, status1, status2) are defined.
 			// Compare the contents.
@@ -134,19 +160,21 @@ func (r *Result) syncDirs(dir1, dir2 tree.Entry, statusDir1, statusDir2 *dtdiff.
 			if status1.Equal(status2) {
 			} else if status1.After(status2) {
 				r.jobs = append(r.jobs, &Job{
-					action:  ACTION_UPDATE,
-					status1: status1,
-					status2: status2,
-					file1:   file1,
-					file2:   file2,
+					action:    ACTION_UPDATE,
+					direction: 1,
+					status1:   status1,
+					status2:   status2,
+					file1:     file1,
+					file2:     file2,
 				})
 			} else if status1.Before(status2) {
 				r.jobs = append(r.jobs, &Job{
-					action:  ACTION_UPDATE,
-					status1: status2,
-					status2: status1,
-					file1:   file2,
-					file2:   file1,
+					action:    ACTION_UPDATE,
+					direction: -1,
+					status1:   status1,
+					status2:   status2,
+					file1:     file1,
+					file2:     file2,
 				})
 			} else {
 				// TODO: must be a conflict
@@ -168,34 +196,6 @@ func ensureStatus(file *tree.Entry, status **dtdiff.Entry, statusDir **dtdiff.En
 		} else {
 			// TODO update
 		}
-	}
-}
-
-// syncSingle synchoronizes a file on only one side. It is either copied or
-// removed.
-func (r *Result) syncSingle(direction int, file1 tree.Entry, status1, status2, statusDir2 *dtdiff.Entry, dir1, dir2 tree.Entry) {
-	if !statusDir2.HasRevision(status1) {
-		r.jobs = append(r.jobs, &Job{
-			action:        ACTION_COPY,
-			status1:       status1,
-			status2:       status2,
-			statusParent2: statusDir2,
-			file1:         file1,
-			parent1:       dir1,
-			parent2:       dir2,
-			direction:     direction,
-		})
-	} else {
-		r.jobs = append(r.jobs, &Job{
-			action:        ACTION_REMOVE,
-			status1:       status1,
-			status2:       status2,
-			statusParent2: statusDir2,
-			file1:         file1,
-			parent1:       dir1,
-			parent2:       dir2,
-			direction:     direction,
-		})
 	}
 }
 

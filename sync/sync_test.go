@@ -122,9 +122,9 @@ func runTests(t *testing.T, fs1, fs2 *memory.Entry, swap bool, cases []testCase)
 		}
 
 		if swap {
-			runTestCase(t, &tc, fs2, fs1)
+			runTestCase(t, &tc, fs2, fs1, -1)
 		} else {
-			runTestCase(t, &tc, fs1, fs2)
+			runTestCase(t, &tc, fs1, fs2, 1)
 		}
 
 		if t.Failed() {
@@ -135,7 +135,7 @@ func runTests(t *testing.T, fs1, fs2 *memory.Entry, swap bool, cases []testCase)
 	}
 }
 
-func runTestCase(t *testing.T, tc *testCase, fs1, fs2 *memory.Entry) {
+func runTestCase(t *testing.T, tc *testCase, fs1, fs2 *memory.Entry, jobDirection int) {
 	result, err := Sync(fs1, fs2)
 	if err != nil {
 		t.Errorf("could not sync after: %s %s: %s", tc.action, tc.file, err)
@@ -145,8 +145,12 @@ func runTestCase(t *testing.T, tc *testCase, fs1, fs2 *memory.Entry) {
 	if len(result.jobs) != 1 {
 		t.Errorf("list of jobs is expected to be 1, but actually is %d", len(result.jobs))
 	} else {
-		if result.jobs[0].action != tc.action || result.jobs[0].file1.Name() != tc.file {
-			t.Errorf("expected a %s job for file %s, but got %s", tc.action, tc.file, result.jobs[0])
+		job := result.jobs[0]
+		if job.direction != jobDirection {
+			t.Errorf("expected direction for %s to be %d, not %d", job, jobDirection, job.direction)
+		}
+		if job.action != tc.action || job.Name() != tc.file {
+			t.Errorf("expected a %s job for file %s, but got %s", tc.action, tc.file, job)
 		}
 	}
 
