@@ -43,6 +43,19 @@ const (
 	ACTION_REMOVE Action = iota
 )
 
+func (a Action) String() string {
+	s := "action?"
+	switch a {
+	case ACTION_COPY:
+		s = "copy"
+	case ACTION_UPDATE:
+		s = "update"
+	case ACTION_REMOVE:
+		s = "remove"
+	}
+	return s
+}
+
 // Job is one action to apply (copy, update or delete)
 type Job struct {
 	applied       bool
@@ -68,17 +81,7 @@ type Job struct {
 
 // String returns a representation of this job for debugging.
 func (j *Job) String() string {
-	action := "action?"
-	switch j.action {
-	case ACTION_COPY:
-		action = "copy"
-	case ACTION_UPDATE:
-		action = "update"
-	case ACTION_REMOVE:
-		action = "remove"
-	}
-
-	return "Job(" + action + "," + j.file1.Name() + ")"
+	return "Job(" + j.action.String() + "," + j.file1.Name() + ")"
 }
 
 // Apply this job (copying, updating, or removing).
