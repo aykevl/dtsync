@@ -77,6 +77,7 @@ func TestSync(t *testing.T) {
 
 func runTests(t *testing.T, fs1, fs2 *memory.Entry, swap bool, cases []testCase) {
 	for _, tc := range cases {
+		t.Logf("Action: %s %s", tc.action, tc.file)
 		statusBefore := readStatuses(t, fs1, fs2)
 
 		var err error
@@ -109,14 +110,8 @@ func runTests(t *testing.T, fs1, fs2 *memory.Entry, swap bool, cases []testCase)
 		}
 
 		if t.Failed() {
-			t.Logf("Action: %s %s", tc.action, tc.file)
-			t.Logf("Status before, side 1\n%s", string(statusBefore[0]))
-			t.Logf("Status before, side 2\n%s", string(statusBefore[1]))
-			statusAfter := readStatuses(t, fs1, fs2)
-			t.Logf("Status after, side 1\n%s", string(statusAfter[0]))
-			t.Logf("Status after, side 2\n%s", string(statusAfter[1]))
-		}
-		if t.Failed() {
+			printStatus(t, "before", statusBefore)
+			printStatus(t, "after", readStatuses(t, fs1, fs2))
 			t.FailNow()
 		}
 	}
@@ -218,6 +213,16 @@ func readStatuses(t *testing.T, roots ...*memory.Entry) [][]byte {
 		assert(err)
 	}
 	return statusData
+}
+
+// printStatus dumps status file to the testing console.
+func printStatus(t *testing.T, moment string, statuses [][]byte) {
+	for i, data := range statuses {
+		if data == nil {
+			continue
+		}
+		t.Logf("Status %s, side %d\n%s", moment, i+1, string(data))
+	}
 }
 
 // Assert panicks when the error is non-nil.
