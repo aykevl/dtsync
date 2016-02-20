@@ -83,7 +83,7 @@ func TestFilesystem(t *testing.T) {
 		t.Errorf("expected to get %#v but instead got %#v when reading from %s", quickBrowFox, string(buf[:n]), file1)
 	}
 
-	err = file1.Update(file2)
+	err = file1.UpdateOver(file2)
 	if err != nil {
 		t.Error("failed to update file:", err)
 	}
