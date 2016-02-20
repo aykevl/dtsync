@@ -89,10 +89,11 @@ path	modtime	replica	generation
 `))
 	}
 
-	runTests(t, fs1, fs2, fsCheck, fs2, false, testCases)
-	runTests(t, fs1, fs2, fsCheck, fs1, true, testCases)
-	runTests(t, fs1, fs2, fsCheck, fs1, false, testCases)
-	runTests(t, fs1, fs2, fsCheck, fs2, true, testCases)
+	for _, swapped := range []bool{false, true} {
+		for _, fsCheckWith := range []*memory.Entry{fs2, fs1} {
+			runTests(t, fs1, fs2, fsCheck, fsCheckWith, swapped, testCases)
+		}
+	}
 }
 
 func runTests(t *testing.T, fs1, fs2, fsCheck, fsCheckWith *memory.Entry, swap bool, cases []testCase) {
