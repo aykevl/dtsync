@@ -282,7 +282,7 @@ func fsEqual(fs1, fs2 *memory.Entry) bool {
 	for i, _ := range list1 {
 		file1 := list1[i]
 		file2 := list2[i]
-		if !file1.Equal(file2) {
+		if !file1.Equal(file2, false) {
 			return false
 		}
 	}

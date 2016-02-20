@@ -52,7 +52,7 @@ type Entry struct {
 func NewRoot() *Entry {
 	return &Entry{
 		fileType: tree.TYPE_DIRECTORY,
-		// do not set the modTime to ease comparing two trees
+		modTime:  time.Now(),
 	}
 }
 
@@ -159,6 +159,7 @@ func (e *Entry) Remove(child tree.Entry) error {
 		return tree.ErrNotFound
 	}
 	delete(e.children, child.Name())
+	e.modTime = time.Now()
 	return child.(*Entry).removeSelf()
 }
 
@@ -248,6 +249,7 @@ func (e *Entry) addChild(child *Entry) error {
 	}
 
 	e.children[child.Name()] = child
+	e.modTime = time.Now()
 	return nil
 }
 
@@ -288,9 +290,18 @@ func (e *Entry) SetContents(contents []byte) {
 
 // Equal compares this entry with another entry, only returning true when this
 // file and possible children (for directories) are exactly equal.
-func (e *Entry) Equal(other *Entry) bool {
-	if e.name != other.name || !e.modTime.Equal(other.modTime) || e.fileType != other.fileType {
+func (e *Entry) Equal(other *Entry, includeDirModTime bool) bool {
+	if e.name != other.name || e.fileType != other.fileType {
 		return false
+	}
+	if !e.modTime.Equal(other.modTime) {
+		if e.fileType == tree.TYPE_DIRECTORY {
+			if includeDirModTime {
+				return false
+			}
+		} else {
+			return false
+		}
 	}
 	switch e.fileType {
 	case tree.TYPE_REGULAR:
@@ -301,7 +312,7 @@ func (e *Entry) Equal(other *Entry) bool {
 		}
 		for name, child := range e.children {
 			otherchild, ok := other.children[name]
-			if !ok || !child.Equal(otherchild) {
+			if !ok || !child.Equal(otherchild, includeDirModTime) {
 				return false
 			}
 		}

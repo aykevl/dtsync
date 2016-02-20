@@ -60,13 +60,13 @@ func TestFilesystem(t *testing.T) {
 	}
 	checkFile(t, root2, file2, 0, 1)
 
-	if !root1.Equal(root2) {
+	if !root1.Equal(root2, false) {
 		t.Error("root1 is not equal to root2")
 	}
 
 	quickBrowFox := "The quick brown fox jumps over the lazy dog.\n"
 	file1.SetContents([]byte(quickBrowFox))
-	if root1.Equal(root2) {
+	if root1.Equal(root2, false) {
 		t.Error("root1 is equal to root2 after file1 got updated")
 	}
 
@@ -87,7 +87,7 @@ func TestFilesystem(t *testing.T) {
 	if err != nil {
 		t.Error("failed to update file:", err)
 	}
-	if !root1.Equal(root2) {
+	if !root1.Equal(root2, false) {
 		t.Error("root1 is not equal to root2 after update")
 	}
 
@@ -102,7 +102,7 @@ func TestFilesystem(t *testing.T) {
 	checkFile(t, root1, dir1, 0, 2)
 	checkFile(t, root2, dir2, 0, 2)
 
-	if !root1.Equal(root2) {
+	if !root1.Equal(root2, false) {
 		t.Error("root1 is not equal to root2 after CreateDir")
 	}
 
@@ -115,7 +115,7 @@ func TestFilesystem(t *testing.T) {
 		t.Errorf("could not copy entry %s to dir %s: %s", child2, dir2, err)
 	}
 
-	if !root1.Equal(root2) {
+	if !root1.Equal(root2, false) {
 		t.Error("root1 is not equal to root2 after adding files to a subdirectory")
 	}
 
@@ -142,7 +142,7 @@ func TestFilesystem(t *testing.T) {
 		}
 	}
 
-	if !root1.Equal(root2) {
+	if !root1.Equal(root2, false) {
 		t.Error("root1 is not equal to root2 after delete")
 	}
 }
