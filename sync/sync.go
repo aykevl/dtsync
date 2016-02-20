@@ -135,6 +135,9 @@ func (r *Result) syncDirs(dir1, dir2 tree.Entry, statusDir1, statusDir2 *dtdiff.
 			parent2:       dir2,
 		}
 		if file1 == nil {
+			if status1 != nil {
+				status1.Remove()
+			}
 			if !statusDir1.HasRevision(status2) {
 				job.action = ACTION_COPY
 				job.direction = -1
@@ -144,6 +147,9 @@ func (r *Result) syncDirs(dir1, dir2 tree.Entry, statusDir1, statusDir2 *dtdiff.
 			}
 			r.jobs = append(r.jobs, job)
 		} else if file2 == nil {
+			if status2 != nil {
+				status2.Remove()
+			}
 			if !statusDir2.HasRevision(status1) {
 				job.action = ACTION_COPY
 				job.direction = 1
@@ -194,7 +200,7 @@ func ensureStatus(file *tree.Entry, status **dtdiff.Entry, statusDir **dtdiff.En
 				panic("must not happen: " + err.Error())
 			}
 		} else {
-			// TODO update
+			// .Update is done in the caller
 		}
 	}
 }

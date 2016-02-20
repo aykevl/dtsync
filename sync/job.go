@@ -156,7 +156,6 @@ func (j *Job) Apply() error {
 		err = parent2.Remove(file2)
 		if err == nil {
 			status2.Remove()
-			status1.Remove() // TODO status1 may be nil
 		}
 	default:
 		panic("unknown action (must not happen)")
