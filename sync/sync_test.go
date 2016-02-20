@@ -71,12 +71,14 @@ func TestSync(t *testing.T) {
 
 	fs1 = memory.NewRoot()
 	fs2 = memory.NewRoot()
+	fsCheck := memory.NewRoot()
 	fsNames := []struct {
 		name string
 		fs   *memory.Entry
 	}{
 		{"fs1", fs1},
 		{"fs2", fs2},
+		{"fsCheck", fsCheck},
 	}
 	for _, fs := range fsNames {
 		fs.fs.AddRegular(STATUS_FILE, []byte(`Content-Type: text/tab-separated-values
@@ -87,7 +89,6 @@ path	modtime	replica	generation
 `))
 	}
 
-	fsCheck := memory.NewRoot()
 	runTests(t, fs1, fs2, fsCheck, fs2, false, testCases)
 	runTests(t, fs1, fs2, fsCheck, fs1, true, testCases)
 	runTests(t, fs1, fs2, fsCheck, fs1, false, testCases)
