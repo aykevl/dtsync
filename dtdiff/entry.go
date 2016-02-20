@@ -157,14 +157,17 @@ func (e *Entry) Update(file tree.Entry) {
 		e.replica.markChanged()
 		e.revReplica = e.replica.identity
 		e.revGeneration = e.replica.generation
+		e.modTime = file.ModTime()
 	}
 }
 
-// SetRevision sets this entry to the revision of the other entry.
-func (e *Entry) SetRevision(other *Entry) {
+// UpdateFrom sets this entry as updated from the other entry, copying the
+// revision and modification time.
+func (e *Entry) UpdateFrom(other *Entry) {
 	e.replica.markChanged()
 	e.revReplica = other.revReplica
 	e.revGeneration = other.revGeneration
+	e.modTime = other.modTime
 }
 
 // Remove this entry.

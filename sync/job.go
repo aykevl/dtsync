@@ -150,7 +150,7 @@ func (j *Job) Apply() error {
 	case ACTION_UPDATE:
 		err = file1.Update(file2)
 		if err == nil {
-			status2.SetRevision(status1)
+			status2.UpdateFrom(status1)
 		}
 	case ACTION_REMOVE:
 		err = parent2.Remove(file2)
