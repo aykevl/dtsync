@@ -267,22 +267,16 @@ func (e *Entry) UpdateFile(modTime time.Time) (io.WriteCloser, error) {
 // AddRegular creates a new regular file.
 // This function only exists for testing purposes.
 func (e *Entry) AddRegular(name string, contents []byte) (*Entry, error) {
-	if e.fileType != tree.TYPE_DIRECTORY {
-		return nil, tree.ErrNoDirectory
-	}
-	if e.children == nil {
-		e.children = make(map[string]*Entry)
-	}
-	if _, ok := e.children[name]; ok {
-		return nil, tree.ErrAlreadyExists
-	}
 	child := &Entry{
 		fileType: tree.TYPE_REGULAR,
 		modTime:  time.Now(),
 		name:     name,
 		contents: contents,
 	}
-	e.children[name] = child
+	err := e.addChild(child)
+	if err != nil {
+		return nil, err
+	}
 	return child, nil
 }
 
