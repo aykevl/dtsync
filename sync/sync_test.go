@@ -47,7 +47,7 @@ func TestSync(t *testing.T) {
 	fs1 := memory.NewRoot()
 	fs2 := memory.NewRoot()
 
-	result, err := Sync(fs1, fs2)
+	result, err := Scan(fs1, fs2)
 	if err != nil {
 		t.Fatal("could not start sync:", err)
 	}
@@ -96,6 +96,7 @@ path	modtime	replica	generation
 func runTests(t *testing.T, fs1, fs2 *memory.Entry, swap bool, cases []testCase) {
 	for _, tc := range cases {
 		t.Logf("Action: %s %s", tc.action, tc.file)
+		failedBefore := t.Failed()
 		statusBefore := readStatuses(t, fs1, fs2)
 
 		var err error
@@ -122,12 +123,12 @@ func runTests(t *testing.T, fs1, fs2 *memory.Entry, swap bool, cases []testCase)
 		}
 
 		if swap {
-			runTestCase(t, &tc, fs2, fs1, -1)
+			runTestCase(t, &tc, fs2, fs1, -1, true)
 		} else {
-			runTestCase(t, &tc, fs1, fs2, 1)
+			runTestCase(t, &tc, fs1, fs2, 1, true)
 		}
 
-		if t.Failed() {
+		if t.Failed() != failedBefore {
 			printStatus(t, "before", statusBefore)
 			printStatus(t, "after", readStatuses(t, fs1, fs2))
 			t.FailNow()
@@ -135,11 +136,65 @@ func runTests(t *testing.T, fs1, fs2 *memory.Entry, swap bool, cases []testCase)
 	}
 }
 
-func runTestCase(t *testing.T, tc *testCase, fs1, fs2 *memory.Entry, jobDirection int) {
-	result, err := Sync(fs1, fs2)
+func runTestCase(t *testing.T, tc *testCase, fs1, fs2 *memory.Entry, jobDirection int, scanTwice bool) {
+	result := runTestCaseScan(t, tc, fs1, fs2, jobDirection)
+	if result == nil {
+		return
+	}
+
+	if scanTwice {
+		// Save, and scan again, to test whether there were any changes.
+		if err := result.SaveStatus(); err != nil {
+			t.Errorf("could not save status: %s", err)
+		}
+		replica1a := result.rs.Get(0)
+		replica2a := result.rs.Get(1)
+
+		result = runTestCaseScan(t, tc, fs1, fs2, jobDirection)
+		replica1b := result.rs.Get(0)
+		replica2b := result.rs.Get(1)
+		if replica1b.Changed() {
+			t.Errorf("%s got updated to %s on second scan", replica1a, replica1b)
+		}
+		if replica2b.Changed() {
+			t.Errorf("%s got updated to %s on second scan", replica2a, replica2b)
+		}
+	}
+
+	if err := result.SyncAll(); err != nil {
+		t.Errorf("could not sync all: %s", err)
+		return
+	}
+	if !fsEqual(fs1, fs2) {
+		t.Errorf("directory trees are not equal after: %s %s", tc.action, tc.file)
+	} else {
+		result.MarkFullySynced()
+
+		// both replicas must include all changes from the other
+		replica1 := result.rs.Get(0)
+		replica2 := result.rs.Get(1)
+		if !replica1.Root().Includes(replica2.Root()) {
+			t.Errorf("%s does not include all changes from %s", replica1, replica2)
+		}
+		if !replica2.Root().Includes(replica1.Root()) {
+			t.Errorf("%s does not include all changes from %s", replica2, replica1)
+		}
+
+		if err := result.SaveStatus(); err != nil {
+			t.Errorf("could not save status: %s", err)
+		}
+	}
+
+	if fs1.Size() != tc.fileCount || fs2.Size() != tc.fileCount {
+		t.Errorf("unexpected number of files after first sync (expected %d): fs1=%d fs2=%d", tc.fileCount, fs1.Size(), fs2.Size())
+	}
+}
+
+func runTestCaseScan(t *testing.T, tc *testCase, fs1, fs2 *memory.Entry, jobDirection int) *Result {
+	result, err := Scan(fs1, fs2)
 	if err != nil {
 		t.Errorf("could not sync after: %s %s: %s", tc.action, tc.file, err)
-		return
+		return nil
 	}
 
 	if len(result.jobs) != 1 {
@@ -154,22 +209,7 @@ func runTestCase(t *testing.T, tc *testCase, fs1, fs2 *memory.Entry, jobDirectio
 		}
 	}
 
-	if err := result.SyncAll(); err != nil {
-		t.Errorf("could not sync all: %s", err)
-		return
-	}
-	if !fsEqual(fs1, fs2) {
-		t.Errorf("directory trees are not equal after: %s %s", tc.action, tc.file)
-	} else {
-		result.MarkFullySynced()
-		if err := result.SaveStatus(); err != nil {
-			t.Errorf("could not save status: %s", err)
-		}
-	}
-
-	if fs1.Size() != tc.fileCount || fs2.Size() != tc.fileCount {
-		t.Errorf("unexpected number of files after first sync (expected %d): fs1=%d fs2=%d", tc.fileCount, fs1.Size(), fs2.Size())
-	}
+	return result
 }
 
 func getFile(parent *memory.Entry, name string) *memory.Entry {

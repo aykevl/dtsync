@@ -106,7 +106,7 @@ func (e *Entry) HasRevision(other *Entry) bool {
 }
 
 // Equal returns true if both entries are of the same revision (replica and
-// generation).
+// generation). Not recursive.
 func (e *Entry) Equal(e2 *Entry) bool {
 	return e.revReplica == e2.revReplica && e.revGeneration == e2.revGeneration
 }
@@ -128,6 +128,47 @@ func (e *Entry) Before(e2 *Entry) bool {
 // Conflict returns true if both entries are modified.
 func (e *Entry) Conflict(e2 *Entry) bool {
 	return e.After(e2) && e2.After(e)
+}
+
+// Includes returns true if this entry includes all revisions from the other
+// entry (recursively: children are also compared).
+//
+// FIXME: It does not always work when one file is removed. It does work however
+// to check for equality, though.
+func (e *Entry) Includes(e2 *Entry) bool {
+	if e2.After(e) && !e.isRoot() {
+		return false
+	}
+
+	for name, child2 := range e2.children {
+		_, ok := e.children[name]
+		if !ok {
+			// if child2 has all revisions, that means it is deleted here, not
+			// new there.
+			if child2.HasRevision(e) {
+				// their child was removed
+				return false
+			}
+		}
+	}
+	for name, child := range e.children {
+		child2, ok := e2.children[name]
+		if !ok {
+			if !child.HasRevision(e2) {
+				// our child is outdated and to-be-removed
+				return false
+			}
+		} else {
+			if !child.Includes(child2) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func (e *Entry) isRoot() bool {
+	return e.parent == nil
 }
 
 func (e *Entry) List() []*Entry {

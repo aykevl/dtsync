@@ -49,6 +49,8 @@ var (
 // File where current status of the tree is stored.
 const STATUS_FILE = ".dtsync"
 
+// Result is returned by Scan on success. It contains the scan jobs that can
+// then be applied.
 type Result struct {
 	rs    *dtdiff.ReplicaSet
 	root1 tree.Entry
@@ -56,7 +58,9 @@ type Result struct {
 	jobs  []*Job
 }
 
-func Sync(dir1, dir2 tree.Entry) (*Result, error) {
+// Scan the two filesystem roots for changes, and return results with a list of
+// sync jobs.
+func Scan(dir1, dir2 tree.Entry) (*Result, error) {
 	if dir1 == dir2 {
 		return nil, ErrSameRoot
 	}

@@ -121,6 +121,12 @@ func (r *Replica) markChanged() {
 	}
 }
 
+// Changed returns true if this replica got updates (presumably during the last
+// scan).
+func (r *Replica) Changed() bool {
+	return r.isChanged
+}
+
 func (r *Replica) include(other *Replica) {
 	for id, gen := range other.peerGenerations {
 		if r.peerGenerations[id] < gen {
