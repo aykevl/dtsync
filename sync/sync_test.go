@@ -89,14 +89,16 @@ path	modtime	replica	generation
 `))
 	}
 
-	for _, swapped := range []bool{false, true} {
-		for _, fsCheckWith := range []*memory.Entry{fs2, fs1} {
-			runTests(t, fs1, fs2, fsCheck, fsCheckWith, swapped, testCases)
+	for _, scanTwice := range []bool{true, false} {
+		for _, swapped := range []bool{false, true} {
+			for _, fsCheckWith := range []*memory.Entry{fs2, fs1} {
+				runTests(t, fs1, fs2, fsCheck, fsCheckWith, swapped, scanTwice, testCases)
+			}
 		}
 	}
 }
 
-func runTests(t *testing.T, fs1, fs2, fsCheck, fsCheckWith *memory.Entry, swap bool, cases []testCase) {
+func runTests(t *testing.T, fs1, fs2, fsCheck, fsCheckWith *memory.Entry, swap, scanTwice bool, cases []testCase) {
 	for _, tc := range cases {
 		t.Logf("Action: %s %s", tc.action, tc.file)
 		failedBefore := t.Failed()
@@ -126,9 +128,9 @@ func runTests(t *testing.T, fs1, fs2, fsCheck, fsCheckWith *memory.Entry, swap b
 		}
 
 		if swap {
-			runTestCase(t, &tc, fs2, fs1, -1, true)
+			runTestCase(t, &tc, fs2, fs1, -1, scanTwice)
 		} else {
-			runTestCase(t, &tc, fs1, fs2, 1, true)
+			runTestCase(t, &tc, fs1, fs2, 1, scanTwice)
 		}
 
 		if t.Failed() != failedBefore {
@@ -138,7 +140,7 @@ func runTests(t *testing.T, fs1, fs2, fsCheck, fsCheckWith *memory.Entry, swap b
 		}
 
 		statusBefore = readStatuses(t, fsCheck, fsCheckWith)
-		runTestCase(t, &tc, fsCheck, fsCheckWith, -1, true)
+		runTestCase(t, &tc, fsCheck, fsCheckWith, -1, scanTwice)
 		if t.Failed() {
 			printStatus(t, "before (check)", statusBefore)
 			printStatus(t, "after (check)", readStatuses(t, fs1, fs2))
