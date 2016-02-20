@@ -33,10 +33,10 @@
 package tree
 
 import (
+	"errors"
 	"io"
 	"sort"
 	"time"
-	"errors"
 )
 
 // The type used for TYPE_* constants
