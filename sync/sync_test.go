@@ -87,13 +87,14 @@ path	modtime	replica	generation
 `))
 	}
 
-	runTests(t, fs1, fs2, false, testCases)
-	runTests(t, fs1, fs2, true, testCases)
-	runTests(t, fs2, fs1, false, testCases)
-	runTests(t, fs2, fs1, true, testCases)
+	fsCheck := memory.NewRoot()
+	runTests(t, fs1, fs2, fsCheck, fs2, false, testCases)
+	runTests(t, fs1, fs2, fsCheck, fs1, true, testCases)
+	runTests(t, fs1, fs2, fsCheck, fs1, false, testCases)
+	runTests(t, fs1, fs2, fsCheck, fs2, true, testCases)
 }
 
-func runTests(t *testing.T, fs1, fs2 *memory.Entry, swap bool, cases []testCase) {
+func runTests(t *testing.T, fs1, fs2, fsCheck, fsCheckWith *memory.Entry, swap bool, cases []testCase) {
 	for _, tc := range cases {
 		t.Logf("Action: %s %s", tc.action, tc.file)
 		failedBefore := t.Failed()
@@ -131,6 +132,14 @@ func runTests(t *testing.T, fs1, fs2 *memory.Entry, swap bool, cases []testCase)
 		if t.Failed() != failedBefore {
 			printStatus(t, "before", statusBefore)
 			printStatus(t, "after", readStatuses(t, fs1, fs2))
+			t.FailNow()
+		}
+
+		statusBefore = readStatuses(t, fsCheck, fsCheckWith)
+		runTestCase(t, &tc, fsCheck, fsCheckWith, -1, true)
+		if t.Failed() {
+			printStatus(t, "before (check)", statusBefore)
+			printStatus(t, "after (check)", readStatuses(t, fs1, fs2))
 			t.FailNow()
 		}
 	}
