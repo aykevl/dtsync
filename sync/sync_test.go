@@ -194,6 +194,18 @@ func runTestCase(t *testing.T, tc *testCase, fs1, fs2 *memory.Entry, jobDirectio
 		if err := result.SaveStatus(); err != nil {
 			t.Errorf("could not save status: %s", err)
 		}
+
+		result, err := Scan(fs1, fs2)
+		if err != nil {
+			t.Errorf("could not scan the two identical trees %s and %s: %s", fs1, fs2, err)
+		} else {
+			if ch1, ch2 := result.rs.Get(0).Changed(), result.rs.Get(1).Changed(); ch1 || ch2 {
+				t.Errorf("one of the replicas was changed with identical trees: (%v, %v)", ch1, ch2)
+			}
+			if len(result.jobs) != 0 {
+				t.Errorf("scan returned %d job when syncing two identical trees", len(result.jobs))
+			}
+		}
 	}
 
 	if fs1.Size() != tc.fileCount || fs2.Size() != tc.fileCount {
