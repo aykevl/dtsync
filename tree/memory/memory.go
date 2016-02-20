@@ -126,8 +126,8 @@ func (e *Entry) CopyTo(otherParent tree.Entry) (tree.Entry, error) {
 	return other, nil
 }
 
-// Update copies data and metadata to the given other file.
-func (e *Entry) Update(other tree.Entry) error {
+// UpdateOver copies data and metadata to the given other file.
+func (e *Entry) UpdateOver(other tree.Entry) error {
 	file, ok := other.(tree.FileEntry)
 	if !ok {
 		return tree.ErrNotImplemented

@@ -148,7 +148,7 @@ func (j *Job) Apply() error {
 			_, err = statusParent2.AddCopy(status1)
 		}
 	case ACTION_UPDATE:
-		err = file1.Update(file2)
+		err = file1.UpdateOver(file2)
 		if err == nil {
 			status2.UpdateFrom(status1)
 		}

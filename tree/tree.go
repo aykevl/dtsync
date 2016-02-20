@@ -77,7 +77,7 @@ type Entry interface {
 	// child.
 	CopyTo(Entry) (Entry, error)
 	// Copy over the other entry, possibly using an optimized algorithm.
-	Update(Entry) error
+	UpdateOver(Entry) error
 	// Delete the child file or directory tree (recursively)
 	Remove(Entry) error
 
