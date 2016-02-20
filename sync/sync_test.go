@@ -67,6 +67,15 @@ func TestSync(t *testing.T) {
 		{"file1.txt", ACTION_COPY, []byte("The quick brown fox..."), 2},
 		{"file1.txt", ACTION_UPDATE, []byte("The quick brown fox jumps over the lazy dog."), 2},
 		{"file1.txt", ACTION_REMOVE, nil, 1},
+		{"file1.txt", ACTION_COPY, []byte("Still jumping..."), 2},
+		{"file0.txt", ACTION_COPY, []byte("Before"), 3},
+		{"file2.txt", ACTION_COPY, []byte("After"), 4},
+		{"file0.txt", ACTION_UPDATE, []byte("-"), 4},
+		{"file2.txt", ACTION_UPDATE, []byte("-"), 4},
+		{"file1.txt", ACTION_UPDATE, []byte("-"), 4},
+		{"file0.txt", ACTION_REMOVE, nil, 3},
+		{"file2.txt", ACTION_REMOVE, nil, 2},
+		{"file1.txt", ACTION_REMOVE, nil, 1},
 	}
 
 	fs1 = memory.NewRoot()
