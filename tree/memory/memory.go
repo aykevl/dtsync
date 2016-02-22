@@ -111,19 +111,25 @@ func (e *Entry) CopyTo(otherParent tree.Entry) (tree.Entry, error) {
 	if !ok {
 		return nil, tree.ErrNotImplemented
 	}
-	other, out, err := file.CreateFile(e.name, e.modTime)
-	if err != nil {
-		return nil, err
+
+	switch e.fileType {
+	case tree.TYPE_REGULAR:
+		other, out, err := file.CreateFile(e.name, e.modTime)
+		if err != nil {
+			return nil, err
+		}
+		_, err = out.Write(e.contents)
+		if err != nil {
+			return nil, err
+		}
+		err = out.Close()
+		if err != nil {
+			return nil, err
+		}
+		return other, nil
+	default:
+		return nil, tree.ErrNotImplemented
 	}
-	_, err = out.Write(e.contents)
-	if err != nil {
-		return nil, err
-	}
-	err = out.Close()
-	if err != nil {
-		return nil, err
-	}
-	return other, nil
 }
 
 // UpdateOver copies data and metadata to the given other file.
@@ -132,22 +138,29 @@ func (e *Entry) UpdateOver(other tree.Entry) error {
 	if !ok {
 		return tree.ErrNotImplemented
 	}
-	out, err := file.UpdateFile(e.modTime)
-	if err != nil {
-		return err
-	}
 
-	_, err = out.Write(e.contents)
-	if err != nil {
-		return err
-	}
+	switch e.fileType {
+	case tree.TYPE_REGULAR:
+		out, err := file.UpdateFile(e.modTime)
+		if err != nil {
+			return err
+		}
 
-	err = out.Close()
-	if err != nil {
-		return err
-	}
+		_, err = out.Write(e.contents)
+		if err != nil {
+			return err
+		}
 
-	return nil
+		err = out.Close()
+		if err != nil {
+			return err
+		}
+
+		return nil
+
+	default:
+		return tree.ErrNotImplemented
+	}
 }
 
 // Remove removes this file or directory tree, recursively.
