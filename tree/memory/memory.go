@@ -207,6 +207,7 @@ func (e *Entry) SetFile(name string) (io.WriteCloser, error) {
 func (e *Entry) CreateDir(name string) (tree.Entry, error) {
 	child := &Entry{
 		fileType: tree.TYPE_DIRECTORY,
+		modTime:  time.Now(),
 		name:     name,
 	}
 	err := e.addChild(child)
