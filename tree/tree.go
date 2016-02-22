@@ -33,8 +33,10 @@
 package tree
 
 import (
+	"bytes"
 	"errors"
 	"io"
+	"io/ioutil"
 	"sort"
 	"time"
 )
@@ -102,6 +104,9 @@ type FileEntry interface {
 	CreateFile(name string, modTime time.Time) (Entry, io.WriteCloser, error)
 	// Update this file. May do about the same as CreateFile.
 	UpdateFile(modTime time.Time) (io.WriteCloser, error)
+	// GetReader returns a io.ReadCloser with the contents of this file.
+	// Useful for Equals()
+	GetContents() (io.ReadCloser, error)
 }
 
 // EntrySlice is a sortable list of Entries, sorting in incrasing order by the
@@ -138,4 +143,60 @@ func ValidName(name string) bool {
 		}
 	}
 	return true
+}
+
+// Equal compares two entries, only returning true when this file and possible
+// children (for directories) are exactly equal.
+func Equal(file1, file2 FileEntry, includeDirModTime bool) (bool, error) {
+	if file1.Name() != file2.Name() || file1.Type() != file2.Type() {
+		return false, nil
+	}
+	if !file1.ModTime().Equal(file2.ModTime()) {
+		if file1.Type() == TYPE_DIRECTORY {
+			if includeDirModTime {
+				return false, nil
+			}
+		} else {
+			return false, nil
+		}
+	}
+	switch file1.Type() {
+	case TYPE_REGULAR:
+		contents := make([][]byte, 2)
+		// TODO compare the contents block-for-block, not by loading the two
+		// files in memory.
+		for i, file := range []FileEntry{file1, file2} {
+			reader, err := file.GetContents()
+			if err != nil {
+				return false, err
+			}
+			defer reader.Close()
+			contents[i], err = ioutil.ReadAll(reader)
+			if err != nil {
+				return false, err
+			}
+		}
+		return bytes.Equal(contents[0], contents[1]), nil
+	case TYPE_DIRECTORY:
+		list1, err := file1.List()
+		if err != nil {
+			return false, err
+		}
+		list2, err := file2.List()
+		if err != nil {
+			return false, err
+		}
+
+		if len(list1) != len(list2) {
+			return false, nil
+		}
+		for i := 0; i < len(list1); i++ {
+			if equal, err := Equal(list1[i].(FileEntry), list2[i].(FileEntry), includeDirModTime); !equal || err != nil {
+				return equal, err
+			}
+		}
+		return true, nil
+	default:
+		panic("unknown fileType")
+	}
 }

@@ -304,9 +304,12 @@ func fsEqual(fs1, fs2 *memory.Entry) bool {
 	}
 
 	for i, _ := range list1 {
-		file1 := list1[i]
-		file2 := list2[i]
-		if !file1.Equal(file2, false) {
+		equal, err := tree.Equal(list1[i], list2[i], false)
+		if err != nil {
+			// IO errors shouldn't happen while testing
+			panic(err)
+		}
+		if !equal {
 			return false
 		}
 	}

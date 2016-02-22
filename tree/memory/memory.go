@@ -289,7 +289,7 @@ func (e *Entry) UpdateFile(modTime time.Time) (io.WriteCloser, error) {
 
 // AddRegular creates a new regular file.
 // This function only exists for testing purposes.
-func (e *Entry) AddRegular(name string, contents []byte) (*Entry, error) {
+func (e *Entry) AddRegular(name string, contents []byte) (tree.FileEntry, error) {
 	child := &Entry{
 		fileType: tree.TYPE_REGULAR,
 		modTime:  time.Now(),
@@ -303,42 +303,14 @@ func (e *Entry) AddRegular(name string, contents []byte) (*Entry, error) {
 	return child, nil
 }
 
+// GetContents returns a reader to read the contents of the file. Must be closed
+// after use.
+func (e *Entry) GetContents() (io.ReadCloser, error) {
+	return newReadCloseBuffer(e.contents), nil
+}
+
 // SetContents sets the internal contents of the file, for debugging.
 func (e *Entry) SetContents(contents []byte) {
 	e.modTime = time.Now()
 	e.contents = contents
-}
-
-// Equal compares this entry with another entry, only returning true when this
-// file and possible children (for directories) are exactly equal.
-func (e *Entry) Equal(other *Entry, includeDirModTime bool) bool {
-	if e.name != other.name || e.fileType != other.fileType {
-		return false
-	}
-	if !e.modTime.Equal(other.modTime) {
-		if e.fileType == tree.TYPE_DIRECTORY {
-			if includeDirModTime {
-				return false
-			}
-		} else {
-			return false
-		}
-	}
-	switch e.fileType {
-	case tree.TYPE_REGULAR:
-		return bytes.Equal(e.contents, other.contents)
-	case tree.TYPE_DIRECTORY:
-		if len(e.children) != len(other.children) {
-			return false
-		}
-		for name, child := range e.children {
-			otherchild, ok := other.children[name]
-			if !ok || !child.Equal(otherchild, includeDirModTime) {
-				return false
-			}
-		}
-		return true
-	default:
-		panic("unknown fileType")
-	}
 }
