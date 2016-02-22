@@ -30,6 +30,7 @@ package sync
 
 import (
 	"io/ioutil"
+	"strings"
 	"testing"
 	"time"
 
@@ -81,6 +82,9 @@ func TestSync(t *testing.T) {
 		{"file1.txt", ACTION_REMOVE, nil, 1},
 		// directory
 		{"dir", ACTION_COPY, nil, 2},
+		{"dir/file.txt", ACTION_COPY, []byte("abc"), 2},
+		{"dir/file.txt", ACTION_UPDATE, []byte("def"), 2},
+		{"dir/file.txt", ACTION_REMOVE, nil, 2},
 		{"dir", ACTION_REMOVE, nil, 1},
 	}
 
@@ -119,26 +123,33 @@ func runTests(t *testing.T, fs1, fs2, fsCheck, fsCheckWith *memory.Entry, swap, 
 		failedBefore := t.Failed()
 		statusBefore := readStatuses(t, fs1, fs2)
 
+		parts := strings.Split(tc.file, "/")
+		parent1 := fs1
+		for i := 0; i < len(parts)-1; i++ {
+			parent1 = getFile(parent1, parts[i])
+		}
+		name := parts[len(parts)-1]
+
 		var err error
 		switch tc.action {
 		case ACTION_COPY: // add
 			if tc.contents != nil {
-				_, err = fs1.AddRegular(tc.file, tc.contents)
+				_, err = parent1.AddRegular(name, tc.contents)
 			} else {
-				_, err = fs1.CreateDir(tc.file, time.Now())
+				_, err = parent1.CreateDir(name, time.Now())
 			}
 		case ACTION_UPDATE:
-			child := getFile(fs1, tc.file)
+			child := getFile(parent1, name)
 			if child == nil {
 				t.Fatalf("could not find file %s to update", tc.file)
 			}
 			child.SetContents(tc.contents)
 		case ACTION_REMOVE:
-			child := getFile(fs1, tc.file)
+			child := getFile(parent1, name)
 			if child == nil {
 				t.Fatalf("could not find file %s to remove", tc.file)
 			}
-			err = fs1.Remove(child)
+			err = parent1.Remove(child)
 		default:
 			t.Fatalf("unknown action: %d", tc.action)
 		}
@@ -220,8 +231,10 @@ func runTestCase(t *testing.T, tc *testCase, fs1, fs2 *memory.Entry, jobDirectio
 		if err != nil {
 			t.Errorf("could not scan the two identical trees %s and %s: %s", fs1, fs2, err)
 		} else {
-			if ch1, ch2 := result.rs.Get(0).Changed(), result.rs.Get(1).Changed(); ch1 || ch2 {
-				t.Errorf("one of the replicas was changed with identical trees: (%v, %v)", ch1, ch2)
+			replica1 := result.rs.Get(0)
+			replica2 := result.rs.Get(1)
+			if ch1, ch2 := replica1.Changed(), replica2.Changed(); ch1 || ch2 {
+				t.Errorf("one of the replicas was changed with identical trees: (%s: %v, %s: %v)", replica1, ch1, replica2, ch2)
 			}
 			if len(result.jobs) != 0 {
 				t.Errorf("scan returned %d job when syncing two identical trees", len(result.jobs))
@@ -248,7 +261,8 @@ func runTestCaseScan(t *testing.T, tc *testCase, fs1, fs2 *memory.Entry, jobDire
 		if job.direction != jobDirection {
 			t.Errorf("expected direction for %s to be %d, not %d", job, jobDirection, job.direction)
 		}
-		if job.action != tc.action || job.Name() != tc.file {
+		parts := strings.Split(tc.file, "/")
+		if job.action != tc.action || job.Name() != parts[len(parts)-1] {
 			t.Errorf("expected a %s job for file %s, but got %s", tc.action, tc.file, job)
 		}
 	}

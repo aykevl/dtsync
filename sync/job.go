@@ -145,6 +145,7 @@ func (j *Job) Apply() error {
 	case ACTION_COPY:
 		file2, err = file1.CopyTo(parent2)
 		if err == nil {
+			statusParent2.Update(parent2)
 			_, err = statusParent2.AddCopy(status1)
 		}
 	case ACTION_UPDATE:
@@ -155,6 +156,7 @@ func (j *Job) Apply() error {
 	case ACTION_REMOVE:
 		err = parent2.Remove(file2)
 		if err == nil {
+			statusParent2.Update(parent2)
 			status2.Remove()
 		}
 	default:

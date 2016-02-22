@@ -167,7 +167,12 @@ func (r *Result) syncDirs(dir1, dir2 tree.Entry, statusDir1, statusDir2 *dtdiff.
 			// Compare the contents.
 			status1.Update(file1)
 			status2.Update(file2)
-			if status1.Equal(status2) {
+			if file1.Type() == tree.TYPE_DIRECTORY && file2.Type() == tree.TYPE_DIRECTORY {
+				// Don't compare mtime of directories.
+				// Future: maybe check for xattrs?
+				r.syncDirs(file1, file2, status1, status2)
+			} else if status1.Equal(status2) {
+				// Two equal non-directories. We don't have to do more.
 			} else if status1.After(status2) {
 				r.jobs = append(r.jobs, &Job{
 					action:    ACTION_UPDATE,
