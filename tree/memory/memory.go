@@ -265,6 +265,9 @@ func (e *Entry) addChild(child *Entry) error {
 	if _, ok := e.children[child.Name()]; ok {
 		return tree.ErrAlreadyExists
 	}
+	if !tree.ValidName(child.name) {
+		return tree.ErrInvalidName
+	}
 
 	e.children[child.Name()] = child
 	e.modTime = time.Now()

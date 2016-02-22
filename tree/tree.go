@@ -55,6 +55,7 @@ var (
 	ErrNoRegular      = errors.New("tree: this is not a regular file")
 	ErrAlreadyExists  = errors.New("tree: file already exists")
 	ErrNotFound       = errors.New("tree: file not found")
+	ErrInvalidName    = errors.New("tree: invalid file name")
 )
 
 // Entry is one object tree, e.g. a file or directory. It can also be something
@@ -123,4 +124,18 @@ func (es EntrySlice) Swap(i, j int) {
 func SortEntries(slice []Entry) {
 	es := EntrySlice(slice)
 	sort.Sort(es)
+}
+
+// ValidName returns true if this name is the empty string or contains invalid
+// characters.
+func ValidName(name string) bool {
+	if name == "" {
+		return false
+	}
+	for _, c := range name {
+		if c == '/' || c == 0 {
+			return false
+		}
+	}
+	return true
 }
