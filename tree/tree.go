@@ -93,8 +93,9 @@ type Entry interface {
 type FileEntry interface {
 	Entry
 
-	// mkdir: create a directory in this directory.
-	CreateDir(name string) (Entry, error)
+	// mkdir: create a directory in this directory with the given name and
+	// modification time.
+	CreateDir(name string, modTime time.Time) (Entry, error)
 	// Open a file for writing in this directory at a temporary place. Closing
 	// that file will move it to the final destination for atomic operation.
 	CreateFile(name string, modTime time.Time) (Entry, io.WriteCloser, error)

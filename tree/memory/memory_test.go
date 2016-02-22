@@ -30,6 +30,7 @@ package memory
 
 import (
 	"testing"
+	"time"
 
 	"github.com/aykevl/dtsync/tree"
 )
@@ -91,11 +92,11 @@ func TestFilesystem(t *testing.T) {
 		t.Error("root1 is not equal to root2 after update")
 	}
 
-	dir1, err := root1.CreateDir("dir")
+	dir1, err := root1.CreateDir("dir", time.Now())
 	if err != nil {
 		t.Error("could not create directory 1:", err)
 	}
-	dir2, err := root2.CreateDir("dir")
+	dir2, err := root2.CreateDir("dir", time.Now())
 	if err != nil {
 		t.Error("could not create directory 2:", err)
 	}

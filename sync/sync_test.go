@@ -31,6 +31,7 @@ package sync
 import (
 	"io/ioutil"
 	"testing"
+	"time"
 
 	"github.com/aykevl/dtsync/tree"
 	"github.com/aykevl/dtsync/tree/memory"
@@ -64,9 +65,11 @@ func TestSync(t *testing.T) {
 	}
 
 	testCases := []testCase{
+		// basic copy/update/remove
 		{"file1.txt", ACTION_COPY, []byte("The quick brown fox..."), 2},
 		{"file1.txt", ACTION_UPDATE, []byte("The quick brown fox jumps over the lazy dog."), 2},
 		{"file1.txt", ACTION_REMOVE, nil, 1},
+		// insert a file before and after an existing file
 		{"file1.txt", ACTION_COPY, []byte("Still jumping..."), 2},
 		{"file0.txt", ACTION_COPY, []byte("Before"), 3},
 		{"file2.txt", ACTION_COPY, []byte("After"), 4},
@@ -76,6 +79,9 @@ func TestSync(t *testing.T) {
 		{"file0.txt", ACTION_REMOVE, nil, 3},
 		{"file2.txt", ACTION_REMOVE, nil, 2},
 		{"file1.txt", ACTION_REMOVE, nil, 1},
+		// directory
+		{"dir", ACTION_COPY, nil, 2},
+		{"dir", ACTION_REMOVE, nil, 1},
 	}
 
 	fs1 = memory.NewRoot()
@@ -116,7 +122,11 @@ func runTests(t *testing.T, fs1, fs2, fsCheck, fsCheckWith *memory.Entry, swap, 
 		var err error
 		switch tc.action {
 		case ACTION_COPY: // add
-			_, err = fs1.AddRegular(tc.file, tc.contents)
+			if tc.contents != nil {
+				_, err = fs1.AddRegular(tc.file, tc.contents)
+			} else {
+				_, err = fs1.CreateDir(tc.file, time.Now())
+			}
 		case ACTION_UPDATE:
 			child := getFile(fs1, tc.file)
 			if child == nil {

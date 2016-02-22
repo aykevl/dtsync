@@ -127,6 +127,10 @@ func (e *Entry) CopyTo(otherParent tree.Entry) (tree.Entry, error) {
 			return nil, err
 		}
 		return other, nil
+
+	case tree.TYPE_DIRECTORY:
+		return tree.CopyTree(e, file)
+
 	default:
 		return nil, tree.ErrNotImplemented
 	}
@@ -216,11 +220,11 @@ func (e *Entry) SetFile(name string) (io.WriteCloser, error) {
 	}
 }
 
-// CreateDir creates a directory with the given name.
-func (e *Entry) CreateDir(name string) (tree.Entry, error) {
+// CreateDir creates a directory with the given name and modtime.
+func (e *Entry) CreateDir(name string, modTime time.Time) (tree.Entry, error) {
 	child := &Entry{
 		fileType: tree.TYPE_DIRECTORY,
-		modTime:  time.Now(),
+		modTime:  modTime,
 		name:     name,
 	}
 	err := e.addChild(child)
