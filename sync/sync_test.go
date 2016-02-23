@@ -88,6 +88,25 @@ func TestSync(t *testing.T) {
 		{"dir", ACTION_REMOVE, nil, 1},
 	}
 
+	complexTestCases := []struct {
+		jobName      string
+		jobAction    Action
+		jobFileCount int64
+		fileAction   func(fs *memory.Entry) error
+	}{
+		{"dir", ACTION_COPY, 2, func(fs *memory.Entry) error {
+			dir, err := fs.CreateDir("dir", time.Now())
+			if err != nil {
+				return err
+			}
+			_, err = dir.(*memory.Entry).AddRegular("file.txt", []byte("abc"))
+			return err
+		}},
+		{"dir", ACTION_REMOVE, 1, func(fs *memory.Entry) error {
+			return fs.Remove(getFile(fs, "dir"))
+		}},
+	}
+
 	fs1 = memory.NewRoot()
 	fs2 = memory.NewRoot()
 	fsCheck := memory.NewRoot()
@@ -111,75 +130,83 @@ path	modtime	replica	generation
 	for _, scanTwice := range []bool{true, false} {
 		for _, swapped := range []bool{false, true} {
 			for _, fsCheckWith := range []*memory.Entry{fs2, fs1} {
-				runTests(t, fs1, fs2, fsCheck, fsCheckWith, swapped, scanTwice, testCases)
+				for _, tc := range testCases {
+					applyTestCase(t, fs1, tc)
+					runTestCase(t, fs1, fs2, fsCheck, fsCheckWith, swapped, scanTwice, tc)
+				}
+				for _, ctc := range complexTestCases {
+					ctc.fileAction(fs1)
+					tc := testCase{ctc.jobName, ctc.jobAction, nil, ctc.jobFileCount}
+					runTestCase(t, fs1, fs2, fsCheck, fsCheckWith, swapped, scanTwice, tc)
+				}
 			}
 		}
 	}
 }
 
-func runTests(t *testing.T, fs1, fs2, fsCheck, fsCheckWith *memory.Entry, swap, scanTwice bool, cases []testCase) {
-	for _, tc := range cases {
-		t.Logf("Action: %s %s", tc.action, tc.file)
-		failedBefore := t.Failed()
-		statusBefore := readStatuses(t, fs1, fs2)
+func applyTestCase(t *testing.T, fs *memory.Entry, tc testCase) {
+	parts := strings.Split(tc.file, "/")
+	parent := fs
+	for i := 0; i < len(parts)-1; i++ {
+		parent = getFile(parent, parts[i])
+	}
+	name := parts[len(parts)-1]
 
-		parts := strings.Split(tc.file, "/")
-		parent1 := fs1
-		for i := 0; i < len(parts)-1; i++ {
-			parent1 = getFile(parent1, parts[i])
-		}
-		name := parts[len(parts)-1]
-
-		var err error
-		switch tc.action {
-		case ACTION_COPY: // add
-			if tc.contents != nil {
-				_, err = parent1.AddRegular(name, tc.contents)
-			} else {
-				_, err = parent1.CreateDir(name, time.Now())
-			}
-		case ACTION_UPDATE:
-			child := getFile(parent1, name)
-			if child == nil {
-				t.Fatalf("could not find file %s to update", tc.file)
-			}
-			child.SetContents(tc.contents)
-		case ACTION_REMOVE:
-			child := getFile(parent1, name)
-			if child == nil {
-				t.Fatalf("could not find file %s to remove", tc.file)
-			}
-			err = parent1.Remove(child)
-		default:
-			t.Fatalf("unknown action: %d", tc.action)
-		}
-		if err != nil {
-			t.Fatalf("could not %s file %s: %s", tc.action, tc.file, err)
-		}
-
-		if swap {
-			runTestCase(t, &tc, fs2, fs1, -1, scanTwice)
+	var err error
+	switch tc.action {
+	case ACTION_COPY: // add
+		if tc.contents != nil {
+			_, err = parent.AddRegular(name, tc.contents)
 		} else {
-			runTestCase(t, &tc, fs1, fs2, 1, scanTwice)
+			_, err = parent.CreateDir(name, time.Now())
 		}
-
-		if t.Failed() != failedBefore {
-			printStatus(t, "before", statusBefore)
-			printStatus(t, "after", readStatuses(t, fs1, fs2))
-			t.FailNow()
+	case ACTION_UPDATE:
+		child := getFile(parent, name)
+		if child == nil {
+			t.Fatalf("could not find file %s to update", tc.file)
 		}
-
-		statusBefore = readStatuses(t, fsCheck, fsCheckWith)
-		runTestCase(t, &tc, fsCheck, fsCheckWith, -1, scanTwice)
-		if t.Failed() {
-			printStatus(t, "before (check)", statusBefore)
-			printStatus(t, "after (check)", readStatuses(t, fs1, fs2))
-			t.FailNow()
+		child.SetContents(tc.contents)
+	case ACTION_REMOVE:
+		child := getFile(parent, name)
+		if child == nil {
+			t.Fatalf("could not find file %s to remove", tc.file)
 		}
+		err = parent.Remove(child)
+	default:
+		t.Fatalf("unknown action: %d", tc.action)
+	}
+	if err != nil {
+		t.Fatalf("could not %s file %s: %s", tc.action, tc.file, err)
 	}
 }
 
-func runTestCase(t *testing.T, tc *testCase, fs1, fs2 *memory.Entry, jobDirection int, scanTwice bool) {
+func runTestCase(t *testing.T, fs1, fs2, fsCheck, fsCheckWith *memory.Entry, swap, scanTwice bool, tc testCase) {
+	t.Logf("Action: %s %s", tc.action, tc.file)
+	failedBefore := t.Failed()
+	statusBefore := readStatuses(t, fs1, fs2)
+
+	if swap {
+		runTestCaseSync(t, &tc, fs2, fs1, -1, scanTwice)
+	} else {
+		runTestCaseSync(t, &tc, fs1, fs2, 1, scanTwice)
+	}
+
+	if t.Failed() != failedBefore {
+		printStatus(t, "before", statusBefore)
+		printStatus(t, "after", readStatuses(t, fs1, fs2))
+		t.FailNow()
+	}
+
+	statusBefore = readStatuses(t, fsCheck, fsCheckWith)
+	runTestCaseSync(t, &tc, fsCheck, fsCheckWith, -1, scanTwice)
+	if t.Failed() {
+		printStatus(t, "before (check)", statusBefore)
+		printStatus(t, "after (check)", readStatuses(t, fs1, fs2))
+		t.FailNow()
+	}
+}
+
+func runTestCaseSync(t *testing.T, tc *testCase, fs1, fs2 *memory.Entry, jobDirection int, scanTwice bool) {
 	result := runTestCaseScan(t, tc, fs1, fs2, jobDirection)
 	if result == nil {
 		return
@@ -231,13 +258,22 @@ func runTestCase(t *testing.T, tc *testCase, fs1, fs2 *memory.Entry, jobDirectio
 		if err != nil {
 			t.Errorf("could not scan the two identical trees %s and %s: %s", fs1, fs2, err)
 		} else {
+			statusBefore := readStatuses(t, fs1, fs2)
 			replica1 := result.rs.Get(0)
 			replica2 := result.rs.Get(1)
 			if ch1, ch2 := replica1.Changed(), replica2.Changed(); ch1 || ch2 {
 				t.Errorf("one of the replicas was changed with identical trees: (%s: %v, %s: %v)", replica1, ch1, replica2, ch2)
+				if err := result.SaveStatus(); err != nil {
+					t.Errorf("could not save status: %s", err)
+				}
 			}
 			if len(result.jobs) != 0 {
-				t.Errorf("scan returned %d job when syncing two identical trees", len(result.jobs))
+				t.Errorf("scan returned %d job %v when syncing two identical trees", len(result.jobs), result.jobs)
+			}
+			if t.Failed() {
+				printStatus(t, "before (changed)", statusBefore)
+				printStatus(t, "after (changed)", readStatuses(t, fs1, fs2))
+				t.FailNow()
 			}
 		}
 	}
@@ -255,7 +291,7 @@ func runTestCaseScan(t *testing.T, tc *testCase, fs1, fs2 *memory.Entry, jobDire
 	}
 
 	if len(result.jobs) != 1 {
-		t.Errorf("list of jobs is expected to be 1, but actually is %d", len(result.jobs))
+		t.Errorf("list of jobs is expected to be 1, but actually is %d %v", len(result.jobs), result.jobs)
 	} else {
 		job := result.jobs[0]
 		if job.direction != jobDirection {

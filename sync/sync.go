@@ -100,11 +100,11 @@ func getStatus(dir tree.Entry) (io.ReadCloser, error) {
 }
 
 func (r *Result) sync() error {
-	return r.syncDirs(r.root1, r.root2, r.rs.Get(0).Root(), r.rs.Get(1).Root())
+	return r.scanDirs(r.root1, r.root2, r.rs.Get(0).Root(), r.rs.Get(1).Root())
 }
 
-// syncDirs implements the heart of the sync algorithm.
-func (r *Result) syncDirs(dir1, dir2 tree.Entry, statusDir1, statusDir2 *dtdiff.Entry) error {
+// scanDirs implements the heart of the sync algorithm.
+func (r *Result) scanDirs(dir1, dir2 tree.Entry, statusDir1, statusDir2 *dtdiff.Entry) error {
 	for row := range iterateEntries(dir1, dir2, statusDir1, statusDir2) {
 		if row.err != nil {
 			// TODO don't stop, continue but mark the sync as unclean (don't
@@ -141,27 +141,39 @@ func (r *Result) syncDirs(dir1, dir2 tree.Entry, statusDir1, statusDir2 *dtdiff.
 		if file1 == nil {
 			if status1 != nil {
 				status1.Remove()
+				status1 = nil
 			}
-			if !statusDir1.HasRevision(status2) {
-				job.action = ACTION_COPY
-				job.direction = -1
-			} else {
-				job.action = ACTION_REMOVE
-				job.direction = 1
+			if statusDir1 != nil {
+				if !statusDir1.HasRevision(status2) {
+					job.action = ACTION_COPY
+					job.direction = -1
+				} else {
+					job.action = ACTION_REMOVE
+					job.direction = 1
+				}
+				r.jobs = append(r.jobs, job)
 			}
-			r.jobs = append(r.jobs, job)
+			if file2.Type() == tree.TYPE_DIRECTORY {
+				r.scanDirs(file1, file2, status1, status2)
+			}
 		} else if file2 == nil {
 			if status2 != nil {
 				status2.Remove()
+				status2 = nil
 			}
-			if !statusDir2.HasRevision(status1) {
-				job.action = ACTION_COPY
-				job.direction = 1
-			} else {
-				job.action = ACTION_REMOVE
-				job.direction = -1
+			if statusDir2 != nil {
+				if !statusDir2.HasRevision(status1) {
+					job.action = ACTION_COPY
+					job.direction = 1
+				} else {
+					job.action = ACTION_REMOVE
+					job.direction = -1
+				}
+				r.jobs = append(r.jobs, job)
 			}
-			r.jobs = append(r.jobs, job)
+			if file1.Type() == tree.TYPE_DIRECTORY {
+				r.scanDirs(file1, file2, status1, status2)
+			}
 		} else {
 			// All four (file1, file2, status1, status2) are defined.
 			// Compare the contents.
@@ -170,7 +182,7 @@ func (r *Result) syncDirs(dir1, dir2 tree.Entry, statusDir1, statusDir2 *dtdiff.
 			if file1.Type() == tree.TYPE_DIRECTORY && file2.Type() == tree.TYPE_DIRECTORY {
 				// Don't compare mtime of directories.
 				// Future: maybe check for xattrs?
-				r.syncDirs(file1, file2, status1, status2)
+				r.scanDirs(file1, file2, status1, status2)
 			} else if status1.Equal(status2) {
 				// Two equal non-directories. We don't have to do more.
 			} else if status1.After(status2) {
@@ -232,18 +244,34 @@ func iterateEntries(dir1, dir2 tree.Entry, statusDir1, statusDir2 *dtdiff.Entry)
 	c := make(chan entryRow)
 	go func() {
 		defer close(c)
-		listDir1, err := dir1.List()
-		if err != nil {
-			c <- entryRow{err: err}
-			return
+
+		var err error
+
+		var listDir1 []tree.Entry
+		if dir1 != nil {
+			listDir1, err = dir1.List()
+			if err != nil {
+				c <- entryRow{err: err}
+				return
+			}
 		}
-		listDir2, err := dir2.List()
-		if err != nil {
-			c <- entryRow{err: err}
-			return
+
+		var listDir2 []tree.Entry
+		if dir2 != nil {
+			listDir2, err = dir2.List()
+			if err != nil {
+				c <- entryRow{err: err}
+				return
+			}
 		}
-		listStatus1 := statusDir1.List()
-		listStatus2 := statusDir2.List()
+
+		var listStatus1, listStatus2 []*dtdiff.Entry
+		if statusDir1 != nil {
+			listStatus1 = statusDir1.List()
+		}
+		if statusDir2 != nil {
+			listStatus2 = statusDir2.List()
+		}
 
 		iterDir1 := iterateEntrySlice(listDir1)
 		iterDir2 := iterateEntrySlice(listDir2)

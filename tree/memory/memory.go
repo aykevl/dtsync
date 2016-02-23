@@ -128,9 +128,6 @@ func (e *Entry) CopyTo(otherParent tree.Entry) (tree.Entry, error) {
 		}
 		return other, nil
 
-	case tree.TYPE_DIRECTORY:
-		return tree.CopyTree(e, file)
-
 	default:
 		return nil, tree.ErrNotImplemented
 	}

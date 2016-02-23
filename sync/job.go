@@ -143,11 +143,7 @@ func (j *Job) Apply() error {
 	var err error
 	switch j.action {
 	case ACTION_COPY:
-		file2, err = file1.CopyTo(parent2)
-		if err == nil {
-			statusParent2.Update(parent2)
-			_, err = statusParent2.AddCopy(status1)
-		}
+		err = copyFile(file1, parent2, status1, statusParent2)
 	case ACTION_UPDATE:
 		err = file1.UpdateOver(file2)
 		if err == nil {
@@ -156,11 +152,62 @@ func (j *Job) Apply() error {
 	case ACTION_REMOVE:
 		err = parent2.Remove(file2)
 		if err == nil {
-			statusParent2.Update(parent2)
 			status2.Remove()
+			statusParent2.Update(parent2)
 		}
 	default:
 		panic("unknown action (must not happen)")
 	}
 	return err
+}
+
+func copyFile(file1, parent2 tree.Entry, status1, statusParent2 *dtdiff.Entry) error {
+	if file1.Type() == tree.TYPE_DIRECTORY {
+		parent2, ok := parent2.(tree.FileEntry)
+		if !ok {
+			return tree.ErrNotImplemented
+		} else {
+			file2, err := parent2.CreateDir(file1.Name(), file1.ModTime())
+			if err != nil {
+				// TODO revert
+				return err
+			}
+			status2, err := statusParent2.AddCopy(status1)
+			if err != nil {
+				return err
+			}
+			statusParent2.Update(parent2)
+
+			list, err := file1.List()
+			if err != nil {
+				// TODO revert
+				return err
+			}
+			statusList := status1.List()
+			if len(list) != len(statusList) {
+				// TODO this might occur when something changes between scanning
+				// and applying the job.
+				panic("list must be equal to statusList")
+			}
+			for i, child1 := range list {
+				childStatus1 := statusList[i]
+				if child1.Name() != childStatus1.Name() {
+					panic("list must be equal to statusList")
+				}
+				err := copyFile(child1, file2, childStatus1, status2)
+				if err != nil {
+					// TODO revert
+					return err
+				}
+			}
+			return nil
+		}
+	} else {
+		_, err := file1.CopyTo(parent2)
+		if err == nil {
+			_, err = statusParent2.AddCopy(status1)
+			statusParent2.Update(parent2)
+		}
+		return err
+	}
 }
