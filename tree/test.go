@@ -30,7 +30,6 @@ package tree
 
 import (
 	"testing"
-	"time"
 )
 
 type TestEntry interface {
@@ -91,11 +90,11 @@ func TreeTest(t *testing.T, root1, root2 TestEntry) {
 		t.Error("root1 is not equal to root2 after update")
 	}
 
-	_dir1, err := root1.CreateDir("dir", time.Now())
+	_dir1, err := root1.CreateDir("dir")
 	if err != nil {
 		t.Error("could not create directory 1:", err)
 	}
-	_dir2, err := root2.CreateDir("dir", time.Now())
+	_dir2, err := root2.CreateDir("dir")
 	if err != nil {
 		t.Error("could not create directory 2:", err)
 	}

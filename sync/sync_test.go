@@ -32,7 +32,6 @@ import (
 	"io/ioutil"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/aykevl/dtsync/tree"
 	"github.com/aykevl/dtsync/tree/memory"
@@ -95,7 +94,7 @@ func TestSync(t *testing.T) {
 		fileAction   func(fs *memory.Entry) error
 	}{
 		{"dir", ACTION_COPY, 2, func(fs *memory.Entry) error {
-			dir, err := fs.CreateDir("dir", time.Now())
+			dir, err := fs.CreateDir("dir")
 			if err != nil {
 				return err
 			}
@@ -158,7 +157,7 @@ func applyTestCase(t *testing.T, fs *memory.Entry, tc testCase) {
 		if tc.contents != nil {
 			_, err = parent.AddRegular(name, tc.contents)
 		} else {
-			_, err = parent.CreateDir(name, time.Now())
+			_, err = parent.CreateDir(name)
 		}
 	case ACTION_UPDATE:
 		child := getFile(parent, name)

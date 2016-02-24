@@ -217,11 +217,11 @@ func (e *Entry) SetFile(name string) (io.WriteCloser, error) {
 	}
 }
 
-// CreateDir creates a directory with the given name and modtime.
-func (e *Entry) CreateDir(name string, modTime time.Time) (tree.Entry, error) {
+// CreateDir creates a directory with the given name.
+func (e *Entry) CreateDir(name string) (tree.Entry, error) {
 	child := &Entry{
 		fileType: tree.TYPE_DIRECTORY,
-		modTime:  modTime,
+		modTime:  time.Now(),
 		name:     name,
 	}
 	err := e.addChild(child)

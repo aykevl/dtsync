@@ -167,12 +167,12 @@ func copyFile(file1, parent2 tree.Entry, status1, statusParent2 *dtdiff.Entry) e
 		if !ok {
 			return tree.ErrNotImplemented
 		} else {
-			file2, err := parent2.CreateDir(file1.Name(), file1.ModTime())
+			file2, err := parent2.CreateDir(file1.Name())
 			if err != nil {
 				// TODO revert
 				return err
 			}
-			status2, err := statusParent2.AddCopy(status1)
+			status2, err := statusParent2.Add(file2)
 			if err != nil {
 				return err
 			}
