@@ -44,9 +44,13 @@ type testCase struct {
 	fileCount int64
 }
 
+func NewTestRoot(t *testing.T) tree.TestEntry {
+	return memory.NewRoot()
+}
+
 func TestSync(t *testing.T) {
-	fs1 := memory.NewRoot()
-	fs2 := memory.NewRoot()
+	fs1 := NewTestRoot(t)
+	fs2 := NewTestRoot(t)
 
 	result, err := Scan(fs1, fs2)
 	if err != nil {
@@ -91,27 +95,27 @@ func TestSync(t *testing.T) {
 		jobName      string
 		jobAction    Action
 		jobFileCount int64
-		fileAction   func(fs *memory.Entry) error
+		fileAction   func(fs tree.TestEntry) error
 	}{
-		{"dir", ACTION_COPY, 2, func(fs *memory.Entry) error {
+		{"dir", ACTION_COPY, 2, func(fs tree.TestEntry) error {
 			dir, err := fs.CreateDir("dir")
 			if err != nil {
 				return err
 			}
-			_, err = dir.(*memory.Entry).AddRegular("file.txt", []byte("abc"))
+			_, err = dir.(tree.TestEntry).AddRegular("file.txt", []byte("abc"))
 			return err
 		}},
-		{"dir", ACTION_REMOVE, 1, func(fs *memory.Entry) error {
+		{"dir", ACTION_REMOVE, 1, func(fs tree.TestEntry) error {
 			return fs.Remove(getFile(fs, "dir"))
 		}},
 	}
 
-	fs1 = memory.NewRoot()
-	fs2 = memory.NewRoot()
-	fsCheck := memory.NewRoot()
+	fs1 = NewTestRoot(t)
+	fs2 = NewTestRoot(t)
+	fsCheck := NewTestRoot(t)
 	fsNames := []struct {
 		name string
-		fs   *memory.Entry
+		fs   tree.TestEntry
 	}{
 		{"fs1", fs1},
 		{"fs2", fs2},
@@ -128,7 +132,7 @@ path	modtime	replica	generation
 
 	for _, scanTwice := range []bool{true, false} {
 		for _, swapped := range []bool{false, true} {
-			for _, fsCheckWith := range []*memory.Entry{fs2, fs1} {
+			for _, fsCheckWith := range []tree.TestEntry{fs2, fs1} {
 				for _, tc := range testCases {
 					applyTestCase(t, fs1, tc)
 					runTestCase(t, fs1, fs2, fsCheck, fsCheckWith, swapped, scanTwice, tc)
@@ -143,7 +147,7 @@ path	modtime	replica	generation
 	}
 }
 
-func applyTestCase(t *testing.T, fs *memory.Entry, tc testCase) {
+func applyTestCase(t *testing.T, fs tree.TestEntry, tc testCase) {
 	parts := strings.Split(tc.file, "/")
 	parent := fs
 	for i := 0; i < len(parts)-1; i++ {
@@ -179,7 +183,7 @@ func applyTestCase(t *testing.T, fs *memory.Entry, tc testCase) {
 	}
 }
 
-func runTestCase(t *testing.T, fs1, fs2, fsCheck, fsCheckWith *memory.Entry, swap, scanTwice bool, tc testCase) {
+func runTestCase(t *testing.T, fs1, fs2, fsCheck, fsCheckWith tree.TestEntry, swap, scanTwice bool, tc testCase) {
 	t.Logf("Action: %s %s", tc.action, tc.file)
 	failedBefore := t.Failed()
 	statusBefore := readStatuses(t, fs1, fs2)
@@ -205,7 +209,7 @@ func runTestCase(t *testing.T, fs1, fs2, fsCheck, fsCheckWith *memory.Entry, swa
 	}
 }
 
-func runTestCaseSync(t *testing.T, tc *testCase, fs1, fs2 *memory.Entry, jobDirection int, scanTwice bool) {
+func runTestCaseSync(t *testing.T, tc *testCase, fs1, fs2 tree.TestEntry, jobDirection int, scanTwice bool) {
 	result := runTestCaseScan(t, tc, fs1, fs2, jobDirection)
 	if result == nil {
 		return
@@ -282,7 +286,7 @@ func runTestCaseSync(t *testing.T, tc *testCase, fs1, fs2 *memory.Entry, jobDire
 	}
 }
 
-func runTestCaseScan(t *testing.T, tc *testCase, fs1, fs2 *memory.Entry, jobDirection int) *Result {
+func runTestCaseScan(t *testing.T, tc *testCase, fs1, fs2 tree.TestEntry, jobDirection int) *Result {
 	result, err := Scan(fs1, fs2)
 	if err != nil {
 		t.Errorf("could not sync after: %s %s: %s", tc.action, tc.file, err)
@@ -305,32 +309,32 @@ func runTestCaseScan(t *testing.T, tc *testCase, fs1, fs2 *memory.Entry, jobDire
 	return result
 }
 
-func getFile(parent *memory.Entry, name string) *memory.Entry {
+func getFile(parent tree.TestEntry, name string) tree.TestEntry {
 	list, err := parent.List()
 	assert(err)
 	for _, child := range list {
 		if child.Name() == name {
-			return child.(*memory.Entry)
+			return child.(tree.TestEntry)
 		}
 	}
 	return nil
 }
 
-func getEntriesExcept(parent *memory.Entry, except string) []*memory.Entry {
+func getEntriesExcept(parent tree.TestEntry, except string) []tree.TestEntry {
 	list, err := parent.List()
 	assert(err)
 
-	listEntries := make([]*memory.Entry, 0, len(list)-1)
+	listEntries := make([]tree.TestEntry, 0, len(list)-1)
 	for _, entry := range list {
 		if entry.Name() == except {
 			continue
 		}
-		listEntries = append(listEntries, entry.(*memory.Entry))
+		listEntries = append(listEntries, entry.(tree.TestEntry))
 	}
 	return listEntries
 }
 
-func fsEqual(fs1, fs2 *memory.Entry) bool {
+func fsEqual(fs1, fs2 tree.TestEntry) bool {
 	list1 := getEntriesExcept(fs1, STATUS_FILE)
 	list2 := getEntriesExcept(fs2, STATUS_FILE)
 
@@ -353,7 +357,7 @@ func fsEqual(fs1, fs2 *memory.Entry) bool {
 
 // readStatuses returns the contents of the status files in the provided
 // directories.
-func readStatuses(t *testing.T, roots ...*memory.Entry) [][]byte {
+func readStatuses(t *testing.T, roots ...tree.TestEntry) [][]byte {
 	statusData := make([][]byte, len(roots))
 	for i, fs := range roots {
 		if fs == nil {
