@@ -185,13 +185,28 @@ func (r *Result) scanDirs(dir1, dir2 tree.Entry, statusDir1, statusDir2 *dtdiff.
 				r.scanDirs(file1, file2, status1, status2)
 			} else if status1.Equal(status2) {
 				// Two equal non-directories. We don't have to do more.
+			} else if status1.Conflict(status2) {
+				r.jobs = append(r.jobs, &Job{
+					action:        ACTION_UPDATE,
+					direction:     0,
+					status1:       status1,
+					status2:       status2,
+					statusParent1: statusDir1,
+					statusParent2: statusDir2,
+					parent1:       dir1,
+					parent2:       dir2,
+					file1:         file1,
+					file2:         file2,
+				})
 			} else if status1.After(status2) {
 				r.jobs = append(r.jobs, &Job{
 					action:        ACTION_UPDATE,
 					direction:     1,
 					status1:       status1,
 					status2:       status2,
+					statusParent1: statusDir1,
 					statusParent2: statusDir2,
+					parent1:       dir1,
 					parent2:       dir2,
 					file1:         file1,
 					file2:         file2,
@@ -203,12 +218,15 @@ func (r *Result) scanDirs(dir1, dir2 tree.Entry, statusDir1, statusDir2 *dtdiff.
 					status1:       status1,
 					status2:       status2,
 					statusParent1: statusDir1,
+					statusParent2: statusDir2,
 					parent1:       dir1,
+					parent2:       dir2,
 					file1:         file1,
 					file2:         file2,
 				})
 			} else {
-				// TODO: must be a conflict
+				// TODO we do get here, somehow. Apparently "Equal" doesn't
+				// always return true on equality.
 			}
 		}
 	}
