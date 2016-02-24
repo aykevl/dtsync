@@ -37,13 +37,6 @@ import (
 // TestFilesystem tests the memory-based filesystem memory.Entry.
 func TestFilesystem(t *testing.T) {
 	root1 := NewRoot()
-
-	// Test whether it implements tree.Entry
-	var treeItf tree.Entry
-	treeItf = root1
-	_ = treeItf
-
 	root2 := NewRoot()
-
 	tree.TreeTest(t, root1, root2)
 }
