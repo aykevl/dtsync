@@ -180,7 +180,10 @@ func applyTestCase(t *testing.T, fs tree.TestEntry, tc testCase) {
 		if child == nil {
 			t.Fatalf("could not find file %s to update", tc.file)
 		}
-		child.SetContents(tc.contents)
+		err = child.SetContents(tc.contents)
+		if err != nil {
+			t.Fatalf("could not set file contents to file %s: %s", child, err)
+		}
 	case ACTION_REMOVE:
 		child := getFile(parent, name)
 		if child == nil {
