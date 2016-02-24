@@ -138,7 +138,7 @@ func TreeTest(t *testing.T, root1, root2 TestEntry) {
 		if len(list) != tc.sizeBefore {
 			t.Errorf("entry %s child count is %d while %d was expected before delete", tc.entry, len(list), tc.sizeBefore)
 		}
-		err = tc.entry.Remove(getFile(tc.entry, tc.name))
+		err = getFile(tc.entry, tc.name).Remove()
 		if err != nil {
 			t.Errorf("could not remove file from entry %s: %s", tc.entry, err)
 		}

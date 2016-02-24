@@ -150,7 +150,7 @@ func (j *Job) Apply() error {
 			status2.UpdateFrom(status1)
 		}
 	case ACTION_REMOVE:
-		err = parent2.Remove(file2)
+		err = file2.Remove()
 		if err == nil {
 			status2.Remove()
 			statusParent2.Update(parent2)

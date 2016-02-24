@@ -106,7 +106,7 @@ func TestSync(t *testing.T) {
 			return err
 		}},
 		{"dir", ACTION_REMOVE, 1, func(fs tree.TestEntry) error {
-			return fs.Remove(getFile(fs, "dir"))
+			return getFile(fs, "dir").Remove()
 		}},
 	}
 
@@ -174,7 +174,7 @@ func applyTestCase(t *testing.T, fs tree.TestEntry, tc testCase) {
 		if child == nil {
 			t.Fatalf("could not find file %s to remove", tc.file)
 		}
-		err = parent.Remove(child)
+		err = child.Remove()
 	default:
 		t.Fatalf("unknown action: %d", tc.action)
 	}

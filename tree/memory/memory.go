@@ -46,6 +46,7 @@ type Entry struct {
 	name     string
 	contents []byte
 	children map[string]*Entry
+	parent   *Entry
 }
 
 // NewRoot creates a new in-memory filesystem root.
@@ -165,31 +166,13 @@ func (e *Entry) UpdateOver(other tree.Entry) error {
 }
 
 // Remove removes this file or directory tree, recursively.
-func (e *Entry) Remove(child tree.Entry) error {
-	if e.fileType != tree.TYPE_DIRECTORY {
-		return tree.ErrNoDirectory
-	}
-	if e.children[child.Name()] != child {
+func (e *Entry) Remove() error {
+	if e.parent.children[e.name] != e {
+		// already removed?
 		return tree.ErrNotFound
 	}
-	delete(e.children, child.Name())
-	e.modTime = time.Now()
-	return child.(*Entry).removeSelf()
-}
-
-// removeSelf removes this file, but does not remove the entry from the parent
-// map.
-// TODO unnecessary?
-func (e *Entry) removeSelf() error {
-	if e.fileType == tree.TYPE_DIRECTORY {
-		list, err := e.List()
-		if err != nil {
-			return err
-		}
-		for _, child := range list {
-			child.(*Entry).removeSelf()
-		}
-	}
+	delete(e.parent.children, e.name)
+	e.parent.modTime = time.Now()
 	return nil
 }
 
@@ -223,6 +206,7 @@ func (e *Entry) CreateDir(name string) (tree.Entry, error) {
 		fileType: tree.TYPE_DIRECTORY,
 		modTime:  time.Now(),
 		name:     name,
+		parent:   e,
 	}
 	err := e.addChild(child)
 	if err != nil {
@@ -239,6 +223,7 @@ func (e *Entry) CreateFile(name string, modTime time.Time) (tree.Entry, io.Write
 		fileType: tree.TYPE_REGULAR,
 		modTime:  modTime,
 		name:     name,
+		parent:   e,
 	}
 	err := e.addChild(child)
 	if err != nil {
@@ -292,6 +277,7 @@ func (e *Entry) AddRegular(name string, contents []byte) (tree.FileEntry, error)
 		modTime:  time.Now(),
 		name:     name,
 		contents: contents,
+		parent:   e,
 	}
 	err := e.addChild(child)
 	if err != nil {

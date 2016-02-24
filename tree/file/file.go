@@ -77,6 +77,16 @@ func NewRoot(rootPath string) (*Entry, error) {
 	}, nil
 }
 
+// NewTestRoot returns a new root in a temporary directory. It should be removed
+// after use using root.Remove()
+func NewTestRoot() (*Entry, error) {
+	rootPath1, err := ioutil.TempDir("", "usync-test-")
+	if err != nil {
+		return nil, err
+	}
+	return NewRoot(rootPath1)
+}
+
 // String returns a string representation of this file, for debugging.
 func (e *Entry) String() string {
 	return "file.Entry(" + e.path() + ")"
@@ -205,29 +215,23 @@ func (e *Entry) Name() string {
 	return e.name
 }
 
-// Remove removes the given child entry recursively.
-func (e *Entry) Remove(child tree.Entry) error {
-	ourChild := child.(*Entry)
-	if ourChild.parent != e {
-		// programming error
-		panic("not a parent")
-	}
-	if ourChild.Type() == tree.TYPE_DIRECTORY {
+// Remove removes this entry, recursively.
+func (e *Entry) Remove() error {
+	if e.Type() == tree.TYPE_DIRECTORY && e.parent != nil {
 		// move to temporary location to provide atomicity in removing a
 		// directory tree
-		oldPath := ourChild.path()
-		tmpName := TEMPPREFIX + ourChild.name + TEMPSUFFIX
-		tmpPath := path.Join(e.path(), tmpName)
+		oldPath := e.path()
+		tmpName := TEMPPREFIX + e.name + TEMPSUFFIX
+		tmpPath := path.Join(e.parent.path(), tmpName)
 		err := os.Rename(oldPath, tmpPath)
 		if err != nil {
 			return err
 		}
-		ourChild.name = tmpName
+		e.name = tmpName
 	}
-	return ourChild.removeSelf()
+	return e.removeSelf()
 }
 
-// removeSelf removes this entry.
 func (e *Entry) removeSelf() error {
 	if e.Type() == tree.TYPE_DIRECTORY {
 		// remove children first

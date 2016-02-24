@@ -29,8 +29,6 @@
 package file
 
 import (
-	"io/ioutil"
-	"os"
 	"testing"
 
 	"github.com/aykevl/dtsync/tree"
@@ -38,40 +36,30 @@ import (
 
 // TestFilesystem tests the memory-based filesystem memory.Entry.
 func TestFilesystem(t *testing.T) {
-	rootPath1, err := ioutil.TempDir("", "usync-test-")
+	root1, err := NewTestRoot()
 	if err != nil {
-		t.Fatal("cannot create directory to test:", err)
+		t.Fatal("could not create root1:", err)
 	}
 	defer func() {
-		// TODO move to root1.Remove()
-		err := os.RemoveAll(rootPath1)
+		err := root1.Remove()
 		if err != nil {
 			t.Fatal("could not remove root1 after use:", err)
 		}
 	}()
-	root1, err := NewRoot(rootPath1)
-	if err != nil {
-		t.Fatal("could not open root1:", err)
-	}
 
-	rootPath2, err := ioutil.TempDir("", "usync-test-")
+	root2, err := NewTestRoot()
 	if err != nil {
-		t.Fatal("cannot create directory to test:", err)
+		t.Fatal("could not create root2:", err)
 	}
 	defer func() {
-		// TODO move to root2.Remove()
-		err := os.RemoveAll(rootPath2)
+		err := root2.Remove()
 		if err != nil {
 			t.Fatal("could not remove root2 after use:", err)
 		}
 	}()
-	root2, err := NewRoot(rootPath2)
-	if err != nil {
-		t.Fatal("could not open root2:", err)
-	}
 
-	t.Log("root1:", rootPath1)
-	t.Log("root2:", rootPath2)
+	t.Log("root1:", root1.path())
+	t.Log("root2:", root2.path())
 
 	tree.TreeTest(t, root1, root2)
 }

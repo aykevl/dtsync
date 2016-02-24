@@ -82,8 +82,8 @@ type Entry interface {
 	CopyTo(Entry) (Entry, error)
 	// Copy over the other entry, possibly using an optimized algorithm.
 	UpdateOver(Entry) error
-	// Delete the child file or directory tree (recursively)
-	Remove(Entry) error
+	// Delete this file or directory tree (recursively)
+	Remove() error
 
 	// Get this file. This only exists to read the status file, not to implement
 	// copying in the syncer!
