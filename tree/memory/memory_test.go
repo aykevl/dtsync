@@ -35,9 +35,6 @@ import (
 )
 
 // TestFilesystem tests the memory-based filesystem memory.Entry.
-//
-// TODO: this function should be made more generic so it can test any filesystem
-// implementing tree.Entry.
 func TestFilesystem(t *testing.T) {
 	root1 := NewRoot()
 
