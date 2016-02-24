@@ -187,21 +187,25 @@ func (r *Result) scanDirs(dir1, dir2 tree.Entry, statusDir1, statusDir2 *dtdiff.
 				// Two equal non-directories. We don't have to do more.
 			} else if status1.After(status2) {
 				r.jobs = append(r.jobs, &Job{
-					action:    ACTION_UPDATE,
-					direction: 1,
-					status1:   status1,
-					status2:   status2,
-					file1:     file1,
-					file2:     file2,
+					action:        ACTION_UPDATE,
+					direction:     1,
+					status1:       status1,
+					status2:       status2,
+					statusParent2: statusDir2,
+					parent2:       dir2,
+					file1:         file1,
+					file2:         file2,
 				})
 			} else if status1.Before(status2) {
 				r.jobs = append(r.jobs, &Job{
-					action:    ACTION_UPDATE,
-					direction: -1,
-					status1:   status1,
-					status2:   status2,
-					file1:     file1,
-					file2:     file2,
+					action:        ACTION_UPDATE,
+					direction:     -1,
+					status1:       status1,
+					status2:       status2,
+					statusParent1: statusDir1,
+					parent1:       dir1,
+					file1:         file1,
+					file2:         file2,
 				})
 			} else {
 				// TODO: must be a conflict

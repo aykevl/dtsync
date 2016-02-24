@@ -34,6 +34,7 @@ import (
 	"testing"
 
 	"github.com/aykevl/dtsync/tree"
+	"github.com/aykevl/dtsync/tree/file"
 	"github.com/aykevl/dtsync/tree/memory"
 )
 
@@ -41,11 +42,19 @@ type testCase struct {
 	file      string
 	action    Action
 	contents  []byte
-	fileCount int64
+	fileCount int
 }
 
 func NewTestRoot(t *testing.T) tree.TestEntry {
-	return memory.NewRoot()
+	if testing.Short() {
+		return memory.NewRoot()
+	} else {
+		root, err := file.NewTestRoot()
+		if err != nil {
+			t.Fatal("could not create test root:", err)
+		}
+		return root
+	}
 }
 
 func TestSync(t *testing.T) {
@@ -61,11 +70,14 @@ func TestSync(t *testing.T) {
 	if err != nil {
 		t.Error("could not save replica state:", err)
 	}
-	if fs1.Size() != 1 {
-		t.Error("replica state wasn't saved for fs1")
-	}
-	if fs2.Size() != 1 {
-		t.Error("replica state wasn't saved for fs2")
+	for _, fs := range []tree.TestEntry{fs1, fs2} {
+		list, err := fs.List()
+		if err != nil {
+			t.Errorf("could not get list for %s: %s", fs, err)
+		}
+		if len(list) != 1 {
+			t.Errorf("replica state wasn't saved for %s", fs)
+		}
 	}
 
 	testCases := []testCase{
@@ -94,7 +106,7 @@ func TestSync(t *testing.T) {
 	complexTestCases := []struct {
 		jobName      string
 		jobAction    Action
-		jobFileCount int64
+		jobFileCount int
 		fileAction   func(fs tree.TestEntry) error
 	}{
 		{"dir", ACTION_COPY, 2, func(fs tree.TestEntry) error {
@@ -281,8 +293,16 @@ func runTestCaseSync(t *testing.T, tc *testCase, fs1, fs2 tree.TestEntry, jobDir
 		}
 	}
 
-	if fs1.Size() != tc.fileCount || fs2.Size() != tc.fileCount {
-		t.Errorf("unexpected number of files after first sync (expected %d): fs1=%d fs2=%d", tc.fileCount, fs1.Size(), fs2.Size())
+	list1, err := fs1.List()
+	if err != nil {
+		t.Errorf("could not get list for %s: %s", fs1, err)
+	}
+	list2, err := fs2.List()
+	if err != nil {
+		t.Errorf("could not get list for %s: %s", fs2, err)
+	}
+	if len(list1) != tc.fileCount || len(list2) != tc.fileCount {
+		t.Errorf("unexpected number of files after first sync (expected %d): fs1=%d fs2=%d", tc.fileCount, len(list1), len(list2))
 	}
 }
 

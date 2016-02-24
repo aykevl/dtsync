@@ -148,6 +148,9 @@ func (j *Job) Apply() error {
 		err = file1.UpdateOver(file2)
 		if err == nil {
 			status2.UpdateFrom(status1)
+			if statusParent2 != nil {
+				statusParent2.Update(parent2)
+			}
 		}
 	case ACTION_REMOVE:
 		err = file2.Remove()
@@ -203,9 +206,9 @@ func copyFile(file1, parent2 tree.Entry, status1, statusParent2 *dtdiff.Entry) e
 			return nil
 		}
 	} else {
-		_, err := file1.CopyTo(parent2)
+		file2, err := file1.CopyTo(parent2)
 		if err == nil {
-			_, err = statusParent2.AddCopy(status1)
+			_, err = statusParent2.Add(file2)
 			statusParent2.Update(parent2)
 		}
 		return err

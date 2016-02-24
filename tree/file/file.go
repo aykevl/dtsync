@@ -184,7 +184,15 @@ func (e *Entry) GetContents() (io.ReadCloser, error) {
 // GetFile returns an io.ReadCloser with the named file. The file must be closed
 // after use.
 func (e *Entry) GetFile(name string) (io.ReadCloser, error) {
-	return os.Open(path.Join(e.path(), name))
+	fp, err := os.Open(path.Join(e.path(), name))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, tree.ErrNotFound
+		} else {
+			return nil, err
+		}
+	}
+	return fp, nil
 }
 
 // List returns a directory listing, sorted by name.
@@ -246,11 +254,25 @@ func (e *Entry) removeSelf() error {
 			}
 		}
 	}
-	return os.Remove(e.path())
+
+	// Actually remove the file or (empty) directory
+	err := os.Remove(e.path())
+	if err != nil {
+		return err
+	}
+
+	// Update parent stat result
+	st, err := os.Stat(e.parent.path())
+	if err != nil {
+		return err
+	}
+	e.parent.st = st
+	return nil
 }
 
 func (e *Entry) SetFile(name string) (io.WriteCloser, error) {
-	return nil, tree.ErrNotImplemented
+	_, out, err := e.CreateFile(name, time.Time{})
+	return out, err
 }
 
 // Size returns the filesize for regular files. For other file types, the result
@@ -291,18 +313,25 @@ func (e *Entry) replaceFile(modTime time.Time) (io.WriteCloser, error) {
 	return &fileWriter{
 		fp: fp,
 		closeCall: func() error {
-			err = os.Chtimes(tempPath, modTime, modTime)
-			if err != nil {
-				return err
+			if !modTime.IsZero() {
+				err = os.Chtimes(tempPath, modTime, modTime)
+				if err != nil {
+					return err
+				}
 			}
 			err = os.Rename(tempPath, e.path())
 			if err != nil {
 				return err
 			}
 			e.st, err = os.Stat(e.path())
-			if !e.st.ModTime().Equal(modTime) {
-				panic("stat is not equal")
+
+			// Update parent stat result
+			st, err := os.Stat(e.parent.path())
+			if err != nil {
+				return err
 			}
+			e.parent.st = st
+
 			return err
 		},
 	}, nil
