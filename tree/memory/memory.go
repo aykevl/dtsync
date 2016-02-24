@@ -307,7 +307,8 @@ func (e *Entry) GetContents() (io.ReadCloser, error) {
 }
 
 // SetContents sets the internal contents of the file, for debugging.
-func (e *Entry) SetContents(contents []byte) {
+func (e *Entry) SetContents(contents []byte) error {
 	e.modTime = time.Now()
 	e.contents = contents
+	return nil
 }

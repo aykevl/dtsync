@@ -37,7 +37,7 @@ type TestEntry interface {
 	FileEntry
 
 	AddRegular(string, []byte) (FileEntry, error)
-	SetContents([]byte)
+	SetContents([]byte) error
 }
 
 // TreeTest is not a test in itself, it is called by trees wanting themselves to
@@ -62,7 +62,10 @@ func TreeTest(t *testing.T, root1, root2 TestEntry) {
 	}
 
 	quickBrowFox := "The quick brown fox jumps over the lazy dog.\n"
-	file1.SetContents([]byte(quickBrowFox))
+	err = file1.SetContents([]byte(quickBrowFox))
+	if err != nil {
+		t.Fatalf("could not set contents to file %s: %s", file1, err)
+	}
 	if testEqual(t, root1, root2) {
 		t.Error("root1 is equal to root2 after file1 got updated")
 	}
