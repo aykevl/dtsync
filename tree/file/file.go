@@ -366,7 +366,7 @@ func (e *Entry) UpdateOver(other tree.Entry) error {
 	}
 }
 
-// SetContents writes contents to this file.
+// SetContents writes contents to this file, for testing.
 func (e *Entry) SetContents(contents []byte) error {
 	fp, err := os.Create(e.path())
 	if err != nil {
@@ -377,8 +377,17 @@ func (e *Entry) SetContents(contents []byte) error {
 	if err != nil {
 		return err
 	}
+	now := time.Now()
+	err = os.Chtimes(e.path(), now, now)
+	if err != nil {
+		// could not update
+		return err
+	}
 	e.st, err = fp.Stat()
-	return err
+	if err != nil {
+		return err
+	}
+	return fp.Sync()
 }
 
 // CopyTo copies this file into the otherParent. The latter must be a directory.
