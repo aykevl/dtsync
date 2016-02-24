@@ -85,7 +85,7 @@ func (e *Entry) addChild(name string, revReplica string, revGeneration int, modT
 		name:          name,
 		revReplica:    revReplica,
 		revGeneration: revGeneration,
-		modTime:       modTime,
+		modTime:       modTime.UTC(),
 		children:      make(map[string]*Entry),
 		parent:        e,
 		replica:       e.replica,
@@ -194,11 +194,11 @@ func (e *Entry) AddCopy(other *Entry) (*Entry, error) {
 
 // Update updates the revision if the file was changed.
 func (e *Entry) Update(file tree.Entry) {
-	if e.modTime != file.ModTime() {
+	if !e.modTime.Equal(file.ModTime()) {
 		e.replica.markChanged()
 		e.revReplica = e.replica.identity
 		e.revGeneration = e.replica.generation
-		e.modTime = file.ModTime()
+		e.modTime = file.ModTime().UTC()
 	}
 }
 
