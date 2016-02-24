@@ -48,6 +48,7 @@ type Type int
 const (
 	TYPE_REGULAR   Type = iota
 	TYPE_DIRECTORY Type = iota
+	TYPE_UNKNOWN   Type = iota
 )
 
 // Error codes that can be used by any filesystem implementation

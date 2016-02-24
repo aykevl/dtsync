@@ -51,13 +51,13 @@ func TreeTest(t *testing.T, root1, root2 TestEntry) {
 
 	_file2, err := file1.CopyTo(root2)
 	if err != nil {
-		t.Errorf("failed to copy file %s to %s: %s", file1, root2, err)
+		t.Fatalf("failed to copy file %s to %s: %s", file1, root2, err)
 	}
 	file2 := _file2.(TestEntry)
 	checkFile(t, root2, file2, 0, 1)
 
 	if !testEqual(t, root1, root2) {
-		t.Error("root1 is not equal to root2")
+		t.Error("root1 is not equal to root2 after CopyTo")
 	}
 
 	quickBrowFox := "The quick brown fox jumps over the lazy dog.\n"
@@ -87,7 +87,7 @@ func TreeTest(t *testing.T, root1, root2 TestEntry) {
 		t.Error("failed to update file:", err)
 	}
 	if !testEqual(t, root1, root2) {
-		t.Error("root1 is not equal to root2 after update")
+		t.Error("root1 is not equal to root2 after UpdateOver")
 	}
 
 	_dir1, err := root1.CreateDir("dir")
@@ -123,7 +123,7 @@ func TreeTest(t *testing.T, root1, root2 TestEntry) {
 	removeTests := []struct {
 		entry      TestEntry
 		name       string
-		sizeBefore int64
+		sizeBefore int
 	}{
 		{root1, "file.txt", 2},
 		{root2, "file.txt", 2},
@@ -131,15 +131,23 @@ func TreeTest(t *testing.T, root1, root2 TestEntry) {
 		{root2, "dir", 1},
 	}
 	for _, tc := range removeTests {
-		if tc.entry.Size() != tc.sizeBefore {
-			t.Errorf("entry %s .Size() is %d while %d was expected before delete", tc.entry, tc.entry.Size(), tc.sizeBefore)
+		list, err := tc.entry.List()
+		if err != nil {
+			t.Fatalf("could not list directory contents of %s: %s", tc.entry, err)
+		}
+		if len(list) != tc.sizeBefore {
+			t.Errorf("entry %s child count is %d while %d was expected before delete", tc.entry, len(list), tc.sizeBefore)
 		}
 		err = tc.entry.Remove(getFile(tc.entry, tc.name))
 		if err != nil {
 			t.Errorf("could not remove file from entry %s: %s", tc.entry, err)
 		}
-		if tc.entry.Size() != tc.sizeBefore-1 {
-			t.Errorf("entry %s .Size() is %d while %d was expected after delete", tc.entry, tc.entry.Size(), tc.sizeBefore-1)
+		list, err = tc.entry.List()
+		if err != nil {
+			t.Fatalf("could not list directory contents of %s: %s", tc.entry, err)
+		}
+		if len(list) != tc.sizeBefore-1 {
+			t.Errorf("entry %s child count is %d while %d was expected after delete", tc.entry, len(list), tc.sizeBefore-1)
 		}
 	}
 
@@ -160,7 +168,7 @@ func checkFile(t *testing.T, dir TestEntry, file TestEntry, index, length int) {
 		t.Fatalf("len(List()): expected length=%d, got %d, for directory %s and file %s (list %s)", length, len(l), dir, file, l)
 		return
 	}
-	if l[index] != file {
+	if !testEqual(t, l[index].(TestEntry), file) {
 		t.Errorf("root1.List()[%d] (%s) is not the same as the file added (%s)", index, l[index], file)
 	}
 }
