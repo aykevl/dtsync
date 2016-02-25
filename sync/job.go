@@ -149,14 +149,14 @@ func (j *Job) Apply() error {
 		if err == nil {
 			status2.UpdateFrom(status1)
 			if statusParent2 != nil {
-				statusParent2.Update(parent2)
+				statusParent2.Update(parent2.Fingerprint())
 			}
 		}
 	case ACTION_REMOVE:
 		err = file2.Remove()
 		if err == nil {
 			status2.Remove()
-			statusParent2.Update(parent2)
+			statusParent2.Update(parent2.Fingerprint())
 		}
 	default:
 		panic("unknown action (must not happen)")
@@ -175,11 +175,11 @@ func copyFile(file1, parent2 tree.Entry, status1, statusParent2 *dtdiff.Entry) e
 				// TODO revert
 				return err
 			}
-			status2, err := statusParent2.Add(file2)
+			status2, err := statusParent2.Add(file2.Name(), file2.Fingerprint())
 			if err != nil {
 				return err
 			}
-			statusParent2.Update(parent2)
+			statusParent2.Update(parent2.Fingerprint())
 
 			list, err := file1.List()
 			if err != nil {
@@ -208,8 +208,8 @@ func copyFile(file1, parent2 tree.Entry, status1, statusParent2 *dtdiff.Entry) e
 	} else {
 		file2, err := file1.CopyTo(parent2)
 		if err == nil {
-			_, err = statusParent2.Add(file2)
-			statusParent2.Update(parent2)
+			_, err = statusParent2.Add(file2.Name(), file2.Fingerprint())
+			statusParent2.Update(parent2.Fingerprint())
 		}
 		return err
 	}

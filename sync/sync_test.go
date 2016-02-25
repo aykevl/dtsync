@@ -138,7 +138,7 @@ func TestSync(t *testing.T) {
 Identity: `+fs.name+`
 Generation: 1
 
-path	modtime	replica	generation
+path	fingerprint	replica	generation
 `))
 	}
 

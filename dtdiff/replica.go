@@ -36,7 +36,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/aykevl/unitsv"
 )
@@ -203,12 +202,12 @@ func (r *Replica) load(file io.Reader) error {
 
 	const (
 		TSV_PATH = iota
-		TSV_MODTIME
+		TSV_FINGERPRINT
 		TSV_REPLICA
 		TSV_GENERATION
 	)
 
-	tsvReader, err := unitsv.NewReader(reader, []string{"path", "modtime", "replica", "generation"})
+	tsvReader, err := unitsv.NewReader(reader, []string{"path", "fingerprint", "replica", "generation"})
 	if err != nil {
 		return err
 	}
@@ -234,15 +233,11 @@ func (r *Replica) load(file io.Reader) error {
 		if err != nil || revGeneration < 1 || revGeneration > r.peerGenerations[peers[revReplicaIndex]] {
 			return ErrInvalidEntryGeneration
 		}
-		// Note: in the future, we might want to use time.RFC3339Nano
-		modTime, err := time.Parse(time.RFC3339, fields[TSV_MODTIME])
-		if err != nil {
-			return err
-		}
+		fingerprint := fields[TSV_FINGERPRINT]
 		path := strings.Split(fields[TSV_PATH], "/")
 
 		// now add this entry
-		err = r.rootEntry.add(path, revReplica, revGeneration, modTime)
+		err = r.rootEntry.add(path, revReplica, revGeneration, fingerprint)
 		if err != nil {
 			return err
 		}
@@ -274,7 +269,7 @@ func (r *Replica) Serialize(out io.Writer) error {
 	writeKeyValue(writer, "PeerGenerations", strings.Join(peerGenerationList, ","))
 	writer.WriteByte('\n')
 
-	tsvWriter, err := unitsv.NewWriter(writer, []string{"path", "modtime", "replica", "generation"})
+	tsvWriter, err := unitsv.NewWriter(writer, []string{"path", "fingerprint", "replica", "generation"})
 	if err != nil {
 		return err
 	}
@@ -316,7 +311,7 @@ func (e *Entry) serializeChildren(tsvWriter *unitsv.Writer, peerIndex map[string
 		} else {
 			childpath = path + "/" + name
 		}
-		err := tsvWriter.WriteRow([]string{childpath, child.modTime.Format(time.RFC3339Nano), strconv.Itoa(peerIndex[child.revReplica]), strconv.Itoa(child.revGeneration)})
+		err := tsvWriter.WriteRow([]string{childpath, child.fingerprint, strconv.Itoa(peerIndex[child.revReplica]), strconv.Itoa(child.revGeneration)})
 		err = e.children[name].serializeChildren(tsvWriter, peerIndex, childpath)
 		if err != nil {
 			return err

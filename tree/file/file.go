@@ -218,6 +218,11 @@ func (e *Entry) ModTime() time.Time {
 	return e.st.ModTime()
 }
 
+// Fingerprint returns a fingerprint calculated from the file's metadata.
+func (e *Entry) Fingerprint() string {
+	return tree.Fingerprint(e)
+}
+
 // Name returns the filename.
 func (e *Entry) Name() string {
 	return e.name

@@ -39,14 +39,14 @@ Generation: 2
 Peers: second
 PeerGenerations: 1
 
-path	modtime	replica	generation
-conflict.txt	2016-02-14T19:10:10.327687803Z	0	2
-dir	2016-02-15T19:17:51.35414374Z	0	1
-dir/file.txt	2016-02-15T19:18:18.290458876Z	0	1
-file1.txt	2013-01-03T19:04:31.721713001Z	0	1
-file2.html	2012-12-18T20:25:21.119862001Z	0	2
-file3.jpeg	2012-12-18T20:25:21.099852001Z	1	1
-new.txt	2016-02-14T16:30:26.719348761Z	0	2
+path	fingerprint	replica	generation
+conflict.txt	f/2016-02-14T19:10:10.327687803Z/0	0	2
+dir	d/2016-02-15T19:17:51.35414374Z/0	0	1
+dir/file.txt	f/2016-02-15T19:18:18.290458876Z/0	0	1
+file1.txt	f/2013-01-03T19:04:31.721713001Z/0	0	1
+file2.html	f/2012-12-18T20:25:21.119862001Z/0	0	2
+file3.jpeg	f/2012-12-18T20:25:21.099852001Z/0	1	1
+new.txt	f/2016-02-14T16:30:26.719348761Z/0	0	2
 `
 
 const status2 = `Content-Type: text/tab-separated-values
@@ -55,13 +55,13 @@ Generation: 5
 Peers: first
 PeerGenerations: 1
 
-path	modtime	replica	generation
-conflict.txt	2016-02-14T19:10:10.327687803Z	0	3
-dir	2016-02-15T19:17:51.35414374Z	0	1
-dir/file.txt	2016-02-15T19:18:18.290458876Z	0	1
-file1.txt	2013-01-03T19:04:31.721713001Z	1	1
-file2.html	2012-12-18T20:25:21.119862001Z	1	1
-file3.jpeg	2012-12-18T20:25:21.099852001Z	0	2
+path	fingerprint	replica	generation
+conflict.txt	f/2016-02-14T19:10:10.327687803Z/0	0	3
+dir	d/2016-02-15T19:17:51.35414374Z	0	1
+dir/file.txt	f/2016-02-15T19:18:18.290458876Z/0	0	1
+file1.txt	f/2013-01-03T19:04:31.721713001Z/0	1	1
+file2.html	f/2012-12-18T20:25:21.119862001Z/0	1	1
+file3.jpeg	f/2012-12-18T20:25:21.099852001Z/0	0	2
 `
 
 func TestReplica(t *testing.T) {

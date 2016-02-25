@@ -38,6 +38,8 @@ import (
 	"io"
 	"io/ioutil"
 	"sort"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -50,6 +52,17 @@ const (
 	TYPE_DIRECTORY Type = iota
 	TYPE_UNKNOWN   Type = iota
 )
+
+func (t Type) Char() string {
+	switch t {
+	case TYPE_REGULAR:
+		return "f"
+	case TYPE_DIRECTORY:
+		return "d"
+	default:
+		return "?"
+	}
+}
 
 // Error codes that can be used by any filesystem implementation
 var (
@@ -72,8 +85,10 @@ type Entry interface {
 	// Size returns the filesize for regular files. For others, it's
 	// implementation-dependent.
 	Size() int64
-	// ModTime returns the last modification time.
-	ModTime() time.Time
+	// Fingerprint returns a (weak) fingerprint of this file, including it's
+	// type and modification time, and possibly including it's size or
+	// permission bits.
+	Fingerprint() string
 	// Type returns the file type (see the Type constants above)
 	Type() Type
 
@@ -108,6 +123,8 @@ type FileEntry interface {
 	// GetReader returns a io.ReadCloser with the contents of this file.
 	// Useful for Equals()
 	GetContents() (io.ReadCloser, error)
+	// ModTime returns the last modification time.
+	ModTime() time.Time
 }
 
 // EntrySlice is a sortable list of Entries, sorting in incrasing order by the
@@ -200,4 +217,15 @@ func Equal(file1, file2 FileEntry, includeDirModTime bool) (bool, error) {
 	default:
 		panic("unknown fileType")
 	}
+}
+
+// Fingerprint returns a fingerprint for this file.
+func Fingerprint(e FileEntry) string {
+	parts := make([]string, 0, 4)
+	modTime := e.ModTime().Format(time.RFC3339Nano)
+	parts = append(parts, e.Type().Char(), modTime)
+	if e.Type() == TYPE_REGULAR {
+		parts = append(parts, strconv.FormatInt(e.Size(), 10))
+	}
+	return strings.Join(parts, "/")
 }

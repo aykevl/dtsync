@@ -90,6 +90,11 @@ func (e *Entry) ModTime() time.Time {
 	return e.modTime
 }
 
+// Fingerprint returns a fingerprint calculated from the file's metadata.
+func (e *Entry) Fingerprint() string {
+	return tree.Fingerprint(e)
+}
+
 // List returns a list of directory entries for directories. It returns an error
 // when attempting to list something other than a directory.
 func (e *Entry) List() ([]tree.Entry, error) {

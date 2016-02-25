@@ -30,9 +30,6 @@ package dtdiff
 
 import (
 	"sort"
-	"time"
-
-	"github.com/aykevl/dtsync/tree"
 )
 
 // An Entry is one object (row) in a Replica. It belongs to one Replica.
@@ -41,7 +38,7 @@ type Entry struct {
 	// rev*: replica and it's generation at that moment where this Entry last changed
 	revReplica    string
 	revGeneration int
-	modTime       time.Time
+	fingerprint   string
 	children      map[string]*Entry
 	parent        *Entry
 	replica       *Replica
@@ -58,7 +55,7 @@ func (e *Entry) Name() string {
 }
 
 // Add new entry by recursively finding the parent
-func (e *Entry) add(path []string, revReplica string, revGeneration int, modTime time.Time) error {
+func (e *Entry) add(path []string, revReplica string, revGeneration int, fingerprint string) error {
 	if path[0] == "" {
 		return ErrInvalidPath
 	}
@@ -69,14 +66,14 @@ func (e *Entry) add(path []string, revReplica string, revGeneration int, modTime
 			// or: the path has a parent that hasn't yet been scanned
 			return ErrInvalidPath
 		}
-		return child.add(path[1:], revReplica, revGeneration, modTime)
+		return child.add(path[1:], revReplica, revGeneration, fingerprint)
 	} else {
-		_, err := e.addChild(path[0], revReplica, revGeneration, modTime)
+		_, err := e.addChild(path[0], revReplica, revGeneration, fingerprint)
 		return err
 	}
 }
 
-func (e *Entry) addChild(name string, revReplica string, revGeneration int, modTime time.Time) (*Entry, error) {
+func (e *Entry) addChild(name string, revReplica string, revGeneration int, fingerprint string) (*Entry, error) {
 	if _, ok := e.children[name]; ok {
 		// duplicate path
 		return nil, ErrExists
@@ -85,7 +82,7 @@ func (e *Entry) addChild(name string, revReplica string, revGeneration int, modT
 		name:          name,
 		revReplica:    revReplica,
 		revGeneration: revGeneration,
-		modTime:       modTime.UTC(),
+		fingerprint:   fingerprint,
 		children:      make(map[string]*Entry),
 		parent:        e,
 		replica:       e.replica,
@@ -181,24 +178,24 @@ func (e *Entry) List() []*Entry {
 }
 
 // Add a new status entry.
-func (e *Entry) Add(file tree.Entry) (*Entry, error) {
+func (e *Entry) Add(name, fingerprint string) (*Entry, error) {
 	e.replica.markChanged()
-	return e.addChild(file.Name(), e.replica.identity, e.replica.generation, file.ModTime())
+	return e.addChild(name, e.replica.identity, e.replica.generation, fingerprint)
 }
 
 // AddCopy copies the status entry to here, keeping the revision.
 func (e *Entry) AddCopy(other *Entry) (*Entry, error) {
 	e.replica.markChanged()
-	return e.addChild(other.name, other.revReplica, other.revGeneration, other.modTime)
+	return e.addChild(other.name, other.revReplica, other.revGeneration, other.fingerprint)
 }
 
 // Update updates the revision if the file was changed.
-func (e *Entry) Update(file tree.Entry) {
-	if !e.modTime.Equal(file.ModTime()) {
+func (e *Entry) Update(fingerprint string) {
+	if fingerprint != e.fingerprint {
 		e.replica.markChanged()
+		e.fingerprint = fingerprint
 		e.revReplica = e.replica.identity
 		e.revGeneration = e.replica.generation
-		e.modTime = file.ModTime().UTC()
 	}
 }
 
@@ -208,7 +205,7 @@ func (e *Entry) UpdateFrom(other *Entry) {
 	e.replica.markChanged()
 	e.revReplica = other.revReplica
 	e.revGeneration = other.revGeneration
-	e.modTime = other.modTime
+	e.fingerprint = other.fingerprint
 }
 
 // Remove this entry.

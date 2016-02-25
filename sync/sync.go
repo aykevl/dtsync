@@ -177,8 +177,8 @@ func (r *Result) scanDirs(dir1, dir2 tree.Entry, statusDir1, statusDir2 *dtdiff.
 		} else {
 			// All four (file1, file2, status1, status2) are defined.
 			// Compare the contents.
-			status1.Update(file1)
-			status2.Update(file2)
+			status1.Update(file1.Fingerprint())
+			status2.Update(file2.Fingerprint())
 			if file1.Type() == tree.TYPE_DIRECTORY && file2.Type() == tree.TYPE_DIRECTORY {
 				// Don't compare mtime of directories.
 				// Future: maybe check for xattrs?
@@ -238,7 +238,7 @@ func ensureStatus(file *tree.Entry, status **dtdiff.Entry, statusDir **dtdiff.En
 	if *file != nil {
 		if *status == nil {
 			var err error
-			*status, err = (*statusDir).Add(*file)
+			*status, err = (*statusDir).Add((*file).Name(), (*file).Fingerprint())
 			if err != nil {
 				panic("must not happen: " + err.Error())
 			}
