@@ -86,7 +86,7 @@ func Scan(dir1, dir2 tree.Entry) (*Result, error) {
 		root2: dir2,
 	}
 
-	return result, result.sync()
+	return result, result.scan()
 }
 
 func getStatus(dir tree.Entry) (io.ReadCloser, error) {
@@ -99,7 +99,7 @@ func getStatus(dir tree.Entry) (io.ReadCloser, error) {
 	return file, nil
 }
 
-func (r *Result) sync() error {
+func (r *Result) scan() error {
 	return r.scanDirs(r.root1, r.root2, r.rs.Get(0).Root(), r.rs.Get(1).Root())
 }
 
