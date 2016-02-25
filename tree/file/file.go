@@ -267,11 +267,13 @@ func (e *Entry) removeSelf() error {
 	}
 
 	// Update parent stat result
-	st, err := os.Stat(e.parent.path())
-	if err != nil {
-		return err
+	if e.parent != nil {
+		st, err := os.Stat(e.parent.path())
+		if err != nil {
+			return err
+		}
+		e.parent.st = st
 	}
-	e.parent.st = st
 	return nil
 }
 
