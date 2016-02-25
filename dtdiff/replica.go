@@ -32,6 +32,7 @@ import (
 	"bufio"
 	"errors"
 	"io"
+	"mime"
 	"net/textproto"
 	"sort"
 	"strconv"
@@ -147,7 +148,14 @@ func (r *Replica) load(file io.Reader) error {
 		return err
 	}
 
-	if header.Get("Content-Type") != "text/tab-separated-values" {
+	mediaType, params, err := mime.ParseMediaType(header.Get("Content-Type"))
+	if err != nil {
+		return err
+	}
+	if mediaType != "text/tab-separated-values" {
+		return ErrContentType
+	}
+	if params["charset"] != "utf-8" {
 		return ErrContentType
 	}
 
@@ -262,7 +270,7 @@ func (r *Replica) Serialize(out io.Writer) error {
 
 	writer := bufio.NewWriter(out)
 	// Don't look at the error return values, errors will be caught in .Flush().
-	writeKeyValue(writer, "Content-Type", "text/tab-separated-values")
+	writeKeyValue(writer, "Content-Type", "text/tab-separated-values; charset=utf-8")
 	writeKeyValue(writer, "Identity", r.identity)
 	writeKeyValue(writer, "Generation", strconv.Itoa(r.generation))
 	writeKeyValue(writer, "Peers", strings.Join(peerList, ","))

@@ -134,7 +134,7 @@ func TestSync(t *testing.T) {
 		{"fsCheck", fsCheck},
 	}
 	for _, fs := range fsNames {
-		fs.fs.AddRegular(STATUS_FILE, []byte(`Content-Type: text/tab-separated-values
+		fs.fs.AddRegular(STATUS_FILE, []byte(`Content-Type: text/tab-separated-values; charset=utf-8
 Identity: `+fs.name+`
 Generation: 1
 
