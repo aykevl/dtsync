@@ -65,7 +65,6 @@ func TestSync(t *testing.T) {
 	if err != nil {
 		t.Fatal("could not start sync:", err)
 	}
-	result.MarkFullySynced()
 	err = result.SaveStatus()
 	if err != nil {
 		t.Error("could not save replica state:", err)
@@ -256,8 +255,6 @@ func runTestCaseSync(t *testing.T, tc *testCase, fs1, fs2 tree.TestEntry, jobDir
 	if !fsEqual(fs1, fs2) {
 		t.Errorf("directory trees are not equal after: %s %s", tc.action, tc.file)
 	} else {
-		result.MarkFullySynced()
-
 		// both replicas must include all changes from the other
 		replica1 := result.rs.Get(0)
 		replica2 := result.rs.Get(1)

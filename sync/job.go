@@ -58,6 +58,7 @@ func (a Action) String() string {
 
 // Job is one action to apply (copy, update or delete)
 type Job struct {
+	result        *Result
 	applied       bool
 	action        Action
 	status1       *dtdiff.Entry
@@ -160,6 +161,14 @@ func (j *Job) Apply() error {
 		}
 	default:
 		panic("unknown action (must not happen)")
+	}
+
+	j.result.countTotal++
+	if err != nil {
+		j.result.countError++
+	}
+	if j.result.countTotal == len(j.result.jobs) && j.result.countError == 0 {
+		j.result.markSynced()
 	}
 	return err
 }

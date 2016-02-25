@@ -52,10 +52,12 @@ const STATUS_FILE = ".dtsync"
 // Result is returned by Scan on success. It contains the scan jobs that can
 // then be applied.
 type Result struct {
-	rs    *dtdiff.ReplicaSet
-	root1 tree.Entry
-	root2 tree.Entry
-	jobs  []*Job
+	rs         *dtdiff.ReplicaSet
+	root1      tree.Entry
+	root2      tree.Entry
+	jobs       []*Job
+	countTotal int
+	countError int
 }
 
 // Scan the two filesystem roots for changes, and return results with a list of
@@ -86,7 +88,14 @@ func Scan(dir1, dir2 tree.Entry) (*Result, error) {
 		root2: dir2,
 	}
 
-	return result, result.scan()
+	scanResult := result.scan()
+	if scanResult != nil {
+		return nil, err
+	}
+	if len(result.jobs) == 0 {
+		result.markSynced()
+	}
+	return result, nil
 }
 
 func getStatus(dir tree.Entry) (io.ReadCloser, error) {
@@ -129,6 +138,7 @@ func (r *Result) scanDirs(dir1, dir2 tree.Entry, statusDir1, statusDir2 *dtdiff.
 			continue
 		}
 		job := &Job{
+			result:        r,
 			status1:       status1,
 			status2:       status2,
 			statusParent1: statusDir1,
@@ -187,6 +197,7 @@ func (r *Result) scanDirs(dir1, dir2 tree.Entry, statusDir1, statusDir2 *dtdiff.
 				// Two equal non-directories. We don't have to do more.
 			} else if status1.Conflict(status2) {
 				r.jobs = append(r.jobs, &Job{
+					result:        r,
 					action:        ACTION_UPDATE,
 					direction:     0,
 					status1:       status1,
@@ -200,6 +211,7 @@ func (r *Result) scanDirs(dir1, dir2 tree.Entry, statusDir1, statusDir2 *dtdiff.
 				})
 			} else if status1.After(status2) {
 				r.jobs = append(r.jobs, &Job{
+					result:        r,
 					action:        ACTION_UPDATE,
 					direction:     1,
 					status1:       status1,
@@ -213,6 +225,7 @@ func (r *Result) scanDirs(dir1, dir2 tree.Entry, statusDir1, statusDir2 *dtdiff.
 				})
 			} else if status1.Before(status2) {
 				r.jobs = append(r.jobs, &Job{
+					result:        r,
 					action:        ACTION_UPDATE,
 					direction:     -1,
 					status1:       status1,
@@ -378,9 +391,13 @@ func iterateStatusSlice(list []*dtdiff.Entry) chan *dtdiff.Entry {
 	return c
 }
 
-// MarkFullySynced sets both replicas as having incorporated all changes made in
-// the other replica.
-func (r *Result) MarkFullySynced() {
+func (r *Result) Jobs() []*Job {
+	return r.jobs
+}
+
+// markSynced sets both replicas as having incorporated all changes made in the
+// other replica.
+func (r *Result) markSynced() {
 	r.rs.MarkSynced()
 }
 
