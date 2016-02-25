@@ -36,8 +36,7 @@ import (
 const status1 = `Content-Type: text/tab-separated-values; charset=utf-8
 Identity: first
 Generation: 2
-Peers: second
-PeerGenerations: 1
+Knowledge: second:1
 
 path	fingerprint	replica	generation
 conflict.txt	f/2016-02-14T19:10:10.327687803Z/0	0	2
@@ -52,8 +51,7 @@ new.txt	f/2016-02-14T16:30:26.719348761Z/0	0	2
 const status2 = `Content-Type: text/tab-separated-values; charset=utf-8
 Identity: second
 Generation: 5
-Peers: first
-PeerGenerations: 1
+Knowledge: first:1,other:0
 
 path	fingerprint	replica	generation
 conflict.txt	f/2016-02-14T19:10:10.327687803Z/0	0	3

@@ -68,8 +68,8 @@ func (rs *ReplicaSet) Get(index int) *Replica {
 
 // notifyReplica adds the replica to the list of known replicas
 func notifyReplica(replica, other *Replica) {
-	if _, ok := replica.peerGenerations[other.identity]; !ok {
-		replica.peerGenerations[other.identity] = 0
+	if _, ok := replica.knowledge[other.identity]; !ok {
+		replica.knowledge[other.identity] = 0
 	}
 }
 

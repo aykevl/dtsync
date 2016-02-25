@@ -99,7 +99,7 @@ func (e *Entry) Get(name string) *Entry {
 // HasRevision returns true if this file (actually, this replica) includes the
 // revision the other entry is at.
 func (e *Entry) HasRevision(other *Entry) bool {
-	return e.replica.peerGenerations[other.revReplica] >= other.revGeneration
+	return e.replica.knowledge[other.revReplica] >= other.revGeneration
 }
 
 // Equal returns true if both entries are of the same revision (replica and
@@ -110,7 +110,7 @@ func (e *Entry) Equal(e2 *Entry) bool {
 
 // After returns true if this entry was modified after the other.
 func (e *Entry) After(e2 *Entry) bool {
-	otherGeneration, ok := e2.replica.peerGenerations[e.revReplica]
+	otherGeneration, ok := e2.replica.knowledge[e.revReplica]
 	if !ok {
 		return true
 	}

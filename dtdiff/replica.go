@@ -45,7 +45,7 @@ var (
 	ErrContentType            = errors.New("dtdiff: wrong content type")
 	ErrNoIdentity             = errors.New("dtdiff: no Identity header")
 	ErrInvalidGeneration      = errors.New("dtdiff: invalid or missing Generation header")
-	ErrInvalidPeerHeaders     = errors.New("dtdiff: invalid peer headers")
+	ErrInvalidKnowledgeHeader = errors.New("dtdiff: invalid Knowledge header")
 	ErrInvalidReplicaIndex    = errors.New("dtdiff: invalid or missing replica index in entry row")
 	ErrInvalidEntryGeneration = errors.New("dtdiff: invalid generation number in entry row")
 	ErrInvalidPath            = errors.New("dtdiff: invalid or missing path in entry row")
@@ -55,12 +55,12 @@ var (
 
 type Replica struct {
 	// generation starts at 1, 0 means 'no generation'
-	generation      int
-	isChanged       bool // true if there was a change
-	identity        string
-	peerGenerations map[string]int
-	replicaSet      *ReplicaSet
-	rootEntry       *Entry
+	generation int
+	isChanged  bool // true if there was a change
+	identity   string
+	knowledge  map[string]int
+	replicaSet *ReplicaSet
+	rootEntry  *Entry
 }
 
 func loadReplica(replicaSet *ReplicaSet, file io.Reader) (*Replica, error) {
@@ -73,11 +73,11 @@ func loadReplica(replicaSet *ReplicaSet, file io.Reader) (*Replica, error) {
 	r.rootEntry.replica = r
 
 	if file == nil {
-		// This replica is new
+		// This is a blank replica, create initial data
 		r.generation = 1
 		r.identity = makeRandomString(24)
-		r.peerGenerations = make(map[string]int, 1)
-		r.peerGenerations[r.identity] = r.generation
+		r.knowledge = make(map[string]int, 1)
+		r.knowledge[r.identity] = r.generation
 		return r, nil
 	}
 
@@ -117,7 +117,7 @@ func (r *Replica) markChanged() {
 	if !r.isChanged {
 		r.isChanged = true
 		r.generation++
-		r.peerGenerations[r.identity] = r.generation
+		r.knowledge[r.identity] = r.generation
 	}
 }
 
@@ -128,9 +128,9 @@ func (r *Replica) Changed() bool {
 }
 
 func (r *Replica) include(other *Replica) {
-	for id, gen := range other.peerGenerations {
-		if r.peerGenerations[id] < gen {
-			r.peerGenerations[id] = gen
+	for id, gen := range other.knowledge {
+		if r.knowledge[id] < gen {
+			r.knowledge[id] = gen
 		}
 	}
 }
@@ -175,37 +175,31 @@ func (r *Replica) load(file io.Reader) error {
 	}
 	r.generation = generation
 
-	// Get peers with generations
-	peersString := header.Get("Peers")
-	var peersList []string
-	if peersString != "" {
-		peersList = strings.Split(peersString, ",")
-	}
-	peerGenerationsString := header.Get("PeerGenerations")
-	var peerGenerationsList []string
-	if peerGenerationsString != "" {
-		peerGenerationsList = strings.Split(peerGenerationsString, ",")
-	}
-	if len(peersList) != len(peerGenerationsList) {
-		return ErrInvalidPeerHeaders
-	}
-
-	// Create the temporary map of {index: id}
-	peers := make(map[int]string, len(peersList)+1)
+	// Create the temporary map of {index: id}, only used during parsing of the
+	// TSV body.
+	knowledgeString := header.Get("Knowledge")
+	knowledgeParts := strings.Split(knowledgeString, ",")
+	peers := make(map[int]string, len(knowledgeParts)+1)
 	peers[0] = identity
-	for i, peerString := range peersList {
-		peers[i+1] = peerString
-	}
 
-	// Make the {peer: generation} map
-	r.peerGenerations = make(map[string]int, len(peersList)+1)
-	r.peerGenerations[identity] = generation
-	for i, peerGenerationString := range peerGenerationsList {
-		gen, err := strconv.Atoi(peerGenerationString)
-		if err != nil {
-			return ErrInvalidPeerHeaders
+	// Get knowledge of other replicas.
+	// Format: id1:5,id3:8,otherId:20
+	r.knowledge = make(map[string]int, len(knowledgeParts)+1)
+	r.knowledge[r.identity] = r.generation
+	if knowledgeString != "" {
+		for i, part := range knowledgeParts {
+			partParts := strings.SplitN(part, ":", 2)
+			if len(partParts) != 2 {
+				return ErrInvalidKnowledgeHeader
+			}
+			peerId := partParts[0]
+			peerGen, err := strconv.Atoi(partParts[1])
+			if err != nil {
+				return ErrInvalidKnowledgeHeader
+			}
+			r.knowledge[peerId] = peerGen
+			peers[i+1] = peerId
 		}
-		r.peerGenerations[peersList[i]] = gen
 	}
 
 	const (
@@ -238,7 +232,7 @@ func (r *Replica) load(file io.Reader) error {
 		}
 		revReplica := peers[revReplicaIndex]
 		revGeneration, err := strconv.Atoi(fields[TSV_GENERATION])
-		if err != nil || revGeneration < 1 || revGeneration > r.peerGenerations[peers[revReplicaIndex]] {
+		if err != nil || revGeneration < 1 || revGeneration > r.knowledge[peers[revReplicaIndex]] {
 			return ErrInvalidEntryGeneration
 		}
 		fingerprint := fields[TSV_FINGERPRINT]
@@ -255,17 +249,23 @@ func (r *Replica) load(file io.Reader) error {
 }
 
 func (r *Replica) Serialize(out io.Writer) error {
-	peerList := make([]string, 0, len(r.peerGenerations)-1)
-	peerGenerationList := make([]string, 0, len(r.peerGenerations)-1)
-	peerIndex := make(map[string]int, len(r.peerGenerations)-1)
-	for id, gen := range r.peerGenerations {
+	// Get a sorted list of peer identities
+	peerIds := make([]string, 0, len(r.knowledge)-1)
+	for id, _ := range r.knowledge {
 		if id == r.identity {
 			// Do not save ourselves as a peer
 			continue
 		}
-		peerList = append(peerList, id)
-		peerGenerationList = append(peerGenerationList, strconv.Itoa(gen))
-		peerIndex[id] = len(peerList) // peer index, starting with 1 (0 means ourself)
+		peerIds = append(peerIds, id)
+	}
+	sort.Strings(peerIds)
+
+	knowledgeList := make([]string, 0, len(peerIds))
+	peerIndex := make(map[string]int, len(r.knowledge))
+	peerIndex[r.identity] = 0
+	for i, id := range peerIds {
+		knowledgeList = append(knowledgeList, id+":"+strconv.Itoa(r.knowledge[id]))
+		peerIndex[id] = i + 1 // peer index, starting with 1 (0 means ourself)
 	}
 
 	writer := bufio.NewWriter(out)
@@ -273,8 +273,7 @@ func (r *Replica) Serialize(out io.Writer) error {
 	writeKeyValue(writer, "Content-Type", "text/tab-separated-values; charset=utf-8")
 	writeKeyValue(writer, "Identity", r.identity)
 	writeKeyValue(writer, "Generation", strconv.Itoa(r.generation))
-	writeKeyValue(writer, "Peers", strings.Join(peerList, ","))
-	writeKeyValue(writer, "PeerGenerations", strings.Join(peerGenerationList, ","))
+	writeKeyValue(writer, "Knowledge", strings.Join(knowledgeList, ","))
 	writer.WriteByte('\n')
 
 	tsvWriter, err := unitsv.NewWriter(writer, []string{"path", "fingerprint", "replica", "generation"})
