@@ -41,6 +41,8 @@ import (
 	"github.com/aykevl/unitsv"
 )
 
+const VERSION = "dtsync 0.1"
+
 var (
 	ErrContentType            = errors.New("dtdiff: wrong content type")
 	ErrNoIdentity             = errors.New("dtdiff: no Identity header")
@@ -270,6 +272,7 @@ func (r *Replica) Serialize(out io.Writer) error {
 
 	writer := bufio.NewWriter(out)
 	// Don't look at the error return values, errors will be caught in .Flush().
+	writeKeyValue(writer, "Version", VERSION)
 	writeKeyValue(writer, "Content-Type", "text/tab-separated-values; charset=utf-8")
 	writeKeyValue(writer, "Identity", r.identity)
 	writeKeyValue(writer, "Generation", strconv.Itoa(r.generation))
