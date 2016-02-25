@@ -248,9 +248,13 @@ func runTestCaseSync(t *testing.T, tc *testCase, fs1, fs2 tree.TestEntry, jobDir
 		}
 	}
 
-	if err := result.SyncAll(); err != nil {
+	if stats, err := result.SyncAll(); err != nil {
 		t.Errorf("could not sync all: %s", err)
 		return
+	} else if stats.CountTotal != 1 {
+		t.Errorf("CountTotal expected to be 1, got %d", stats.CountTotal)
+	} else if stats.CountError != 0 {
+		t.Errorf("CountTotal expected to be 0, got %d", stats.CountError)
 	}
 	if !fsEqual(fs1, fs2) {
 		t.Errorf("directory trees are not equal after: %s %s", tc.action, tc.file)

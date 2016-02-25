@@ -423,14 +423,29 @@ func (r *Result) serializeStatus(replica *dtdiff.Replica, root tree.Entry) error
 	return outstatus.Close()
 }
 
+// SyncStats is returned by SyncAll() and contains some statistics.
+type SyncStats struct {
+	CountTotal int
+	CountError int
+}
+
 // SyncAll applies all changes detected.
-func (r *Result) SyncAll() error {
+func (r *Result) SyncAll() (SyncStats, error) {
 	for _, job := range r.jobs {
+		if job.applied {
+			continue
+		}
 		err := job.Apply()
 		if err != nil {
 			// TODO: continue after errors, but mark the sync as unclean
-			return err
+			return SyncStats{
+				CountTotal: r.countTotal,
+				CountError: r.countError,
+			}, err
 		}
 	}
-	return nil
+	return SyncStats{
+		CountTotal: r.countTotal,
+		CountError: r.countError,
+	}, nil
 }
