@@ -227,7 +227,7 @@ func Equal(file1, file2 FileEntry, includeDirModTime bool) (bool, error) {
 // Fingerprint returns a fingerprint for this file.
 func Fingerprint(e FileEntry) string {
 	parts := make([]string, 0, 4)
-	modTime := e.ModTime().Format(time.RFC3339Nano)
+	modTime := e.ModTime().UTC().Format(time.RFC3339Nano)
 	parts = append(parts, e.Type().Char(), modTime)
 	if e.Type() == TYPE_REGULAR {
 		parts = append(parts, strconv.FormatInt(e.Size(), 10))
