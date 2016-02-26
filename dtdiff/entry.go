@@ -134,7 +134,16 @@ func (e *Entry) HasRevision(other *Entry) bool {
 // Equal returns true if both entries are of the same revision (replica and
 // generation). Not recursive.
 func (e *Entry) Equal(e2 *Entry) bool {
-	return e.revReplica == e2.revReplica && e.revGeneration == e2.revGeneration
+	if e.revReplica == e2.revReplica && e.revGeneration == e2.revGeneration {
+		return true
+	}
+	if e.fingerprint == e2.fingerprint {
+		return true
+	}
+	if bytes.Equal(e.hash, e2.hash) && len(e.hash) > 0 {
+		return true
+	}
+	return false
 }
 
 // After returns true if this entry was modified after the other.
