@@ -29,6 +29,8 @@
 package sync
 
 import (
+	"bytes"
+
 	"github.com/aykevl/dtsync/dtdiff"
 	"github.com/aykevl/dtsync/tree"
 )
@@ -146,18 +148,24 @@ func (j *Job) Apply() error {
 	case ACTION_COPY:
 		err = copyFile(file1, parent2, status1, statusParent2)
 	case ACTION_UPDATE:
-		err = file1.UpdateOver(file2)
+		var hash []byte
+		hash, err = file1.UpdateOver(file2)
 		if err == nil {
+			if !bytes.Equal(hash, status1.Hash()) {
+				// The first file got updated between the scan and update.
+				// TODO Should we report this as an error?
+				status1.UpdateHash(hash)
+			}
 			status2.UpdateFrom(status1)
 			if statusParent2 != nil {
-				statusParent2.Update(parent2.Fingerprint())
+				statusParent2.Update(parent2.Fingerprint(), nil)
 			}
 		}
 	case ACTION_REMOVE:
 		err = file2.Remove()
 		if err == nil {
 			status2.Remove()
-			statusParent2.Update(parent2.Fingerprint())
+			statusParent2.Update(parent2.Fingerprint(), nil)
 		}
 	default:
 		panic("unknown action (must not happen)")
@@ -184,11 +192,11 @@ func copyFile(file1, parent2 tree.Entry, status1, statusParent2 *dtdiff.Entry) e
 				// TODO revert
 				return err
 			}
-			status2, err := statusParent2.Add(file2.Name(), file2.Fingerprint())
+			status2, err := statusParent2.Add(file2.Name(), file2.Fingerprint(), nil)
 			if err != nil {
 				return err
 			}
-			statusParent2.Update(parent2.Fingerprint())
+			statusParent2.Update(parent2.Fingerprint(), nil)
 
 			list, err := file1.List()
 			if err != nil {
@@ -215,10 +223,10 @@ func copyFile(file1, parent2 tree.Entry, status1, statusParent2 *dtdiff.Entry) e
 			return nil
 		}
 	} else {
-		file2, err := file1.CopyTo(parent2)
+		file2, hash, err := file1.CopyTo(parent2)
 		if err == nil {
-			_, err = statusParent2.Add(file2.Name(), file2.Fingerprint())
-			statusParent2.Update(parent2.Fingerprint())
+			_, err = statusParent2.Add(file2.Name(), file2.Fingerprint(), hash)
+			statusParent2.Update(parent2.Fingerprint(), nil)
 		}
 		return err
 	}

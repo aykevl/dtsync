@@ -88,8 +88,8 @@ func Scan(dir1, dir2 tree.Entry) (*Result, error) {
 		root2: dir2,
 	}
 
-	scanResult := result.scan()
-	if scanResult != nil {
+	err = result.scan()
+	if err != nil {
 		return nil, err
 	}
 	if len(result.jobs) == 0 {
@@ -120,15 +120,26 @@ func (r *Result) scanDirs(dir1, dir2 tree.Entry, statusDir1, statusDir2 *dtdiff.
 			// update certain generation numbers)
 			return row.err
 		}
+		// Convenience shortcuts.
 		file1 := row.file1
 		file2 := row.file2
 		status1 := row.status1
 		status2 := row.status2
-		ensureStatus(&file1, &status1, &statusDir1)
-		ensureStatus(&file2, &status2, &statusDir2)
+
+		// Add/update status if necessary.
+		err := ensureStatus(&file1, &status1, &statusDir1)
+		if err != nil {
+			return err
+		}
+		err = ensureStatus(&file2, &status2, &statusDir2)
+		if err != nil {
+			return err
+		}
+
 		// so now status1 and status2 must both be defined, if the files are
 		// defined
 		if file1 == nil && file2 == nil {
+			// Remove old status entries.
 			if status1 != nil {
 				status1.Remove()
 			}
@@ -245,18 +256,43 @@ func (r *Result) scanDirs(dir1, dir2 tree.Entry, statusDir1, statusDir2 *dtdiff.
 }
 
 // ensureStatus adds a status entry if there isn't one.
-func ensureStatus(file *tree.Entry, status, statusDir **dtdiff.Entry) {
+func ensureStatus(file *tree.Entry, status, statusDir **dtdiff.Entry) error {
 	if *file != nil {
 		if *status == nil {
+			var hash []byte
 			var err error
-			*status, err = (*statusDir).Add((*file).Name(), (*file).Fingerprint())
+			if (*file).Type() == tree.TYPE_REGULAR {
+				hash, err = (*file).Hash()
+				if err != nil {
+					return err
+				}
+			}
+			*status, err = (*statusDir).Add((*file).Name(), (*file).Fingerprint(), hash)
 			if err != nil {
 				panic("must not happen: " + err.Error())
 			}
 		} else {
-			(*status).Update((*file).Fingerprint())
+			oldHash := (*status).Hash()
+			oldFingerprint := (*status).Fingerprint()
+			newFingerprint := (*file).Fingerprint()
+			var newHash []byte
+			var err error
+			if oldFingerprint == newFingerprint && oldHash != nil {
+				// Assume the hash stayed the same when the fingerprint is the
+				// same. But calculate a new hash if there is no hash.
+				newHash = oldHash
+			} else {
+				if (*file).Type() == tree.TYPE_REGULAR {
+					newHash, err = (*file).Hash()
+					if err != nil {
+						return err
+					}
+				}
+			}
+			(*status).Update(newFingerprint, newHash)
 		}
 	}
+	return nil
 }
 
 // entryRow is one row as returned by iterateEntries. All entries in here have

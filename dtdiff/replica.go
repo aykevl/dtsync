@@ -30,6 +30,7 @@ package dtdiff
 
 import (
 	"bufio"
+	"encoding/base64"
 	"errors"
 	"io"
 	"mime"
@@ -207,11 +208,12 @@ func (r *Replica) load(file io.Reader) error {
 	const (
 		TSV_PATH = iota
 		TSV_FINGERPRINT
+		TSV_HASH
 		TSV_REPLICA
 		TSV_GENERATION
 	)
 
-	tsvReader, err := unitsv.NewReader(reader, []string{"path", "fingerprint", "replica", "generation"})
+	tsvReader, err := unitsv.NewReader(reader, []string{"path", "fingerprint", "hash", "replica", "generation"})
 	if err != nil {
 		return err
 	}
@@ -223,6 +225,15 @@ func (r *Replica) load(file io.Reader) error {
 			if err == io.EOF {
 				break
 			}
+			return err
+		}
+		hashStr := fields[TSV_HASH]
+		if len(hashStr) == 43 {
+			// In Go 1.5+, we can use base64.RawURLEncoding
+			hashStr += "="
+		}
+		hash, err := base64.URLEncoding.DecodeString(hashStr)
+		if err != nil {
 			return err
 		}
 		revReplicaIndex, err := strconv.Atoi(fields[TSV_REPLICA])
@@ -241,7 +252,7 @@ func (r *Replica) load(file io.Reader) error {
 		path := strings.Split(fields[TSV_PATH], "/")
 
 		// now add this entry
-		err = r.rootEntry.add(path, revReplica, revGeneration, fingerprint)
+		err = r.rootEntry.add(path, revReplica, revGeneration, fingerprint, hash)
 		if err != nil {
 			return err
 		}
@@ -279,7 +290,7 @@ func (r *Replica) Serialize(out io.Writer) error {
 	writeKeyValue(writer, "Knowledge", strings.Join(knowledgeList, ","))
 	writer.WriteByte('\n')
 
-	tsvWriter, err := unitsv.NewWriter(writer, []string{"path", "fingerprint", "replica", "generation"})
+	tsvWriter, err := unitsv.NewWriter(writer, []string{"path", "fingerprint", "hash", "replica", "generation"})
 	if err != nil {
 		return err
 	}
@@ -321,7 +332,13 @@ func (e *Entry) serializeChildren(tsvWriter *unitsv.Writer, peerIndex map[string
 		} else {
 			childpath = path + "/" + name
 		}
-		err := tsvWriter.WriteRow([]string{childpath, child.fingerprint, strconv.Itoa(peerIndex[child.revReplica]), strconv.Itoa(child.revGeneration)})
+		hash := ""
+		if child.hash != nil {
+			hash = base64.URLEncoding.EncodeToString(child.hash)
+			// In Go 1.5+, we can use base64.RawURLEncoding
+			hash = strings.TrimRight(hash, "=")
+		}
+		err := tsvWriter.WriteRow([]string{childpath, child.fingerprint, hash, strconv.Itoa(peerIndex[child.revReplica]), strconv.Itoa(child.revGeneration)})
 		err = e.children[name].serializeChildren(tsvWriter, peerIndex, childpath)
 		if err != nil {
 			return err

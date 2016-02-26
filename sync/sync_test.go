@@ -137,7 +137,7 @@ func TestSync(t *testing.T) {
 Identity: `+fs.name+`
 Generation: 1
 
-path	fingerprint	replica	generation
+path	fingerprint	hash	replica	generation
 `))
 	}
 
@@ -280,16 +280,19 @@ func runTestCaseSync(t *testing.T, tc *testCase, fs1, fs2 tree.TestEntry, jobDir
 			statusBefore := readStatuses(t, fs1, fs2)
 			replica1 := result.rs.Get(0)
 			replica2 := result.rs.Get(1)
+			fail := false
 			if ch1, ch2 := replica1.Changed(), replica2.Changed(); ch1 || ch2 {
 				t.Errorf("one of the replicas was changed with identical trees: (%s: %v, %s: %v)", replica1, ch1, replica2, ch2)
 				if err := result.SaveStatus(); err != nil {
+					fail = true
 					t.Errorf("could not save status: %s", err)
 				}
 			}
 			if len(result.jobs) != 0 {
+				fail = true
 				t.Errorf("scan returned %d job %v when syncing two identical trees", len(result.jobs), result.jobs)
 			}
-			if t.Failed() {
+			if fail {
 				printStatus(t, "before (changed)", statusBefore)
 				printStatus(t, "after (changed)", readStatuses(t, fs1, fs2))
 				t.FailNow()

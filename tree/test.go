@@ -29,6 +29,8 @@
 package tree
 
 import (
+	"bytes"
+	"encoding/hex"
 	"testing"
 )
 
@@ -37,6 +39,27 @@ type TestEntry interface {
 
 	AddRegular(string, []byte) (FileEntry, error)
 	SetContents([]byte) error
+}
+
+var hashes map[string][]byte
+
+func init() {
+	hashList := []struct {
+		name string
+		hex  string
+	}{
+		{"", "0e5751c026e543b2e8ab2eb06099daa1d1e5df47778f7787faab45cdf12fe3a8"},
+		{"qbf", "3542ad7fd154020a202f8fdf8225ccacae0cb056c1073cf149350806ae58e4d9"},
+	}
+	hashes = make(map[string][]byte, len(hashList))
+	for _, hash := range hashList {
+		raw, err := hex.DecodeString(hash.hex)
+		if err != nil {
+			// must not happen
+			panic(err)
+		}
+		hashes[hash.name] = raw
+	}
 }
 
 // TreeTest is not a test in itself, it is called by trees wanting themselves to
@@ -49,12 +72,15 @@ func TreeTest(t *testing.T, root1, root2 TestEntry) {
 	file1 := _file1.(TestEntry)
 	checkFile(t, root1, file1, 0, 1)
 
-	_file2, err := file1.CopyTo(root2)
+	_file2, hash2, err := file1.CopyTo(root2)
 	if err != nil {
 		t.Fatalf("failed to copy file %s to %s: %s", file1, root2, err)
 	}
 	file2 := _file2.(TestEntry)
 	checkFile(t, root2, file2, 0, 1)
+	if !bytes.Equal(hash2, hashes[""]) {
+		t.Errorf("Hash mismatch for file %s during CopyTo: expected %x, got %x", file2, hashes[""], hash2)
+	}
 
 	if !testEqual(t, root1, root2) {
 		t.Error("root1 is not equal to root2 after CopyTo")
@@ -67,6 +93,14 @@ func TreeTest(t *testing.T, root1, root2 TestEntry) {
 	}
 	if testEqual(t, root1, root2) {
 		t.Error("root1 is equal to root2 after file1 got updated")
+	}
+
+	hash, err := file1.Hash()
+	if err != nil {
+		t.Fatal("could not get hash of file1:", err)
+	}
+	if !bytes.Equal(hash, hashes["qbf"]) {
+		t.Errorf("Hash mismatch for file %s during Hash: expected %x, got %x", file1, hashes["qbf"], hash)
 	}
 
 	f, err := root1.GetFile("file.txt")
@@ -82,9 +116,12 @@ func TreeTest(t *testing.T, root1, root2 TestEntry) {
 		t.Errorf("expected to get %#v but instead got %#v when reading from %s", quickBrowFox, string(buf[:n]), file1)
 	}
 
-	err = file1.UpdateOver(file2)
+	hash, err = file1.UpdateOver(file2)
 	if err != nil {
 		t.Error("failed to update file:", err)
+	}
+	if !bytes.Equal(hash, hashes["qbf"]) {
+		t.Errorf("Hash mismatch during UpdateOver for file %s: expected %x, got %x", file2, hashes["qbf"], hash)
 	}
 	if !testEqual(t, root1, root2) {
 		t.Error("root1 is not equal to root2 after UpdateOver")
@@ -111,7 +148,7 @@ func TreeTest(t *testing.T, root1, root2 TestEntry) {
 	if err != nil {
 		t.Fatalf("could not create child in directory %s: %s", dir1, err)
 	}
-	child2, err := child1.CopyTo(dir2)
+	child2, hash2, err := child1.CopyTo(dir2)
 	if err != nil {
 		t.Errorf("could not copy entry %s to dir %s: %s", child2, dir2, err)
 	}

@@ -223,6 +223,20 @@ func (e *Entry) Fingerprint() string {
 	return tree.Fingerprint(e)
 }
 
+// Hash returns the blake2b hash of this file.
+func (e *Entry) Hash() ([]byte, error) {
+	hash := tree.NewHash()
+	file, err := e.GetContents()
+	if err != nil {
+		return nil, err
+	}
+	_, err = io.Copy(hash, file)
+	if err != nil {
+		return nil, err
+	}
+	return hash.Sum(nil), nil
+}
+
 // Name returns the filename.
 func (e *Entry) Name() string {
 	return e.name
@@ -346,30 +360,33 @@ func (e *Entry) replaceFile(modTime time.Time) (io.WriteCloser, error) {
 
 // UpdateOver replaces this file with the contents and modtime of the other
 // file.
-func (e *Entry) UpdateOver(other tree.Entry) error {
+func (e *Entry) UpdateOver(other tree.Entry) ([]byte, error) {
 	file, ok := other.(tree.FileEntry)
 	if !ok {
-		return tree.ErrNotImplemented
+		return nil, tree.ErrNotImplemented
 	}
 
 	switch e.Type() {
 	case tree.TYPE_REGULAR:
 		out, err := file.UpdateFile(e.ModTime())
 		if err != nil {
-			return err
+			return nil, err
 		}
 
 		in, err := os.Open(e.path())
 
-		_, err = io.Copy(out, in)
+		hasher := tree.NewHash()
+		hashReader := io.TeeReader(in, hasher)
+
+		_, err = io.Copy(out, hashReader)
 		if err != nil {
-			return err
+			return nil, err
 		}
 
-		return out.Close()
+		return hasher.Sum(nil), out.Close()
 
 	default:
-		return tree.ErrNotImplemented
+		return nil, tree.ErrNotImplemented
 	}
 }
 
@@ -399,34 +416,36 @@ func (e *Entry) SetContents(contents []byte) error {
 
 // CopyTo copies this file into the otherParent. The latter must be a directory.
 // Only implemented for regular files, not directories.
-func (e *Entry) CopyTo(otherParent tree.Entry) (tree.Entry, error) {
+func (e *Entry) CopyTo(otherParent tree.Entry) (tree.Entry, []byte, error) {
 	file, ok := otherParent.(tree.FileEntry)
 	if !ok {
-		return nil, tree.ErrNotImplemented
+		return nil, nil, tree.ErrNotImplemented
 	}
 
 	switch e.Type() {
 	case tree.TYPE_REGULAR:
 		other, out, err := file.CreateFile(e.name, e.ModTime())
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		in, err := os.Open(e.path())
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
-		_, err = io.Copy(out, in)
+		hasher := tree.NewHash()
+		hashReader := io.TeeReader(in, hasher)
+		_, err = io.Copy(out, hashReader)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		// out.Close() does an fsync and rename
 		err = out.Close()
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
-		return other, nil
+		return other, hasher.Sum(nil), nil
 
 	default:
-		return nil, tree.ErrNotImplemented
+		return nil, nil, tree.ErrNotImplemented
 	}
 }

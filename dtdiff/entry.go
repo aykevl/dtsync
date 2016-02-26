@@ -29,6 +29,7 @@
 package dtdiff
 
 import (
+	"bytes"
 	"path"
 	"sort"
 )
@@ -40,6 +41,7 @@ type Entry struct {
 	revReplica    string
 	revGeneration int
 	fingerprint   string
+	hash          []byte
 	children      map[string]*Entry
 	parent        *Entry
 	replica       *Replica
@@ -70,8 +72,18 @@ func (e *Entry) relativePathElements() []string {
 	}
 }
 
+// Fingerprint returns the current fingerprint of this entry.
+func (e *Entry) Fingerprint() string {
+	return e.fingerprint
+}
+
+// Hash returns the hash of the status entry, if one is known.
+func (e *Entry) Hash() []byte {
+	return e.hash
+}
+
 // Add new entry by recursively finding the parent
-func (e *Entry) add(path []string, revReplica string, revGeneration int, fingerprint string) error {
+func (e *Entry) add(path []string, revReplica string, revGeneration int, fingerprint string, hash []byte) error {
 	if path[0] == "" {
 		return ErrInvalidPath
 	}
@@ -82,14 +94,14 @@ func (e *Entry) add(path []string, revReplica string, revGeneration int, fingerp
 			// or: the path has a parent that hasn't yet been scanned
 			return ErrInvalidPath
 		}
-		return child.add(path[1:], revReplica, revGeneration, fingerprint)
+		return child.add(path[1:], revReplica, revGeneration, fingerprint, hash)
 	} else {
-		_, err := e.addChild(path[0], revReplica, revGeneration, fingerprint)
+		_, err := e.addChild(path[0], revReplica, revGeneration, fingerprint, hash)
 		return err
 	}
 }
 
-func (e *Entry) addChild(name string, revReplica string, revGeneration int, fingerprint string) (*Entry, error) {
+func (e *Entry) addChild(name string, revReplica string, revGeneration int, fingerprint string, hash []byte) (*Entry, error) {
 	if _, ok := e.children[name]; ok {
 		// duplicate path
 		return nil, ErrExists
@@ -99,6 +111,7 @@ func (e *Entry) addChild(name string, revReplica string, revGeneration int, fing
 		revReplica:    revReplica,
 		revGeneration: revGeneration,
 		fingerprint:   fingerprint,
+		hash:          hash,
 		children:      make(map[string]*Entry),
 		parent:        e,
 		replica:       e.replica,
@@ -194,22 +207,30 @@ func (e *Entry) List() []*Entry {
 }
 
 // Add a new status entry.
-func (e *Entry) Add(name, fingerprint string) (*Entry, error) {
+func (e *Entry) Add(name, fingerprint string, hash []byte) (*Entry, error) {
 	e.replica.markChanged()
-	return e.addChild(name, e.replica.identity, e.replica.generation, fingerprint)
+	return e.addChild(name, e.replica.identity, e.replica.generation, fingerprint, hash)
 }
 
 // AddCopy copies the status entry to here, keeping the revision.
 func (e *Entry) AddCopy(other *Entry) (*Entry, error) {
 	e.replica.markChanged()
-	return e.addChild(other.name, other.revReplica, other.revGeneration, other.fingerprint)
+	return e.addChild(other.name, other.revReplica, other.revGeneration, other.fingerprint, other.hash)
 }
 
-// Update updates the revision if the file was changed.
-func (e *Entry) Update(fingerprint string) {
-	if fingerprint != e.fingerprint {
+// Update updates the revision if the file was changed. The file is not changed
+// if the fingerprint but not the hash changed.
+func (e *Entry) Update(fingerprint string, hash []byte) {
+	e.fingerprint = fingerprint
+	e.UpdateHash(hash)
+}
+
+// UpdateHash sets the new hash from the parameter, marking this file as changed
+// if it is different from the existing one.
+func (e *Entry) UpdateHash(hash []byte) {
+	if !bytes.Equal(e.hash, hash) {
 		e.replica.markChanged()
-		e.fingerprint = fingerprint
+		e.hash = hash
 		e.revReplica = e.replica.identity
 		e.revGeneration = e.replica.generation
 	}
@@ -222,6 +243,7 @@ func (e *Entry) UpdateFrom(other *Entry) {
 	e.revReplica = other.revReplica
 	e.revGeneration = other.revGeneration
 	e.fingerprint = other.fingerprint
+	e.hash = other.hash
 }
 
 // Remove this entry.

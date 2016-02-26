@@ -95,6 +95,16 @@ func (e *Entry) Fingerprint() string {
 	return tree.Fingerprint(e)
 }
 
+// Hash returns the blake2b hash of this file.
+func (e *Entry) Hash() ([]byte, error) {
+	hash := tree.NewHash()
+	_, err := hash.Write(e.contents)
+	if err != nil {
+		panic(err) // hash writer may not return an error
+	}
+	return hash.Sum(nil), nil
+}
+
 // List returns a list of directory entries for directories. It returns an error
 // when attempting to list something other than a directory.
 func (e *Entry) List() ([]tree.Entry, error) {
@@ -112,61 +122,72 @@ func (e *Entry) List() ([]tree.Entry, error) {
 
 // CopyTo copies this file into the given parent, returning an error if the file
 // already exists.
-func (e *Entry) CopyTo(otherParent tree.Entry) (tree.Entry, error) {
+func (e *Entry) CopyTo(otherParent tree.Entry) (tree.Entry, []byte, error) {
 	file, ok := otherParent.(tree.FileEntry)
 	if !ok {
-		return nil, tree.ErrNotImplemented
+		return nil, nil, tree.ErrNotImplemented
 	}
 
 	switch e.fileType {
 	case tree.TYPE_REGULAR:
 		other, out, err := file.CreateFile(e.name, e.modTime)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		_, err = out.Write(e.contents)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		err = out.Close()
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
-		return other, nil
+		hash, err := e.Hash()
+		if err != nil {
+			// we're hasing a buffer, that may not return an error
+			panic(err)
+		}
+		return other, hash, nil
 
 	default:
-		return nil, tree.ErrNotImplemented
+		return nil, nil, tree.ErrNotImplemented
 	}
 }
 
 // UpdateOver copies data and metadata to the given other file.
-func (e *Entry) UpdateOver(other tree.Entry) error {
+func (e *Entry) UpdateOver(other tree.Entry) ([]byte, error) {
 	file, ok := other.(tree.FileEntry)
 	if !ok {
-		return tree.ErrNotImplemented
+		return nil, tree.ErrNotImplemented
 	}
 
 	switch e.fileType {
 	case tree.TYPE_REGULAR:
 		out, err := file.UpdateFile(e.modTime)
 		if err != nil {
-			return err
+			return nil, err
 		}
 
 		_, err = out.Write(e.contents)
 		if err != nil {
-			return err
+			return nil, err
 		}
 
 		err = out.Close()
 		if err != nil {
-			return err
+			return nil, err
 		}
 
-		return nil
+		hash, err := e.Hash()
+		if err != nil {
+			// we're hasing a buffer, that may not return an error
+			panic(err)
+		}
+
+		return hash, nil
 
 	default:
-		return tree.ErrNotImplemented
+		return nil, tree.ErrNotImplemented
 	}
 }
 

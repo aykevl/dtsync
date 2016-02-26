@@ -35,12 +35,15 @@ package tree
 import (
 	"bytes"
 	"errors"
+	"hash"
 	"io"
 	"io/ioutil"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/dchest/blake2b"
 )
 
 // The type used for TYPE_* constants
@@ -91,12 +94,14 @@ type Entry interface {
 	Fingerprint() string
 	// Type returns the file type (see the Type constants above)
 	Type() Type
+	// Hash returns the blake2b hash of the file.
+	Hash() ([]byte, error)
 
 	// Copy into the other entry (as a child). The returned entry is the new
 	// child.
-	CopyTo(Entry) (Entry, error)
+	CopyTo(Entry) (Entry, []byte, error)
 	// Copy over the other entry, possibly using an optimized algorithm.
-	UpdateOver(Entry) error
+	UpdateOver(Entry) ([]byte, error)
 	// Delete this file or directory tree (recursively)
 	Remove() error
 
@@ -228,4 +233,9 @@ func Fingerprint(e FileEntry) string {
 		parts = append(parts, strconv.FormatInt(e.Size(), 10))
 	}
 	return strings.Join(parts, "/")
+}
+
+// NewHash returns the hashing function used by interfaces implementing Entry.
+func NewHash() hash.Hash {
+	return blake2b.New256()
 }
