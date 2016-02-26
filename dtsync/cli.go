@@ -33,6 +33,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/aykevl/dtsync/sync"
 	"github.com/aykevl/dtsync/tree/file"
@@ -94,18 +95,22 @@ func main() {
 		if !scanner.Scan() {
 			return
 		}
-		switch scanner.Text() {
-		case "y", "Y", "yes", "Yes", "YES":
+		input := strings.ToLower(scanner.Text())
+		switch input {
+		case "y", "yes":
 			// apply changes
 			action = 1
-		case "n", "N", "no", "No", "NO":
+		case "n", "no":
 			// exit
 			action = -1
+		case "q", "quit":
+			// exit
+			action = -2
 		default:
 			continue
 		}
 	}
-	if action == -1 {
+	if action < 0 {
 		err = result.SaveStatus()
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "Could not save status:", err)
