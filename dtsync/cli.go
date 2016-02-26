@@ -33,14 +33,28 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"runtime/pprof"
 	"strings"
 
 	"github.com/aykevl/dtsync/sync"
 	"github.com/aykevl/dtsync/tree/file"
 )
 
+var cpuprofile = flag.String("cpuprofile", "", "write CPU profile to file")
+
 func main() {
 	flag.Parse()
+
+	if *cpuprofile != "" {
+		f, err := os.Create(*cpuprofile)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "Could not open CPU profile file:", err)
+		}
+		defer f.Close()
+		pprof.StartCPUProfile(f)
+		defer pprof.StopCPUProfile()
+	}
+
 	if flag.NArg() != 2 {
 		fmt.Fprintf(os.Stderr, "Provide exactly two directories on the command line (got %d).\n", flag.NArg())
 		return
