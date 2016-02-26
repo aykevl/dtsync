@@ -29,6 +29,7 @@
 package dtdiff
 
 import (
+	"path"
 	"sort"
 )
 
@@ -52,6 +53,21 @@ func (e *Entry) String() string {
 // Name returns the name of this entry
 func (e *Entry) Name() string {
 	return e.name
+}
+
+// RelativePath returns the path relative to the root
+func (e *Entry) RelativePath() string {
+	return path.Join(e.relativePathElements()...)
+}
+
+func (e *Entry) relativePathElements() []string {
+	if e.parent == nil {
+		parts := make([]string, 1)
+		parts[0] = e.name
+		return parts
+	} else {
+		return append(e.parent.relativePathElements(), e.name)
+	}
 }
 
 // Add new entry by recursively finding the parent

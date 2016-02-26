@@ -223,3 +223,52 @@ func copyFile(file1, parent2 tree.Entry, status1, statusParent2 *dtdiff.Entry) e
 		return err
 	}
 }
+
+// Direction returns the sync direction of this file, with 1 for left-to-right,
+// 0 for undecided (conflict), and -1 for right-to-left.
+func (j *Job) Direction() int {
+	return j.direction
+}
+
+// StatusLeft returns an identifying string of what happened on the left side of
+// the sync.
+func (j *Job) StatusLeft() string {
+	return j.status(j.file1, j.parent1, j.file2, j.parent2, j.status1, j.statusParent1, j.status2, j.statusParent2)
+}
+
+// StatusRight is similar to StatusLeft.
+func (j *Job) StatusRight() string {
+	return j.status(j.file2, j.parent2, j.file1, j.parent1, j.status2, j.statusParent2, j.status1, j.statusParent1)
+}
+
+// status returns the change that was applied to this file (new, modified,
+// removed).
+func (j *Job) status(file, parent, otherFile, otherParent tree.Entry, status, statusParent, otherStatus, otherStatusParent *dtdiff.Entry) string {
+	if file == nil {
+		if statusParent.HasRevision(otherStatus) {
+			return "removed"
+		} else {
+			return ""
+		}
+	} else if otherFile == nil {
+		if otherStatusParent.HasRevision(status) {
+			return ""
+		} else {
+			return "new"
+		}
+	}
+	if status.After(otherStatus) {
+		return "modified"
+	}
+	return ""
+}
+
+// RelativePath returns the path relative to it's root.
+func (j *Job) RelativePath() string {
+	// This must be updated when we implement file or directory moves: then the
+	// paths cannot be assumed to be the same.
+	if j.file1 == nil {
+		return j.status2.RelativePath()
+	}
+	return j.status1.RelativePath()
+}
