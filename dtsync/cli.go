@@ -63,15 +63,18 @@ func main() {
 	fs1, err := file.NewRoot(flag.Arg(0))
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Could not open first root:", err)
+		return
 	}
 	fs2, err := file.NewRoot(flag.Arg(1))
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Could not open second root:", err)
+		return
 	}
 
 	result, err := sync.Scan(fs1, fs2)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Could not scan roots:", err)
+		return
 	}
 
 	if len(result.Jobs()) == 0 {
