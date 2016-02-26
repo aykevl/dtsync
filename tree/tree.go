@@ -43,7 +43,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dchest/blake2b"
+	"github.com/codahale/blake2"
 )
 
 // The type used for TYPE_* constants
@@ -237,5 +237,5 @@ func Fingerprint(e FileEntry) string {
 
 // NewHash returns the hashing function used by interfaces implementing Entry.
 func NewHash() hash.Hash {
-	return blake2b.New256()
+	return blake2.New(&blake2.Config{Size: 32})
 }
