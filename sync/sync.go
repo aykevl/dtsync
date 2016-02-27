@@ -425,6 +425,9 @@ func iterateStatusSlice(list []*dtdiff.Entry) chan *dtdiff.Entry {
 	return c
 }
 
+// Jobs returns a list of jobs. You can apply them via a call to .Apply(), or
+// you can call SyncAll() which does the same thing. When all jobs are
+// successfully applied, both trees are marked as successfully synchronized.
 func (r *Result) Jobs() []*Job {
 	return r.jobs
 }
@@ -457,14 +460,17 @@ func (r *Result) serializeStatus(replica *dtdiff.Replica, root tree.Entry) error
 	return outstatus.Close()
 }
 
-// SyncStats is returned by SyncAll() and contains some statistics.
-type SyncStats struct {
+// Stats is returned by SyncAll() and contains the total number and the number
+// of applied jobs (successfull and failed) and the number of jobs that failed.
+type Stats struct {
 	CountTotal int
 	CountError int
 }
 
-// SyncAll applies all changes detected.
-func (r *Result) SyncAll() (SyncStats, error) {
+// SyncAll applies all changes detected. It returns a Stats object with the
+// current statistics (including changes applied before, via for example
+// Result.Jobs[0].Apply()).
+func (r *Result) SyncAll() (Stats, error) {
 	for _, job := range r.jobs {
 		if job.applied {
 			continue
@@ -472,13 +478,13 @@ func (r *Result) SyncAll() (SyncStats, error) {
 		err := job.Apply()
 		if err != nil {
 			// TODO: continue after errors, but mark the sync as unclean
-			return SyncStats{
+			return Stats{
 				CountTotal: r.countTotal,
 				CountError: r.countError,
 			}, err
 		}
 	}
-	return SyncStats{
+	return Stats{
 		CountTotal: r.countTotal,
 		CountError: r.countError,
 	}, nil
