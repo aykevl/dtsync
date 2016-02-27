@@ -40,9 +40,9 @@ type TestEntry interface {
 	SetContents([]byte) error
 }
 
-var hashes map[string][]byte
-
-func init() {
+// Generate a list of hashes (blake2b) to compare with the output of various
+// functions.
+func generateHashes() map[string][]byte {
 	hashList := []struct {
 		name string
 		hex  string
@@ -50,7 +50,7 @@ func init() {
 		{"", "0e5751c026e543b2e8ab2eb06099daa1d1e5df47778f7787faab45cdf12fe3a8"},
 		{"qbf", "3542ad7fd154020a202f8fdf8225ccacae0cb056c1073cf149350806ae58e4d9"},
 	}
-	hashes = make(map[string][]byte, len(hashList))
+	hashes := make(map[string][]byte, len(hashList))
 	for _, hash := range hashList {
 		raw, err := hex.DecodeString(hash.hex)
 		if err != nil {
@@ -59,6 +59,7 @@ func init() {
 		}
 		hashes[hash.name] = raw
 	}
+	return hashes
 }
 
 // Tester is a helper interface, abstracting away *testing.T.
@@ -74,6 +75,8 @@ type Tester interface {
 // TreeTest is not a test in itself, it is called by trees wanting themselves to
 // be tested in a generic way.
 func TreeTest(t Tester, root1, root2 TestEntry) {
+	hashes := generateHashes()
+
 	_file1, err := root1.AddRegular("file.txt", nil)
 	if err != nil {
 		t.Error("could not add file:", err)
