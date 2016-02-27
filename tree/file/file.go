@@ -36,7 +36,7 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
-	"path"
+	"path/filepath"
 	"time"
 
 	"github.com/aykevl/dtsync/tree"
@@ -64,7 +64,7 @@ type Entry struct {
 
 // NewRoot wraps a root directory in an Entry.
 func NewRoot(rootPath string) (*Entry, error) {
-	rootPath = path.Clean(rootPath)
+	rootPath = filepath.Clean(rootPath)
 	st, err := os.Stat(rootPath)
 	if err != nil {
 		return nil, err
@@ -92,7 +92,7 @@ func (e *Entry) String() string {
 	return "file.Entry(" + e.path() + ")"
 }
 
-// pathElements returns a list of path elements to be joined by path.Join.
+// pathElements returns a list of path elements to be joined by filepath.Join.
 func (e *Entry) pathElements() []string {
 	if e.parent == nil {
 		parts := make([]string, 1, 2)
@@ -105,7 +105,7 @@ func (e *Entry) pathElements() []string {
 
 // path returns the full path for this entry.
 func (e *Entry) path() string {
-	return path.Join(e.pathElements()...)
+	return filepath.Join(e.pathElements()...)
 }
 
 // AddRegular implements tree.TestEntry by adding a single file with the given
@@ -184,7 +184,7 @@ func (e *Entry) GetContents() (io.ReadCloser, error) {
 // GetFile returns an io.ReadCloser with the named file. The file must be closed
 // after use.
 func (e *Entry) GetFile(name string) (io.ReadCloser, error) {
-	fp, err := os.Open(path.Join(e.path(), name))
+	fp, err := os.Open(filepath.Join(e.path(), name))
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, tree.ErrNotFound
@@ -249,7 +249,7 @@ func (e *Entry) Remove() error {
 		// directory tree
 		oldPath := e.path()
 		tmpName := TEMPPREFIX + e.name + TEMPSUFFIX
-		tmpPath := path.Join(e.parent.path(), tmpName)
+		tmpPath := filepath.Join(e.parent.path(), tmpName)
 		err := os.Rename(oldPath, tmpPath)
 		if err != nil {
 			return err
@@ -326,7 +326,7 @@ func (e *Entry) UpdateFile(modTime time.Time) (io.WriteCloser, error) {
 // replaceFile replaces the current file without checking for a type. Used by
 // CreateFile and UpdateFile.
 func (e *Entry) replaceFile(modTime time.Time) (io.WriteCloser, error) {
-	tempPath := path.Join(e.parent.path(), TEMPPREFIX+e.name+TEMPSUFFIX)
+	tempPath := filepath.Join(e.parent.path(), TEMPPREFIX+e.name+TEMPSUFFIX)
 	fp, err := os.Create(tempPath)
 	if err != nil {
 		return nil, err
