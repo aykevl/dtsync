@@ -31,7 +31,6 @@ package tree
 import (
 	"bytes"
 	"encoding/hex"
-	"testing"
 )
 
 type TestEntry interface {
@@ -62,9 +61,19 @@ func init() {
 	}
 }
 
+// Tester is a helper interface, abstracting away *testing.T.
+// This is useful as we don't have to import package "testing" this way, which
+// would pollute the "flag" package with it's flags.
+type Tester interface {
+	Error(...interface{})
+	Errorf(string, ...interface{})
+	Fatal(...interface{})
+	Fatalf(string, ...interface{})
+}
+
 // TreeTest is not a test in itself, it is called by trees wanting themselves to
 // be tested in a generic way.
-func TreeTest(t *testing.T, root1, root2 TestEntry) {
+func TreeTest(t Tester, root1, root2 TestEntry) {
 	_file1, err := root1.AddRegular("file.txt", nil)
 	if err != nil {
 		t.Error("could not add file:", err)
@@ -195,7 +204,7 @@ func TreeTest(t *testing.T, root1, root2 TestEntry) {
 
 // checkFile tests whether the file exists at a place in the index and checks
 // the number of children the directory has.
-func checkFile(t *testing.T, dir TestEntry, file TestEntry, index, length int) {
+func checkFile(t Tester, dir TestEntry, file TestEntry, index, length int) {
 	l, err := dir.List()
 	if err != nil {
 		t.Error("could not list directory:", err)
@@ -224,7 +233,7 @@ func getFile(parent Entry, name string) Entry {
 	return nil
 }
 
-func testEqual(t *testing.T, file1, file2 TestEntry) bool {
+func testEqual(t Tester, file1, file2 TestEntry) bool {
 	equal, err := Equal(file1, file2, false)
 	if err != nil {
 		t.Fatalf("could not compare files %s and %s: %s", file1, file2, err)
