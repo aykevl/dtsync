@@ -82,14 +82,14 @@ func TreeTest(t Tester, root1, root2 TestEntry) {
 		t.Error("could not add file:", err)
 	}
 	file1 := _file1.(TestEntry)
-	checkFile(t, root1, file1, 0, 1)
+	checkFile(t, root1, file1, 0, 1, "file.txt")
 
 	_file2, hash2, err := file1.CopyTo(root2)
 	if err != nil {
 		t.Fatalf("failed to copy file %s to %s: %s", file1, root2, err)
 	}
 	file2 := _file2.(TestEntry)
-	checkFile(t, root2, file2, 0, 1)
+	checkFile(t, root2, file2, 0, 1, "file.txt")
 	if !bytes.Equal(hash2, hashes[""]) {
 		t.Errorf("Hash mismatch for file %s during CopyTo: expected %x, got %x", file2, hashes[""], hash2)
 	}
@@ -149,8 +149,8 @@ func TreeTest(t Tester, root1, root2 TestEntry) {
 	}
 	dir1 := _dir1.(TestEntry)
 	dir2 := _dir2.(TestEntry)
-	checkFile(t, root1, dir1, 0, 2)
-	checkFile(t, root2, dir2, 0, 2)
+	checkFile(t, root1, dir1, 0, 2, "dir")
+	checkFile(t, root2, dir2, 0, 2, "dir")
 
 	if !testEqual(t, root1, root2) {
 		t.Error("root1 is not equal to root2 after CreateDir")
@@ -160,6 +160,7 @@ func TreeTest(t Tester, root1, root2 TestEntry) {
 	if err != nil {
 		t.Fatalf("could not create child in directory %s: %s", dir1, err)
 	}
+	checkFile(t, dir1, child1.(TestEntry), 0, 1, "dir/file2.txt")
 	child2, hash2, err := child1.CopyTo(dir2)
 	if err != nil {
 		t.Errorf("could not copy entry %s to dir %s: %s", child2, dir2, err)
@@ -207,7 +208,7 @@ func TreeTest(t Tester, root1, root2 TestEntry) {
 
 // checkFile tests whether the file exists at a place in the index and checks
 // the number of children the directory has.
-func checkFile(t Tester, dir TestEntry, file TestEntry, index, length int) {
+func checkFile(t Tester, dir TestEntry, file TestEntry, index, length int, relpath string) {
 	l, err := dir.List()
 	if err != nil {
 		t.Error("could not list directory:", err)
@@ -219,6 +220,9 @@ func checkFile(t Tester, dir TestEntry, file TestEntry, index, length int) {
 	}
 	if !testEqual(t, l[index].(TestEntry), file) {
 		t.Errorf("root1.List()[%d] (%s) is not the same as the file added (%s)", index, l[index], file)
+	}
+	if file.RelativePath() != relpath {
+		t.Errorf("%s: expected RelativePath to give %s, not %s", file, relpath, file.RelativePath())
 	}
 }
 

@@ -242,6 +242,10 @@ func (e *Entry) Name() string {
 	return e.name
 }
 
+func (e *Entry) RelativePath() string {
+	return filepath.Join(e.pathElements()[1:]...)
+}
+
 // Remove removes this entry, recursively.
 func (e *Entry) Remove() error {
 	if e.Type() == tree.TYPE_DIRECTORY && e.parent != nil {

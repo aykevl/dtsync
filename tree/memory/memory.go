@@ -33,6 +33,7 @@ package memory
 
 import (
 	"bytes"
+	"path/filepath"
 	"io"
 	"time"
 
@@ -70,6 +71,19 @@ func (e *Entry) Type() tree.Type {
 // Name returns the filename (not the path)
 func (e *Entry) Name() string {
 	return e.name
+}
+
+func (e *Entry) pathElements() []string {
+	if e.parent == nil {
+		parts := make([]string, 1)
+		parts[0] = e.Name()
+		return parts
+	}
+	return append(e.parent.pathElements(), e.Name())
+}
+
+func (e *Entry) RelativePath() string {
+	return filepath.Join(e.pathElements()...)
 }
 
 // Size returns the filesize for files, or the number of direct children for

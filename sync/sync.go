@@ -34,6 +34,7 @@ package sync
 import (
 	"errors"
 	"io"
+	"path/filepath"
 
 	"github.com/aykevl/dtsync/dtdiff"
 	"github.com/aykevl/dtsync/tree"
@@ -58,6 +59,7 @@ type Result struct {
 	jobs       []*Job
 	countTotal int
 	countError int
+	ignore     []string // paths to ignore
 }
 
 // Scan the two filesystem roots for changes, and return results with a list of
@@ -82,20 +84,26 @@ func Scan(dir1, dir2 tree.Entry) (*Result, error) {
 		return nil, err
 	}
 
-	result := &Result{
+	r := &Result{
 		rs:    rs,
 		root1: dir1,
 		root2: dir2,
 	}
 
-	err = result.scan()
+	// Get files to ignore.
+	for i:=0; i<2; i++ {
+		header := rs.Get(i).Header()
+		r.ignore = append(r.ignore, header["Ignore"]...)
+	}
+
+	err = r.scan()
 	if err != nil {
 		return nil, err
 	}
-	if len(result.jobs) == 0 {
-		result.markSynced()
+	if len(r.jobs) == 0 {
+		r.markSynced()
 	}
-	return result, nil
+	return r, nil
 }
 
 func getStatus(dir tree.Entry) (io.ReadCloser, error) {
@@ -125,6 +133,17 @@ func (r *Result) scanDirs(dir1, dir2 tree.Entry, statusDir1, statusDir2 *dtdiff.
 		file2 := row.file2
 		status1 := row.status1
 		status2 := row.status2
+
+		if file1 != nil && r.isIgnored(file1) || file2 != nil && r.isIgnored(file2) {
+			// Ignore these files
+			if status1 != nil {
+				status1.Remove()
+			}
+			if status2 != nil {
+				status2.Remove()
+			}
+			continue
+		}
 
 		// Add/update status if necessary.
 		err := ensureStatus(&file1, &status1, &statusDir1)
@@ -159,6 +178,7 @@ func (r *Result) scanDirs(dir1, dir2 tree.Entry, statusDir1, statusDir2 *dtdiff.
 			parent1:       dir1,
 			parent2:       dir2,
 		}
+
 		if file1 == nil {
 			if status1 != nil {
 				status1.Remove()
@@ -423,6 +443,29 @@ func iterateStatusSlice(list []*dtdiff.Entry) chan *dtdiff.Entry {
 		close(c)
 	}()
 	return c
+}
+
+func (r *Result) isIgnored(file tree.Entry) bool {
+	relpath := file.RelativePath()
+	for _, pattern := range r.ignore {
+		if len(pattern) == 0 {
+			continue
+		}
+		// TODO: use a more advanced pattern matching method.
+		if pattern[0] == '/' {
+			// Match relative to the root.
+			if match, err := filepath.Match(pattern[1:], relpath); match && err == nil {
+				return true
+			}
+		} else {
+			// Match only the name. This does not work when the pattern contains
+			// slashes.
+			if match, err := filepath.Match(pattern, file.Name()); match && err == nil {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // Jobs returns a list of jobs. You can apply them via a call to .Apply(), or

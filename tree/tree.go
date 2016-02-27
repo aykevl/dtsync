@@ -82,6 +82,8 @@ var (
 type Entry interface {
 	// Name returns the name of this file.
 	Name() string
+	// RelativePath returns the path relative to the root of this tree.
+	RelativePath() string
 	// Return a list of children, in alphabetic order.
 	// Returns an error when this is not a directory.
 	List() ([]Entry, error)

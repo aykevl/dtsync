@@ -38,6 +38,7 @@ Content-Type: text/tab-separated-values; charset=utf-8
 Identity: first
 Generation: 2
 Knowledge: second:1
+Other-Header: abc
 
 path	fingerprint	hash	replica	generation
 conflict.txt	f/2016-02-14T19:10:10.327687803Z/0		0	2

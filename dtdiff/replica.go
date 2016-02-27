@@ -44,6 +44,8 @@ import (
 
 const VERSION = "dtsync 0.1"
 
+type Header textproto.MIMEHeader
+
 var (
 	ErrContentType            = errors.New("dtdiff: wrong content type")
 	ErrNoIdentity             = errors.New("dtdiff: no Identity header")
@@ -64,6 +66,7 @@ type Replica struct {
 	knowledge  map[string]int
 	replicaSet *ReplicaSet
 	rootEntry  *Entry
+	header     textproto.MIMEHeader
 }
 
 func loadReplica(replicaSet *ReplicaSet, file io.Reader) (*Replica, error) {
@@ -258,7 +261,19 @@ func (r *Replica) load(file io.Reader) error {
 		}
 	}
 
+	// Remove all headers that are written by Serialize() anyway.
+	header.Del("Content-Type")
+	header.Del("Identity")
+	header.Del("Generation")
+	header.Del("Knowledge")
+	header.Del("Version")
+	r.header = header
+
 	return nil
+}
+
+func (r *Replica) Header() Header {
+	return Header(r.header)
 }
 
 func (r *Replica) Serialize(out io.Writer) error {
@@ -288,6 +303,11 @@ func (r *Replica) Serialize(out io.Writer) error {
 	writeKeyValue(writer, "Identity", r.identity)
 	writeKeyValue(writer, "Generation", strconv.Itoa(r.generation))
 	writeKeyValue(writer, "Knowledge", strings.Join(knowledgeList, ","))
+	for key, values := range r.header {
+		for _, value := range values {
+			writeKeyValue(writer, key, value)
+		}
+	}
 	writer.WriteByte('\n')
 
 	tsvWriter, err := unitsv.NewWriter(writer, []string{"path", "fingerprint", "hash", "replica", "generation"})
