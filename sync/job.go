@@ -80,12 +80,14 @@ type Job struct {
 	//   1 left-to-right aka forwards (file1 → file2)
 	//   0 undecided (conflict, user must choose)
 	//  -1 right-to-left aka backwards (file1 ← file2)
-	direction int
+	direction       int
+	hasNewDirection bool
+	newDirection    int
 }
 
 // String returns a representation of this job for debugging.
 func (j *Job) String() string {
-	return "Job(" + j.action.String() + "," + j.Name() + ")"
+	return "Job(" + j.Action().String() + "," + j.Name() + ")"
 }
 
 // Name returns the filename of the file to be copied, updated, or removed.
@@ -97,10 +99,10 @@ func (j *Job) Name() string {
 	if j.file2 != nil {
 		name2 = j.file2.Name()
 	}
-	if j.action == ACTION_REMOVE {
+	if j.Action() == ACTION_REMOVE {
 		name1, name2 = name2, name1
 	}
-	switch j.direction {
+	switch j.Direction() {
 	case 1:
 		return name1
 	case 0:
@@ -127,7 +129,7 @@ func (j *Job) Apply() error {
 	parent1 := j.parent1
 	parent2 := j.parent2
 
-	switch j.direction {
+	switch j.Direction() {
 	case 1:
 		// don't swap
 	case 0:
@@ -144,7 +146,7 @@ func (j *Job) Apply() error {
 	j.applied = true
 
 	var err error
-	switch j.action {
+	switch j.Action() {
 	case ACTION_COPY:
 		err = copyFile(file1, parent2, status1, statusParent2)
 	case ACTION_UPDATE:
@@ -234,7 +236,42 @@ func copyFile(file1, parent2 tree.Entry, status1, statusParent2 *dtdiff.Entry) e
 // Direction returns the sync direction of this file, with 1 for left-to-right,
 // 0 for undecided (conflict), and -1 for right-to-left.
 func (j *Job) Direction() int {
+	if j.hasNewDirection {
+		return j.newDirection
+	}
 	return j.direction
+}
+
+// SetDirection sets the job direction, which must be -1, 0, or 1. Any other
+// value will cause a panic.
+func (j *Job) SetDirection(direction int) {
+	switch direction {
+	case -1, 0, 1:
+	default:
+		panic("invalid direction")
+	}
+	j.newDirection = direction
+	j.hasNewDirection = true
+}
+
+// Action returns the (possibly flipped) action constant.
+func (j *Job) Action() Action {
+	if j.hasNewDirection && j.direction != 0 && j.newDirection != 0 && j.direction != j.newDirection {
+		switch j.action {
+		case ACTION_COPY:
+			return ACTION_REMOVE
+		case ACTION_REMOVE:
+			return ACTION_COPY
+		default:
+			return j.action
+		}
+	}
+	return j.action
+}
+
+// Applied returns true if this action was already applied.
+func (j *Job) Applied() bool {
+	return j.applied
 }
 
 // StatusLeft returns an identifying string of what happened on the left side of

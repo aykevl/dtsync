@@ -91,7 +91,7 @@ func Scan(dir1, dir2 tree.Entry) (*Result, error) {
 	}
 
 	// Get files to ignore.
-	for i:=0; i<2; i++ {
+	for i := 0; i < 2; i++ {
 		header := rs.Get(i).Header()
 		r.ignore = append(r.ignore, header["Ignore"]...)
 	}
@@ -521,14 +521,16 @@ func (r *Result) SyncAll() (Stats, error) {
 		err := job.Apply()
 		if err != nil {
 			// TODO: continue after errors, but mark the sync as unclean
-			return Stats{
-				CountTotal: r.countTotal,
-				CountError: r.countError,
-			}, err
+			return r.Stats(), err
 		}
 	}
+	return r.Stats(), nil
+}
+
+// Stats returns the same statistics as would be returned after SyncAll().
+func (r *Result) Stats() Stats {
 	return Stats{
 		CountTotal: r.countTotal,
 		CountError: r.countError,
-	}, nil
+	}
 }
