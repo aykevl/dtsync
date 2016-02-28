@@ -65,7 +65,7 @@ type Entry struct {
 // NewRoot wraps a root directory in an Entry.
 func NewRoot(rootPath string) (*Entry, error) {
 	rootPath = filepath.Clean(rootPath)
-	st, err := os.Stat(rootPath)
+	st, err := os.Lstat(rootPath)
 	if err != nil {
 		return nil, err
 	}
@@ -168,7 +168,7 @@ func (e *Entry) CreateDir(name string) (tree.Entry, error) {
 	if err != nil {
 		return nil, err
 	}
-	child.st, err = os.Stat(child.path())
+	child.st, err = os.Lstat(child.path())
 	if err != nil {
 		return nil, err
 	}
@@ -286,7 +286,7 @@ func (e *Entry) removeSelf() error {
 
 	// Update parent stat result
 	if e.parent != nil {
-		st, err := os.Stat(e.parent.path())
+		st, err := os.Lstat(e.parent.path())
 		if err != nil {
 			return err
 		}
@@ -348,10 +348,10 @@ func (e *Entry) replaceFile(modTime time.Time) (io.WriteCloser, error) {
 			if err != nil {
 				return err
 			}
-			e.st, err = os.Stat(e.path())
+			e.st, err = os.Lstat(e.path())
 
 			// Update parent stat result
-			st, err := os.Stat(e.parent.path())
+			st, err := os.Lstat(e.parent.path())
 			if err != nil {
 				return err
 			}
