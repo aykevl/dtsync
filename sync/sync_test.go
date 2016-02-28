@@ -57,9 +57,19 @@ func NewTestRoot(t *testing.T) tree.TestEntry {
 	}
 }
 
+func removeTestRoots(t *testing.T, filesystems ...tree.Entry) {
+	for _, fs := range filesystems {
+		err := fs.Remove()
+		if err != nil {
+			t.Error("could not remove test dir:", err)
+		}
+	}
+}
+
 func TestSync(t *testing.T) {
 	fs1 := NewTestRoot(t)
 	fs2 := NewTestRoot(t)
+	defer removeTestRoots(t, fs1, fs2)
 
 	result, err := Scan(fs1, fs2)
 	if err != nil {
@@ -124,6 +134,7 @@ func TestSync(t *testing.T) {
 	fs1 = NewTestRoot(t)
 	fs2 = NewTestRoot(t)
 	fsCheck := NewTestRoot(t)
+	defer removeTestRoots(t, fs1, fs2, fsCheck)
 	fsNames := []struct {
 		name string
 		fs   tree.TestEntry
