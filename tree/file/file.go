@@ -252,6 +252,9 @@ func (e *Entry) RelativePath() string {
 
 // Remove removes this entry, recursively.
 func (e *Entry) Remove() error {
+	// TODO checking modtime before removing a directory doesn't have much use:
+	// the entries are listed just before they are removed.
+	// Maybe combine with data from dtdiff?
 	if e.Type() == tree.TYPE_DIRECTORY && e.parent != nil {
 		// move to temporary location to provide atomicity in removing a
 		// directory tree
@@ -263,6 +266,14 @@ func (e *Entry) Remove() error {
 			return err
 		}
 		e.name = tmpName
+	} else {
+		st, err := os.Lstat(e.path())
+		if err != nil {
+			return err
+		}
+		if e.statChanged(st) {
+			return tree.ErrChanged
+		}
 	}
 	return e.removeSelf()
 }
@@ -376,12 +387,17 @@ func (e *Entry) UpdateOver(other tree.Entry) ([]byte, error) {
 
 	switch e.Type() {
 	case tree.TYPE_REGULAR:
+		in, err := os.Open(e.path())
+
+		// Make sure the file is still the same.
+		if err = e.checkStat(in); err != nil {
+			return nil, err
+		}
+
 		out, err := file.UpdateFile(e.ModTime())
 		if err != nil {
 			return nil, err
 		}
-
-		in, err := os.Open(e.path())
 
 		hasher := tree.NewHash()
 		hashReader := io.TeeReader(in, hasher)
@@ -432,11 +448,17 @@ func (e *Entry) CopyTo(otherParent tree.Entry) (tree.Entry, []byte, error) {
 
 	switch e.Type() {
 	case tree.TYPE_REGULAR:
-		other, out, err := file.CreateFile(e.name, e.ModTime())
+		in, err := os.Open(e.path())
 		if err != nil {
 			return nil, nil, err
 		}
-		in, err := os.Open(e.path())
+
+		// Make sure the file is still the same.
+		if err = e.checkStat(in); err != nil {
+			return nil, nil, err
+		}
+
+		other, out, err := file.CreateFile(e.name, e.ModTime())
 		if err != nil {
 			return nil, nil, err
 		}
@@ -456,4 +478,20 @@ func (e *Entry) CopyTo(otherParent tree.Entry) (tree.Entry, []byte, error) {
 	default:
 		return nil, nil, tree.ErrNotImplemented
 	}
+}
+
+func (e *Entry) checkStat(fp *os.File) error {
+	st, err := fp.Stat()
+	if err != nil {
+		return err
+	}
+	if e.statChanged(st) {
+		return tree.ErrChanged
+	}
+	return nil
+}
+
+func (e *Entry) statChanged(st os.FileInfo) bool {
+	// TODO: check inode on Unix-like filesystems?
+	return e.st.Size() != st.Size() || e.st.ModTime() != st.ModTime()
 }

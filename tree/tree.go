@@ -67,7 +67,7 @@ func (t Type) Char() string {
 	}
 }
 
-// Error codes that can be used by any filesystem implementation
+// Error codes that can be used by any filesystem implementation.
 var (
 	ErrNotImplemented = errors.New("tree: not implemented")
 	ErrNoDirectory    = errors.New("tree: this is not a directory")
@@ -75,6 +75,7 @@ var (
 	ErrAlreadyExists  = errors.New("tree: file already exists")
 	ErrNotFound       = errors.New("tree: file not found")
 	ErrInvalidName    = errors.New("tree: invalid file name")
+	ErrChanged        = errors.New("tree: updated file between scan and sync")
 )
 
 // Entry is one object tree, e.g. a file or directory. It can also be something
@@ -99,6 +100,9 @@ type Entry interface {
 	// Hash returns the blake2b hash of the file.
 	Hash() ([]byte, error)
 
+	// The following 3 functions must check that the file is still the same (by
+	// issuing a stat() right before copying, for example).
+	//
 	// Copy into the other entry (as a child). The returned entry is the new
 	// child.
 	CopyTo(Entry) (Entry, []byte, error)
