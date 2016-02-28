@@ -69,12 +69,16 @@ func NewRoot(rootPath string) (*Entry, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Entry{
+	e := &Entry{
 		root: &filesystem{
 			path: rootPath,
 		},
 		st: st,
-	}, nil
+	}
+	if e.Type() != tree.TYPE_DIRECTORY {
+		return nil, tree.ErrNoDirectory
+	}
+	return e, nil
 }
 
 // NewTestRoot returns a new root in a temporary directory. It should be removed
