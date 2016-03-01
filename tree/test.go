@@ -79,10 +79,22 @@ func TreeTest(t Tester, root1, root2 TestEntry) {
 
 	_file1, err := root1.AddRegular("file.txt", nil)
 	if err != nil {
-		t.Error("could not add file:", err)
+		t.Fatal("could not add file:", err)
 	}
 	file1 := _file1.(TestEntry)
 	checkFile(t, root1, file1, 0, 1, "file.txt")
+
+	if file, err := root1.Get(nil); err != nil {
+		t.Errorf("could not get root with Get:", err)
+	} else if file != root1 {
+		t.Errorf("root was not the same with Get(nil)")
+	}
+
+	if file, err := root1.Get([]string{"file.txt"}); err != nil {
+		t.Errorf("could not get file with Get:", err)
+	} else if !testEqual(t, file.(TestEntry), file1) {
+		t.Errorf("file.txt was not the same with Get([]string{\"file.txt\"})")
+	}
 
 	_file2, hash2, err := file1.CopyTo(root2)
 	if err != nil {
@@ -161,6 +173,13 @@ func TreeTest(t Tester, root1, root2 TestEntry) {
 		t.Fatalf("could not create child in directory %s: %s", dir1, err)
 	}
 	checkFile(t, dir1, child1.(TestEntry), 0, 1, "dir/file2.txt")
+
+	if child1Get, err := root1.Get([]string{"dir", "file2.txt"}); err != nil {
+		t.Errorf("could not get file with Get:", err)
+	} else if !testEqual(t, child1.(TestEntry), child1Get.(TestEntry)) {
+		t.Errorf("dir/file2.txt was not the same with Get([]string{\"dir\", \"file2.txt\"})")
+	}
+
 	child2, hash2, err := child1.CopyTo(dir2)
 	if err != nil {
 		t.Errorf("could not copy entry %s to dir %s: %s", child2, dir2, err)

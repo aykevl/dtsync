@@ -67,10 +67,6 @@ type Job struct {
 	status2       *dtdiff.Entry
 	statusParent1 *dtdiff.Entry
 	statusParent2 *dtdiff.Entry
-	file1         tree.Entry
-	file2         tree.Entry
-	parent1       tree.Entry
-	parent2       tree.Entry
 	// The direction is a special one.
 	// When it is changed, file1, file2 etc are also changed.
 	// And if it is a copy or delete, the action is reversed (copy becomes
@@ -93,11 +89,11 @@ func (j *Job) String() string {
 // Name returns the filename of the file to be copied, updated, or removed.
 func (j *Job) Name() string {
 	var name1, name2 string
-	if j.file1 != nil {
-		name1 = j.file1.Name()
+	if j.status1 != nil {
+		name1 = j.status1.Name()
 	}
-	if j.file2 != nil {
-		name2 = j.file2.Name()
+	if j.status2 != nil {
+		name2 = j.status2.Name()
 	}
 	if j.Action() == ACTION_REMOVE {
 		name1, name2 = name2, name1
@@ -124,10 +120,8 @@ func (j *Job) Apply() error {
 	status2 := j.status2
 	statusParent1 := j.statusParent1
 	statusParent2 := j.statusParent2
-	file1 := j.file1
-	file2 := j.file2
-	parent1 := j.parent1
-	parent2 := j.parent2
+	root1 := j.result.root1
+	root2 := j.result.root2
 
 	switch j.Direction() {
 	case 1:
@@ -138,52 +132,96 @@ func (j *Job) Apply() error {
 		// swap: we're going the opposite direction
 		status1, status2 = status2, status1
 		statusParent1, statusParent2 = statusParent2, statusParent1
-		file1, file2 = file2, file1
-		parent1, parent2 = parent2, parent1
+		root1, root2 = root2, root1
 	default:
 		panic("unknown direction")
 	}
 	j.applied = true
 
-	var err error
+	// Add error now, remove it at the end when there was no error (all errors
+	// return early).
+	j.result.countTotal++
+	j.result.countError++
+
 	switch j.Action() {
 	case ACTION_COPY:
-		err = copyFile(file1, parent2, status1, statusParent2)
-	case ACTION_UPDATE:
-		var hash []byte
-		hash, err = file1.UpdateOver(file2)
-		if err == nil {
-			if !bytes.Equal(hash, status1.Hash()) {
-				// The first file got updated between the scan and update.
-				// TODO Should we report this as an error?
-				status1.UpdateHash(hash)
-			}
-			status2.UpdateFrom(status1)
-			if statusParent2 != nil {
-				statusParent2.Update(parent2.Fingerprint(), nil)
-			}
+		err := copyFile(root1, root2, status1, statusParent2)
+		if err != nil {
+			return err
 		}
-	case ACTION_REMOVE:
-		err = file2.Remove()
-		if err == nil {
-			status2.Remove()
+	case ACTION_UPDATE:
+		// Get the required file entries.
+		file1, err := root1.Get(status1.RelativePathElements())
+		if err != nil {
+			return err
+		}
+
+		parts2 := status2.RelativePathElements()
+		file2, err := root2.Get(parts2)
+		if err != nil {
+			return err
+		}
+		parent2, err := root2.Get(parts2[:len(parts2)-1])
+		if err != nil {
+			return err
+		}
+
+		hash, err := file1.UpdateOver(file2)
+		if err != nil {
+			return err
+		}
+		if !bytes.Equal(hash, status1.Hash()) {
+			// The first file got updated between the scan and update.
+			// TODO Should we report this as an error?
+			status1.UpdateHash(hash)
+		}
+		status2.UpdateFrom(status1)
+		if statusParent2 != nil {
 			statusParent2.Update(parent2.Fingerprint(), nil)
 		}
+	case ACTION_REMOVE:
+		parts2 := status2.RelativePathElements()
+		file2, err := root2.Get(parts2)
+		if err != nil {
+			return err
+		}
+		parent2, err := root2.Get(parts2[:len(parts2)-1])
+		if err != nil {
+			return err
+		}
+
+		err = file2.Remove()
+		if err != nil {
+			return err
+		}
+		status2.Remove()
+		statusParent2.Update(parent2.Fingerprint(), nil)
 	default:
 		panic("unknown action (must not happen)")
 	}
 
-	j.result.countTotal++
-	if err != nil {
-		j.result.countError++
-	}
+	// There was no error.
+	j.result.countError--
 	if j.result.countTotal == len(j.result.jobs) && j.result.countError == 0 {
 		j.result.markSynced()
 	}
-	return err
+	return nil
 }
 
-func copyFile(file1, parent2 tree.Entry, status1, statusParent2 *dtdiff.Entry) error {
+func copyFile(root1, root2 tree.Entry, status1, statusParent2 *dtdiff.Entry) error {
+	file1, err := root1.Get(status1.RelativePathElements())
+	if err != nil {
+		return err
+	}
+	parent2, err := root2.Get(statusParent2.RelativePathElements())
+	if err != nil {
+		return err
+	}
+
+	return copyFileSub(root1, root2, file1, parent2, status1, statusParent2)
+}
+
+func copyFileSub(root1, root2, file1, parent2 tree.Entry, status1, statusParent2 *dtdiff.Entry) error {
 	if file1.Type() == tree.TYPE_DIRECTORY {
 		parent2, ok := parent2.(tree.FileEntry)
 		if !ok {
@@ -216,7 +254,7 @@ func copyFile(file1, parent2 tree.Entry, status1, statusParent2 *dtdiff.Entry) e
 			if child1.Name() != childStatus1.Name() {
 				panic("list must be equal to statusList")
 			}
-			err := copyFile(child1, file2, childStatus1, status2)
+			err := copyFileSub(root1, root2, child1, file2, childStatus1, status2)
 			if err != nil {
 				// TODO revert
 				return err
@@ -277,24 +315,24 @@ func (j *Job) Applied() bool {
 // StatusLeft returns an identifying string of what happened on the left side of
 // the sync.
 func (j *Job) StatusLeft() string {
-	return j.status(j.file1, j.parent1, j.file2, j.parent2, j.status1, j.statusParent1, j.status2, j.statusParent2)
+	return j.status(j.status1, j.statusParent1, j.status2, j.statusParent2)
 }
 
 // StatusRight is similar to StatusLeft.
 func (j *Job) StatusRight() string {
-	return j.status(j.file2, j.parent2, j.file1, j.parent1, j.status2, j.statusParent2, j.status1, j.statusParent1)
+	return j.status(j.status2, j.statusParent2, j.status1, j.statusParent1)
 }
 
 // status returns the change that was applied to this file (new, modified,
 // removed).
-func (j *Job) status(file, parent, otherFile, otherParent tree.Entry, status, statusParent, otherStatus, otherStatusParent *dtdiff.Entry) string {
-	if file == nil {
+func (j *Job) status(status, statusParent, otherStatus, otherStatusParent *dtdiff.Entry) string {
+	if status == nil {
 		if statusParent.HasRevision(otherStatus) {
 			return "removed"
 		} else {
 			return ""
 		}
-	} else if otherFile == nil {
+	} else if otherStatus == nil {
 		if otherStatusParent.HasRevision(status) {
 			return ""
 		} else {
@@ -311,7 +349,7 @@ func (j *Job) status(file, parent, otherFile, otherParent tree.Entry, status, st
 func (j *Job) RelativePath() string {
 	// This must be updated when we implement file or directory moves: then the
 	// paths cannot be assumed to be the same.
-	if j.file1 == nil {
+	if j.status1 == nil {
 		return j.status2.RelativePath()
 	}
 	return j.status1.RelativePath()

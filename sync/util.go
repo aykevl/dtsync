@@ -28,9 +28,14 @@
 
 package sync
 
+import (
+	"github.com/aykevl/dtsync/dtdiff"
+	"github.com/aykevl/dtsync/tree"
+)
+
 // leastName returns the alphabetically first name in the list that is not the
 // empty string.
-func leastName(names []string) string {
+func leastName(names ...string) string {
 	name := ""
 	for _, s := range names {
 		if s != "" && s < name || name == "" {
@@ -38,4 +43,59 @@ func leastName(names []string) string {
 		}
 	}
 	return name
+}
+
+func iterateEntrySlice(list []tree.Entry) chan tree.Entry {
+	c := make(chan tree.Entry)
+	go func() {
+		for _, entry := range list {
+			if entry.Name() == STATUS_FILE {
+				continue
+			}
+			c <- entry
+		}
+		close(c)
+	}()
+	return c
+}
+
+func iterateStatusSlice(list []*dtdiff.Entry) chan *dtdiff.Entry {
+	c := make(chan *dtdiff.Entry)
+	go func() {
+		for _, entry := range list {
+			c <- entry
+		}
+		close(c)
+	}()
+	return c
+}
+
+func nextFileStatus(fileList []tree.Entry, statusList []*dtdiff.Entry) func() (tree.Entry, *dtdiff.Entry) {
+	fileIterator := iterateEntrySlice(fileList)
+	statusIterator := iterateStatusSlice(statusList)
+
+	file := <-fileIterator
+	status := <-statusIterator
+	return func() (retFile tree.Entry, retStatus *dtdiff.Entry) {
+		fileName := ""
+		if file != nil {
+			fileName = file.Name()
+		}
+		statusName := ""
+		if status != nil {
+			statusName = status.Name()
+		}
+
+		name := leastName(fileName, statusName)
+		if name == fileName {
+			retFile = file
+			file = <-fileIterator
+		}
+		if name == statusName {
+			retStatus = status
+			status = <-statusIterator
+		}
+
+		return
+	}
 }

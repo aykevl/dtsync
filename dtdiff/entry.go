@@ -32,6 +32,9 @@ import (
 	"bytes"
 	"path"
 	"sort"
+	"strconv"
+
+	"github.com/aykevl/dtsync/tree"
 )
 
 // An Entry is one object (row) in a Replica. It belongs to one Replica.
@@ -49,7 +52,7 @@ type Entry struct {
 
 // String function, for debugging purposes
 func (e *Entry) String() string {
-	return "dtdiff.Entry(" + e.name + ")"
+	return "dtdiff.Entry(" + e.name + "," + e.revReplica + ":" + strconv.Itoa(e.revGeneration) + ")"
 }
 
 // Name returns the name of this entry
@@ -59,16 +62,16 @@ func (e *Entry) Name() string {
 
 // RelativePath returns the path relative to the root
 func (e *Entry) RelativePath() string {
-	return path.Join(e.relativePathElements()...)
+	return path.Join(e.RelativePathElements()...)
 }
 
-func (e *Entry) relativePathElements() []string {
+// RelativePathElements returns the RelativePath as a list (not joined together
+// with /)
+func (e *Entry) RelativePathElements() []string {
 	if e.parent == nil {
-		parts := make([]string, 1)
-		parts[0] = e.name
-		return parts
+		return nil
 	} else {
-		return append(e.parent.relativePathElements(), e.name)
+		return append(e.parent.RelativePathElements(), e.name)
 	}
 }
 
@@ -80,6 +83,19 @@ func (e *Entry) Fingerprint() string {
 // Hash returns the hash of the status entry, if one is known.
 func (e *Entry) Hash() []byte {
 	return e.hash
+}
+
+// Type returns the tree.Type filetype
+func (e *Entry) Type() tree.Type {
+	// Fingerprint must be defined.
+	switch e.fingerprint[0] {
+	case 'f':
+		return tree.TYPE_REGULAR
+	case 'd':
+		return tree.TYPE_DIRECTORY
+	default:
+		return tree.TYPE_UNKNOWN
+	}
 }
 
 // Add new entry by recursively finding the parent

@@ -45,6 +45,7 @@ var (
 	ErrUnimplemented  = errors.New("sync: job: unimplemented")
 	ErrAlreadyApplied = errors.New("sync: job: already applied")
 	ErrSameRoot       = errors.New("sync: trying to synchronize the same directory")
+	ErrCanceled       = errors.New("sync: canceled") // must always be handled
 )
 
 // File where current status of the tree is stored.
@@ -60,6 +61,7 @@ type Result struct {
 	countTotal int
 	countError int
 	ignore     []string // paths to ignore
+	cancel     uint32   // set to non-0 if the scan should cancel
 }
 
 // Scan the two filesystem roots for changes, and return results with a list of
@@ -117,111 +119,135 @@ func getStatus(dir tree.Entry) (io.ReadCloser, error) {
 }
 
 func (r *Result) scan() error {
-	return r.scanDirs(r.root1, r.root2, r.rs.Get(0).Root(), r.rs.Get(1).Root())
+	var scanners [2]chan error
+	roots := []tree.Entry{r.root1, r.root2}
+	for i := range roots {
+		scanners[i] = make(chan error)
+		go func(i int) {
+			scanners[i] <- r.scanDir(roots[i], r.rs.Get(i).Root())
+		}(i)
+	}
+	select {
+	case err := <-scanners[0]:
+		if err != nil {
+			r.cancel = 1
+			<-scanners[1]
+			return err
+		}
+		err = <-scanners[1]
+		if err != nil {
+			return err
+		}
+	case err := <-scanners[1]:
+		if err != nil {
+			r.cancel = 1
+			<-scanners[0]
+			return err
+		}
+		err = <-scanners[0]
+		if err != nil {
+			return err
+		}
+	}
+
+	// Reconcile changes
+	r.reconcile(r.rs.Get(0).Root(), r.rs.Get(1).Root())
+	return nil
 }
 
-// scanDirs implements the heart of the sync algorithm.
-func (r *Result) scanDirs(dir1, dir2 tree.Entry, statusDir1, statusDir2 *dtdiff.Entry) error {
-	for row := range iterateEntries(dir1, dir2, statusDir1, statusDir2) {
-		if row.err != nil {
-			// TODO don't stop, continue but mark the sync as unclean (don't
-			// update certain generation numbers)
-			return row.err
-		}
-		// Convenience shortcuts.
-		file1 := row.file1
-		file2 := row.file2
-		status1 := row.status1
-		status2 := row.status2
+// scanDir scans one side of the tree, updating the status tree to the current
+// status.
+func (r *Result) scanDir(dir tree.Entry, statusDir *dtdiff.Entry) error {
+	fileList, err := dir.List()
+	if err != nil {
+		return err
+	}
+	iterator := nextFileStatus(fileList, statusDir.List())
 
-		if file1 != nil && r.isIgnored(file1) || file2 != nil && r.isIgnored(file2) {
-			// Ignore these files
-			if status1 != nil {
-				status1.Remove()
-			}
-			if status2 != nil {
-				status2.Remove()
-			}
+	var file tree.Entry
+	var status *dtdiff.Entry
+	for {
+		if r.cancel != 0 {
+			return ErrCanceled
+		}
+
+		file, status = iterator()
+		if file != nil && r.isIgnored(file) {
+			file = nil
+		}
+
+		if file == nil && status == nil {
+			break
+		}
+		if file == nil {
+			// old status entry
+			status.Remove()
 			continue
 		}
 
-		// Add/update status if necessary.
-		err := ensureStatus(&file1, &status1, &statusDir1)
-		if err != nil {
-			return err
-		}
-		err = ensureStatus(&file2, &status2, &statusDir2)
-		if err != nil {
-			return err
-		}
-
-		// so now status1 and status2 must both be defined, if the files are
-		// defined
-		if file1 == nil && file2 == nil {
-			// Remove old status entries.
-			if status1 != nil {
-				status1.Remove()
-			}
-			if status2 != nil {
-				status2.Remove()
-			}
-			continue
-		}
-		job := &Job{
-			result:        r,
-			status1:       status1,
-			status2:       status2,
-			statusParent1: statusDir1,
-			statusParent2: statusDir2,
-			file1:         file1,
-			file2:         file2,
-			parent1:       dir1,
-			parent2:       dir2,
-		}
-
-		if file1 == nil {
-			if status1 != nil {
-				status1.Remove()
-				status1 = nil
-			}
-			if statusDir1 != nil {
-				if !statusDir1.HasRevision(status2) {
-					job.action = ACTION_COPY
-					job.direction = -1
-				} else {
-					job.action = ACTION_REMOVE
-					job.direction = 1
+		if status == nil {
+			// add status
+			var hash []byte
+			var err error
+			if file.Type() == tree.TYPE_REGULAR {
+				hash, err = file.Hash()
+				if err != nil {
+					return err
 				}
-				r.jobs = append(r.jobs, job)
 			}
-			if file2.Type() == tree.TYPE_DIRECTORY {
-				r.scanDirs(file1, file2, status1, status2)
-			}
-		} else if file2 == nil {
-			if status2 != nil {
-				status2.Remove()
-				status2 = nil
-			}
-			if statusDir2 != nil {
-				if !statusDir2.HasRevision(status1) {
-					job.action = ACTION_COPY
-					job.direction = 1
-				} else {
-					job.action = ACTION_REMOVE
-					job.direction = -1
-				}
-				r.jobs = append(r.jobs, job)
-			}
-			if file1.Type() == tree.TYPE_DIRECTORY {
-				r.scanDirs(file1, file2, status1, status2)
+			status, err = statusDir.Add(file.Name(), file.Fingerprint(), hash)
+			if err != nil {
+				panic(err) // must not happen
 			}
 		} else {
-			// All four (file1, file2, status1, status2) are defined.
-			// Compare the contents.
-			if file1.Type() == tree.TYPE_DIRECTORY && file2.Type() == tree.TYPE_DIRECTORY {
+			// update status (if needed)
+			oldHash := status.Hash()
+			oldFingerprint := status.Fingerprint()
+			newFingerprint := file.Fingerprint()
+			var newHash []byte
+			var err error
+			if oldFingerprint == newFingerprint && oldHash != nil {
+				// Assume the hash stayed the same when the fingerprint is the
+				// same. But calculate a new hash if there is no hash.
+				newHash = oldHash
+			} else {
+				if file.Type() == tree.TYPE_REGULAR {
+					newHash, err = file.Hash()
+					if err != nil {
+						return err
+					}
+				}
+			}
+			status.Update(newFingerprint, newHash)
+		}
+
+		if file.Type() == tree.TYPE_DIRECTORY {
+			err := r.scanDir(file, status)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+// reconcile compares two status trees, calculating the difference as sync jobs.
+func (r *Result) reconcile(statusDir1, statusDir2 *dtdiff.Entry) {
+	iterator := iterateEntries(statusDir1, statusDir2)
+	for {
+		status1, status2 := iterator()
+		if status1 == nil && status2 == nil {
+			break
+		}
+
+		if status1 != nil && status2 != nil {
+			// Both are defined, so compare the contents.
+
+			if status1.Type() == tree.TYPE_DIRECTORY && status2.Type() == tree.TYPE_DIRECTORY {
 				// Don't compare mtime of directories.
 				// Future: maybe check for xattrs?
-				r.scanDirs(file1, file2, status1, status2)
+				r.reconcile(status1, status2)
 			} else if status1.Equal(status2) {
 				// Two equal non-directories. We don't have to do more.
 			} else if status1.Conflict(status2) {
@@ -233,10 +259,6 @@ func (r *Result) scanDirs(dir1, dir2 tree.Entry, statusDir1, statusDir2 *dtdiff.
 					status2:       status2,
 					statusParent1: statusDir1,
 					statusParent2: statusDir2,
-					parent1:       dir1,
-					parent2:       dir2,
-					file1:         file1,
-					file2:         file2,
 				})
 			} else if status1.After(status2) {
 				r.jobs = append(r.jobs, &Job{
@@ -247,10 +269,6 @@ func (r *Result) scanDirs(dir1, dir2 tree.Entry, statusDir1, statusDir2 *dtdiff.
 					status2:       status2,
 					statusParent1: statusDir1,
 					statusParent2: statusDir2,
-					parent1:       dir1,
-					parent2:       dir2,
-					file1:         file1,
-					file2:         file2,
 				})
 			} else if status1.Before(status2) {
 				r.jobs = append(r.jobs, &Job{
@@ -261,188 +279,103 @@ func (r *Result) scanDirs(dir1, dir2 tree.Entry, statusDir1, statusDir2 *dtdiff.
 					status2:       status2,
 					statusParent1: statusDir1,
 					statusParent2: statusDir2,
-					parent1:       dir1,
-					parent2:       dir2,
-					file1:         file1,
-					file2:         file2,
 				})
 			} else {
-				// TODO we do get here, somehow. Apparently "Equal" doesn't
-				// always return true on equality.
+				panic("equal but not equal? (should be unreachable)")
 			}
-		}
-	}
-	return nil
-}
 
-// ensureStatus adds a status entry if there isn't one.
-func ensureStatus(file *tree.Entry, status, statusDir **dtdiff.Entry) error {
-	if *file != nil {
-		if *status == nil {
-			var hash []byte
-			var err error
-			if (*file).Type() == tree.TYPE_REGULAR {
-				hash, err = (*file).Hash()
-				if err != nil {
-					return err
-				}
-			}
-			*status, err = (*statusDir).Add((*file).Name(), (*file).Fingerprint(), hash)
-			if err != nil {
-				panic("must not happen: " + err.Error())
-			}
 		} else {
-			oldHash := (*status).Hash()
-			oldFingerprint := (*status).Fingerprint()
-			newFingerprint := (*file).Fingerprint()
-			var newHash []byte
-			var err error
-			if oldFingerprint == newFingerprint && oldHash != nil {
-				// Assume the hash stayed the same when the fingerprint is the
-				// same. But calculate a new hash if there is no hash.
-				newHash = oldHash
-			} else {
-				if (*file).Type() == tree.TYPE_REGULAR {
-					newHash, err = (*file).Hash()
-					if err != nil {
-						return err
-					}
-				}
+			// One of the files does not exist.
+
+			job := &Job{
+				result:        r,
+				status1:       status1,
+				status2:       status2,
+				statusParent1: statusDir1,
+				statusParent2: statusDir2,
 			}
-			(*status).Update(newFingerprint, newHash)
+
+			if status1 != nil {
+				if statusDir2 != nil {
+					if !statusDir2.HasRevision(status1) {
+						job.action = ACTION_COPY
+						job.direction = 1
+					} else {
+						job.action = ACTION_REMOVE
+						job.direction = -1
+					}
+					r.jobs = append(r.jobs, job)
+				}
+				if status1.Type() == tree.TYPE_DIRECTORY {
+					r.reconcile(status1, nil)
+				}
+
+			} else if status2 != nil {
+				if statusDir1 != nil {
+					if !statusDir1.HasRevision(status2) {
+						job.action = ACTION_COPY
+						job.direction = -1
+					} else {
+						job.action = ACTION_REMOVE
+						job.direction = 1
+					}
+					r.jobs = append(r.jobs, job)
+				}
+				if status2.Type() == tree.TYPE_DIRECTORY {
+					r.reconcile(nil, status2)
+				}
+
+			} else {
+				panic("unreachable")
+			}
 		}
 	}
-	return nil
 }
 
-// entryRow is one row as returned by iterateEntries. All entries in here have
-// the same name.
-type entryRow struct {
-	file1   tree.Entry
-	file2   tree.Entry
-	status1 *dtdiff.Entry
-	status2 *dtdiff.Entry
-	err     error
-}
+// iterateEntries returns an iterator iterating over the two status dirs. The
+// iterator is a function returning both child entries. Both entries have the
+// same name, or one is nil. Both are nil when the end of the status dirs is
+// reached.
+func iterateEntries(statusDir1, statusDir2 *dtdiff.Entry) func() (*dtdiff.Entry, *dtdiff.Entry) {
+	var listStatus1, listStatus2 []*dtdiff.Entry
+	if statusDir1 != nil {
+		listStatus1 = statusDir1.List()
+	}
+	if statusDir2 != nil {
+		listStatus2 = statusDir2.List()
+	}
+	iterStatus1 := iterateStatusSlice(listStatus1)
+	iterStatus2 := iterateStatusSlice(listStatus2)
 
-// iterateEntries returns a channel from which rows can be read of entries (see
-// entryRow) that all have the same name, or are nil.
-func iterateEntries(dir1, dir2 tree.Entry, statusDir1, statusDir2 *dtdiff.Entry) chan entryRow {
-	// I would like to make this function far shorter, but I don't see an easy
-	// way...
-	c := make(chan entryRow)
-	go func() {
-		defer close(c)
-
-		var err error
-
-		var listDir1 []tree.Entry
-		if dir1 != nil {
-			listDir1, err = dir1.List()
-			if err != nil {
-				c <- entryRow{err: err}
-				return
-			}
+	status1 := <-iterStatus1
+	status2 := <-iterStatus2
+	return func() (retStatus1, retStatus2 *dtdiff.Entry) {
+		status1Name := ""
+		if status1 != nil {
+			status1Name = status1.Name()
+		}
+		status2Name := ""
+		if status2 != nil {
+			status2Name = status2.Name()
 		}
 
-		var listDir2 []tree.Entry
-		if dir2 != nil {
-			listDir2, err = dir2.List()
-			if err != nil {
-				c <- entryRow{err: err}
-				return
-			}
+		name := leastName(status1Name, status2Name)
+		// All of the names are empty strings, so we must have reached the end.
+		if name == "" {
+			return nil, nil
 		}
 
-		var listStatus1, listStatus2 []*dtdiff.Entry
-		if statusDir1 != nil {
-			listStatus1 = statusDir1.List()
+		if status1Name == name {
+			retStatus1 = status1
+			status1 = <-iterStatus1
 		}
-		if statusDir2 != nil {
-			listStatus2 = statusDir2.List()
+		if status2Name == name {
+			retStatus2 = status2
+			status2 = <-iterStatus2
 		}
 
-		iterDir1 := iterateEntrySlice(listDir1)
-		iterDir2 := iterateEntrySlice(listDir2)
-		iterStatus1 := iterateStatusSlice(listStatus1)
-		iterStatus2 := iterateStatusSlice(listStatus2)
-
-		file1 := <-iterDir1
-		file2 := <-iterDir2
-		status1 := <-iterStatus1
-		status2 := <-iterStatus2
-
-		for {
-			file1Name := ""
-			if file1 != nil {
-				file1Name = file1.Name()
-			}
-			file2Name := ""
-			if file2 != nil {
-				file2Name = file2.Name()
-			}
-			status1Name := ""
-			if status1 != nil {
-				status1Name = status1.Name()
-			}
-			status2Name := ""
-			if status2 != nil {
-				status2Name = status2.Name()
-			}
-
-			name := leastName([]string{file1Name, file2Name, status1Name, status2Name})
-			// All of the names are empty strings, so we must have reached the
-			// end.
-			if name == "" {
-				break
-			}
-
-			row := entryRow{}
-			if file1 != nil && file1.Name() == name {
-				row.file1 = file1
-				file1 = <-iterDir1
-			}
-			if file2 != nil && file2.Name() == name {
-				row.file2 = file2
-				file2 = <-iterDir2
-			}
-			if status1 != nil && status1.Name() == name {
-				row.status1 = status1
-				status1 = <-iterStatus1
-			}
-			if status2 != nil && status2.Name() == name {
-				row.status2 = status2
-				status2 = <-iterStatus2
-			}
-			c <- row
-		}
-	}()
-	return c
-}
-
-func iterateEntrySlice(list []tree.Entry) chan tree.Entry {
-	c := make(chan tree.Entry)
-	go func() {
-		for _, entry := range list {
-			if entry.Name() == STATUS_FILE {
-				continue
-			}
-			c <- entry
-		}
-		close(c)
-	}()
-	return c
-}
-
-func iterateStatusSlice(list []*dtdiff.Entry) chan *dtdiff.Entry {
-	c := make(chan *dtdiff.Entry)
-	go func() {
-		for _, entry := range list {
-			c <- entry
-		}
-		close(c)
-	}()
-	return c
+		return
+	}
 }
 
 func (r *Result) isIgnored(file tree.Entry) bool {

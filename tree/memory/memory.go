@@ -33,8 +33,8 @@ package memory
 
 import (
 	"bytes"
-	"path/filepath"
 	"io"
+	"path/filepath"
 	"time"
 
 	"github.com/aykevl/dtsync/tree"
@@ -82,8 +82,24 @@ func (e *Entry) pathElements() []string {
 	return append(e.parent.pathElements(), e.Name())
 }
 
+// RelativePath returns the path relative to the root.
 func (e *Entry) RelativePath() string {
 	return filepath.Join(e.pathElements()...)
+}
+
+// Get returns the child that may not be a direct child.
+func (e *Entry) Get(path []string) (tree.Entry, error) {
+	child := e
+	for _, name := range path {
+		if name == "" {
+			panic("path contains empty string")
+		}
+		child = child.children[name]
+		if child == nil {
+			return nil, tree.ErrNotFound
+		}
+	}
+	return child, nil
 }
 
 // Size returns the filesize for files, or the number of direct children for

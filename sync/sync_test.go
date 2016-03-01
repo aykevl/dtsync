@@ -236,7 +236,7 @@ func runTestCase(t *testing.T, fs1, fs2, fsCheck, fsCheckWith tree.TestEntry, sw
 
 func runTestCaseSync(t *testing.T, tc *testCase, fs1, fs2 tree.TestEntry, jobDirection int, scanTwice bool) {
 	result := runTestCaseScan(t, tc, fs1, fs2, jobDirection)
-	if result == nil {
+	if t.Failed() {
 		return
 	}
 
@@ -333,6 +333,9 @@ func runTestCaseScan(t *testing.T, tc *testCase, fs1, fs2 tree.TestEntry, jobDir
 
 	if len(result.jobs) != 1 {
 		t.Errorf("list of jobs is expected to be 1, but actually is %d %v", len(result.jobs), result.jobs)
+		if err := result.SaveStatus(); err != nil {
+			t.Errorf("could not save status: %s", err)
+		}
 	} else {
 		job := result.jobs[0]
 		if job.direction != jobDirection {
@@ -453,7 +456,7 @@ func TestLeastName(t *testing.T) {
 		{[]string{"a", "aba"}, "a"},
 	}
 	for _, tc := range testCases {
-		name := leastName(tc.input)
+		name := leastName(tc.input...)
 		if name != tc.output {
 			t.Errorf("expected %#v but got %#v for input %#v", tc.output, name, tc.input)
 		}

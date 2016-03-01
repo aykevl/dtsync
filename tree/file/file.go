@@ -56,10 +56,10 @@ type filesystem struct {
 // Entry is one file or directory in the filesystem. It additionally contains
 // it's name, parent, root, and stat() result.
 type Entry struct {
-	name   string
-	root   *filesystem
-	parent *Entry
-	st     os.FileInfo
+	name    string
+	root    *filesystem
+	parents []string
+	st      os.FileInfo
 }
 
 // NewRoot wraps a root directory in an Entry.
@@ -96,20 +96,60 @@ func (e *Entry) String() string {
 	return "file.Entry(" + e.path() + ")"
 }
 
-// pathElements returns a list of path elements to be joined by filepath.Join.
-func (e *Entry) pathElements() []string {
-	if e.parent == nil {
-		parts := make([]string, 1, 2)
-		parts[0] = e.root.path
-		return parts
-	} else {
-		return append(e.parent.pathElements(), e.name)
-	}
+// isRoot returns true if this is the root entry.
+func (e *Entry) isRoot() bool {
+	return len(e.parents) == 0
 }
 
 // path returns the full path for this entry.
 func (e *Entry) path() string {
-	return filepath.Join(e.pathElements()...)
+	parts := make([]string, 1, len(e.parents)+2)
+	parts[0] = e.root.path
+	parts = append(parts, e.parents...)
+	parts = append(parts, e.name)
+	return filepath.Join(parts...)
+}
+
+// parentPath returns the path of the parent entry
+func (e *Entry) parentPath() string {
+	if len(e.parents) == 0 && e.name == "" {
+		panic("trying to get the parentPath of the root")
+	}
+	parts := make([]string, 1, len(e.parents)+1)
+	parts[0] = e.root.path
+	parts = append(parts, e.parents...)
+	return filepath.Join(parts...)
+}
+
+// Get returns a new child with the given path.
+func (e *Entry) Get(path []string) (tree.Entry, error) {
+	if len(path) == 0 {
+		return e, nil
+	}
+	// check path validity
+	for _, name := range path {
+		if name == "" {
+			panic("path contains empty string")
+		}
+	}
+
+	parents := make([]string, 0, len(e.parents)+len(path)-1)
+	parents = append(parents, e.parents...)
+	parents = append(parents, path[:len(path)-1]...)
+	child := &Entry{
+		name:    path[len(path)-1],
+		root:    e.root,
+		parents: parents,
+	}
+	st, err := os.Stat(child.path())
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, tree.ErrNotFound
+		}
+		return nil, err
+	}
+	child.st = st
+	return child, nil
 }
 
 // AddRegular implements tree.TestEntry by adding a single file with the given
@@ -120,9 +160,9 @@ func (e *Entry) AddRegular(name string, contents []byte) (tree.FileEntry, error)
 	}
 
 	child := &Entry{
-		name:   name,
-		parent: e,
-		root:   e.root,
+		name:    name,
+		root:    e.root,
+		parents: e.childParents(),
 	}
 	file, err := os.Create(child.path())
 	if err != nil {
@@ -164,9 +204,9 @@ func (e *Entry) CreateDir(name string) (tree.Entry, error) {
 		return nil, tree.ErrInvalidName
 	}
 	child := &Entry{
-		name:   name,
-		parent: e,
-		root:   e.root,
+		name:    name,
+		root:    e.root,
+		parents: e.childParents(),
 	}
 	err := os.Mkdir(child.path(), 0777)
 	if err != nil {
@@ -177,6 +217,15 @@ func (e *Entry) CreateDir(name string) (tree.Entry, error) {
 		return nil, err
 	}
 	return child, nil
+}
+
+// childParents returns the parents string slice for a child. It copies our
+// parents and appends our name (as their direct parent).
+func (e *Entry) childParents() []string {
+	parents := make([]string, 0, len(e.parents)+1)
+	parents = append(parents, e.parents...)
+	parents = append(parents, e.name)
+	return parents
 }
 
 // GetContents returns an io.ReadCloser (that must be closed) with the contents
@@ -208,10 +257,10 @@ func (e *Entry) List() ([]tree.Entry, error) {
 	listEntries := make([]tree.Entry, len(list))
 	for i, st := range list {
 		listEntries[i] = &Entry{
-			st:     st,
-			name:   st.Name(),
-			parent: e,
-			root:   e.root,
+			st:      st,
+			name:    st.Name(),
+			root:    e.root,
+			parents: e.childParents(),
 		}
 	}
 	return listEntries, nil
@@ -247,7 +296,10 @@ func (e *Entry) Name() string {
 }
 
 func (e *Entry) RelativePath() string {
-	return filepath.Join(e.pathElements()[1:]...)
+	parts := make([]string, 0, len(e.parents)+1)
+	parts = append(parts, e.parents...)
+	parts = append(parts, e.name)
+	return filepath.Join(parts...)
 }
 
 // Remove removes this entry, recursively.
@@ -255,12 +307,14 @@ func (e *Entry) Remove() error {
 	// TODO checking modtime before removing a directory doesn't have much use:
 	// the entries are listed just before they are removed.
 	// Maybe combine with data from dtdiff?
-	if e.Type() == tree.TYPE_DIRECTORY && e.parent != nil {
+	if e.isRoot() {
+		// ignore the root (just remove)
+	} else if e.Type() == tree.TYPE_DIRECTORY {
 		// move to temporary location to provide atomicity in removing a
 		// directory tree
 		oldPath := e.path()
 		tmpName := TEMPPREFIX + e.name + TEMPSUFFIX
-		tmpPath := filepath.Join(e.parent.path(), tmpName)
+		tmpPath := filepath.Join(e.parentPath(), tmpName)
 		err := os.Rename(oldPath, tmpPath)
 		if err != nil {
 			return err
@@ -299,14 +353,6 @@ func (e *Entry) removeSelf() error {
 		return err
 	}
 
-	// Update parent stat result
-	if e.parent != nil {
-		st, err := os.Lstat(e.parent.path())
-		if err != nil {
-			return err
-		}
-		e.parent.st = st
-	}
 	return nil
 }
 
@@ -324,9 +370,9 @@ func (e *Entry) Size() int64 {
 // CreateFile creates the child, implementing tree.FileEntry. This function is useful for CopyTo.
 func (e *Entry) CreateFile(name string, modTime time.Time) (tree.Entry, io.WriteCloser, error) {
 	child := &Entry{
-		name:   name,
-		parent: e,
-		root:   e.root,
+		name:    name,
+		root:    e.root,
+		parents: e.childParents(),
 	}
 
 	writer, err := child.replaceFile(modTime)
@@ -345,7 +391,7 @@ func (e *Entry) UpdateFile(modTime time.Time) (io.WriteCloser, error) {
 // replaceFile replaces the current file without checking for a type. Used by
 // CreateFile and UpdateFile.
 func (e *Entry) replaceFile(modTime time.Time) (io.WriteCloser, error) {
-	tempPath := filepath.Join(e.parent.path(), TEMPPREFIX+e.name+TEMPSUFFIX)
+	tempPath := filepath.Join(e.parentPath(), TEMPPREFIX+e.name+TEMPSUFFIX)
 	fp, err := os.Create(tempPath)
 	if err != nil {
 		return nil, err
@@ -364,13 +410,6 @@ func (e *Entry) replaceFile(modTime time.Time) (io.WriteCloser, error) {
 				return err
 			}
 			e.st, err = os.Lstat(e.path())
-
-			// Update parent stat result
-			st, err := os.Lstat(e.parent.path())
-			if err != nil {
-				return err
-			}
-			e.parent.st = st
 
 			return err
 		},

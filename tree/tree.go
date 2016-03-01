@@ -81,6 +81,10 @@ var (
 // Entry is one object tree, e.g. a file or directory. It can also be something
 // else, like bookmarks in a browser, or an email message.
 type Entry interface {
+	// Get returns a child Entry that may not be a direct child.
+	// The path may actually be nil or zero length, in which case the entry
+	// itself is returned.
+	Get(path []string) (Entry, error)
 	// Name returns the name of this file.
 	Name() string
 	// RelativePath returns the path relative to the root of this tree.
