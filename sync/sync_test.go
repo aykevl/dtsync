@@ -59,6 +59,10 @@ func NewTestRoot(t *testing.T) tree.TestEntry {
 
 func removeTestRoots(t *testing.T, filesystems ...tree.Entry) {
 	for _, fs := range filesystems {
+		if _, ok := fs.(*memory.Entry); ok {
+			// Don't try to remove an in-memory filesystem.
+			continue
+		}
 		err := fs.Remove()
 		if err != nil {
 			t.Error("could not remove test dir:", err)
