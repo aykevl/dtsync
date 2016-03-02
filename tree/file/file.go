@@ -263,6 +263,7 @@ func (e *Entry) List() ([]tree.Entry, error) {
 			parents: e.childParents(),
 		}
 	}
+	tree.SortEntries(listEntries)
 	return listEntries, nil
 }
 
