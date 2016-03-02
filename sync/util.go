@@ -90,6 +90,16 @@ func nextFileStatus(fileList []tree.Entry, statusList []*dtdiff.Entry) func() (t
 		if name == fileName {
 			retFile = file
 			file = <-fileIterator
+			for file != nil && file.Name() == name {
+				// In some very broken filesystems, or maybe some weirdly
+				// designed systems where a directory may contain multiple
+				// entries with the same name (MTP), this may actually happen.
+				// I've actually seen it in a corrupted FAT32 filesystem on
+				// Linux.
+				// TODO: maybe we should handle this event in some other way? Or
+				// maybe the actual Tree implementations should handle this?
+				file = <-fileIterator
+			}
 		}
 		if name == statusName {
 			retStatus = status
