@@ -301,14 +301,18 @@ func main() {
 		if job.Direction() == 0 {
 			action = "skip"
 		}
-		fmt.Printf("%d/%d %6s: %s\n", i+1, len(result.Jobs()), action, job.RelativePath())
+		digits := 0
+		for i := len(result.Jobs()); i != 0; i /= 10 {
+			digits += 1
+		}
+		fmt.Printf("%*d/%d %6s: %s\n", digits, i+1, len(result.Jobs()), action, job.RelativePath())
 
 		if job.Direction() == 0 {
 			continue
 		}
 		err := job.Apply()
 		if err != nil {
-			fmt.Println(" ", err)
+			fmt.Printf("%*s%s\n", digits*2+10, "", err)
 		}
 	}
 	stats := result.Stats()
