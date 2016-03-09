@@ -31,13 +31,15 @@ package tree
 import (
 	"bytes"
 	"encoding/hex"
+	"io/ioutil"
+	"strings"
 )
 
-type TestEntry interface {
-	FileEntry
+type TestTree interface {
+	FileTree
 
-	AddRegular(string, []byte) (FileEntry, error)
-	SetContents([]byte) error
+	AddRegular(path []string, contents []byte) (Entry, error)
+	SetContents(path []string, contents []byte) error
 }
 
 // Generate a list of hashes (blake2b) to compare with the output of various
@@ -74,50 +76,41 @@ type Tester interface {
 
 // TreeTest is not a test in itself, it is called by trees wanting themselves to
 // be tested in a generic way.
-func TreeTest(t Tester, root1, root2 TestEntry) {
+func TreeTest(t Tester, fs1, fs2 TestTree) {
 	hashes := generateHashes()
 
-	_file1, err := root1.AddRegular("file.txt", nil)
+	root1 := fs1.(LocalTree).Root()
+	root2 := fs2.(LocalTree).Root()
+
+	file1, err := fs1.AddRegular(pathSplit("file.txt"), nil)
 	if err != nil {
 		t.Fatal("could not add file:", err)
 	}
-	file1 := _file1.(TestEntry)
 	checkFile(t, root1, file1, 0, 1, "file.txt")
 
-	if file, err := root1.Get(nil); err != nil {
-		t.Errorf("could not get root with Get:", err)
-	} else if file != root1 {
-		t.Errorf("root was not the same with Get(nil)")
-	}
-
-	if file, err := root1.Get([]string{"file.txt"}); err != nil {
-		t.Errorf("could not get file with Get:", err)
-	} else if !testEqual(t, file.(TestEntry), file1) {
-		t.Errorf("file.txt was not the same with Get([]string{\"file.txt\"})")
-	}
-
-	_file2, hash2, err := file1.CopyTo(root2)
+	info2, _, err := fs1.Copy(infoFromEntry(t, file1), &FileInfoStruct{}, fs2)
 	if err != nil {
 		t.Fatalf("failed to copy file %s to %s: %s", file1, root2, err)
 	}
-	file2 := _file2.(TestEntry)
+	file2 := getFile(root2, "file.txt")
 	checkFile(t, root2, file2, 0, 1, "file.txt")
-	if !bytes.Equal(hash2, hashes[""]) {
-		t.Errorf("Hash mismatch for file %s during CopyTo: expected %x, got %x", file2, hashes[""], hash2)
+	if !bytes.Equal(info2.Hash(), hashes[""]) {
+		t.Errorf("Hash mismatch for file %s during Copy: expected %x, got %x", file2, hashes[""], info2.Hash())
 	}
 
 	if !testEqual(t, root1, root2) {
-		t.Error("root1 is not equal to root2 after CopyTo")
+		t.Error("root1 is not equal to root2 after Copy")
 	}
 
 	quickBrowFox := "The quick brown fox jumps over the lazy dog.\n"
-	err = file1.SetContents([]byte(quickBrowFox))
+	err = fs1.SetContents(file1.RelativePath(), []byte(quickBrowFox))
 	if err != nil {
 		t.Fatalf("could not set contents to file %s: %s", file1, err)
 	}
 	if testEqual(t, root1, root2) {
 		t.Error("root1 is equal to root2 after file1 got updated")
 	}
+	file1 = getFile(root1, "file.txt")
 
 	hash, err := file1.Hash()
 	if err != nil {
@@ -127,40 +120,46 @@ func TreeTest(t Tester, root1, root2 TestEntry) {
 		t.Errorf("Hash mismatch for file %s during Hash: expected %x, got %x", file1, hashes["qbf"], hash)
 	}
 
-	f, err := root1.GetFile("file.txt")
+	f, err := fs1.GetFile("file.txt")
 	if err != nil {
 		t.Fatalf("failed to get contents of file.txt: %s", err)
 	}
-	buf := make([]byte, 1024)
-	n, err := f.Read(buf)
+	buf, err := ioutil.ReadAll(f)
 	if err != nil {
 		t.Fatalf("failed to read contents of file %s: %s", file1, err)
 	}
-	if string(buf[:n]) != quickBrowFox {
-		t.Errorf("expected to get %#v but instead got %#v when reading from %s", quickBrowFox, string(buf[:n]), file1)
+	if string(buf) != quickBrowFox {
+		t.Errorf("expected to get %#v but instead got %#v when reading from %s", quickBrowFox, string(buf), file1)
 	}
 
-	hash, err = file1.UpdateOver(file2)
+	info, _, err := fs1.Update(infoFromEntry(t, file1), infoFromEntry(t, file2), file2.Tree())
 	if err != nil {
-		t.Error("failed to update file:", err)
+		t.Fatal("failed to update file:", err)
 	}
-	if !bytes.Equal(hash, hashes["qbf"]) {
-		t.Errorf("Hash mismatch during UpdateOver for file %s: expected %x, got %x", file2, hashes["qbf"], hash)
+	if !bytes.Equal(info.Hash(), hashes["qbf"]) {
+		t.Errorf("Hash mismatch during Update for file %s: expected %x, got %x", file2, hashes["qbf"], info.Hash())
 	}
 	if !testEqual(t, root1, root2) {
-		t.Error("root1 is not equal to root2 after UpdateOver")
+		t.Error("root1 is not equal to root2 after Update")
 	}
+	file2 = getFile(root2, "file.txt")
 
-	_dir1, err := root1.CreateDir("dir")
+	infoDir1, err := fs1.CreateDir("dir", &FileInfoStruct{})
 	if err != nil {
 		t.Error("could not create directory 1:", err)
 	}
-	_dir2, err := root2.CreateDir("dir")
+	dir1 := getFile(root1, "dir")
+	if !sameInfo(t, infoDir1, dir1) {
+		t.Errorf("FileInfo of %d does not match the return value of CreateDir", dir1)
+	}
+	infoDir2, err := fs2.CreateDir("dir", &FileInfoStruct{})
 	if err != nil {
 		t.Error("could not create directory 2:", err)
 	}
-	dir1 := _dir1.(TestEntry)
-	dir2 := _dir2.(TestEntry)
+	dir2 := getFile(root2, "dir")
+	if !sameInfo(t, infoDir2, dir2) {
+		t.Errorf("FileInfo of %d does not match the return value of CreateDir", dir2)
+	}
 	checkFile(t, root1, dir1, 0, 2, "dir")
 	checkFile(t, root2, dir2, 0, 2, "dir")
 
@@ -168,21 +167,15 @@ func TreeTest(t Tester, root1, root2 TestEntry) {
 		t.Error("root1 is not equal to root2 after CreateDir")
 	}
 
-	child1, err := dir1.AddRegular("file2.txt", []byte("My ship is full of eels."))
+	child1, err := fs1.AddRegular(pathSplit("dir/file2.txt"), []byte("My ship is full of eels."))
 	if err != nil {
 		t.Fatalf("could not create child in directory %s: %s", dir1, err)
 	}
-	checkFile(t, dir1, child1.(TestEntry), 0, 1, "dir/file2.txt")
+	checkFile(t, dir1, child1, 0, 1, "dir/file2.txt")
 
-	if child1Get, err := root1.Get([]string{"dir", "file2.txt"}); err != nil {
-		t.Errorf("could not get file with Get:", err)
-	} else if !testEqual(t, child1.(TestEntry), child1Get.(TestEntry)) {
-		t.Errorf("dir/file2.txt was not the same with Get([]string{\"dir\", \"file2.txt\"})")
-	}
-
-	child2, hash2, err := child1.CopyTo(dir2)
+	_, _, err = fs1.Copy(infoFromEntry(t, child1), infoFromEntry(t, dir2), fs2)
 	if err != nil {
-		t.Errorf("could not copy entry %s to dir %s: %s", child2, dir2, err)
+		t.Errorf("could not copy entry %s to dir %s: %s", child1, dir2, err)
 	}
 
 	if !testEqual(t, root1, root2) {
@@ -190,33 +183,34 @@ func TreeTest(t Tester, root1, root2 TestEntry) {
 	}
 
 	removeTests := []struct {
-		entry      TestEntry
-		name       string
+		root       Tree
+		child      Entry
 		sizeBefore int
 	}{
-		{root1, "file.txt", 2},
-		{root2, "file.txt", 2},
-		{root1, "dir", 1},
-		{root2, "dir", 1},
+		{fs1, file1, 2},
+		{fs2, file2, 2},
+		{fs1, dir1, 1},
+		{fs2, dir2, 1},
 	}
 	for _, tc := range removeTests {
-		list, err := tc.entry.List()
+		entry := tc.root.(LocalTree).Root()
+		list, err := entry.List()
 		if err != nil {
-			t.Fatalf("could not list directory contents of %s: %s", tc.entry, err)
+			t.Fatalf("could not list directory contents of %s: %s", tc.root, err)
 		}
 		if len(list) != tc.sizeBefore {
-			t.Errorf("entry %s child count is %d while %d was expected before delete", tc.entry, len(list), tc.sizeBefore)
+			t.Fatalf("entry %s child count is %d while %d was expected before delete", entry, len(list), tc.sizeBefore)
 		}
-		err = getFile(tc.entry, tc.name).Remove()
+		_, err = tc.root.Remove(infoFromEntry(t, tc.child))
 		if err != nil {
-			t.Errorf("could not remove file from entry %s: %s", tc.entry, err)
+			t.Errorf("could not remove file %s: %s", tc.child, err)
 		}
-		list, err = tc.entry.List()
+		list, err = entry.List()
 		if err != nil {
-			t.Fatalf("could not list directory contents of %s: %s", tc.entry, err)
+			t.Fatalf("could not list directory contents of %s: %s", entry, err)
 		}
 		if len(list) != tc.sizeBefore-1 {
-			t.Errorf("entry %s child count is %d while %d was expected after delete", tc.entry, len(list), tc.sizeBefore-1)
+			t.Fatalf("root %s child count is %d while %d was expected after delete", tc.root, len(list), tc.sizeBefore-1)
 		}
 	}
 
@@ -225,9 +219,50 @@ func TreeTest(t Tester, root1, root2 TestEntry) {
 	}
 }
 
+// pathSplit splits the given string at the slash, to get path elements. An
+// empty string also gives an empty slice (nil).
+func pathSplit(p string) []string {
+	if p == "" {
+		return nil
+	}
+	return strings.Split(p, "/")
+}
+
+// pathJoin does the reverse of pathSplit, joining the array with slashes.
+func pathJoin(p []string) string {
+	return strings.Join(p, "/")
+}
+
+// sameInfo returns true if both FileInfo interfaces are exactly equal for all
+// properties.
+func sameInfo(t Tester, info FileInfo, entry Entry) bool {
+	entryHash, err := entry.Hash()
+	if err != nil {
+		t.Fatalf("could not hash %s: %s", entry, err)
+	}
+	if info.Name() != entry.Name() ||
+		info.Type() != entry.Type() ||
+		info.ModTime() != entry.ModTime() ||
+		info.Size() != entry.Size() ||
+		!bytes.Equal(info.Hash(), entryHash) {
+		return false
+	}
+	path1 := info.RelativePath()
+	path2 := entry.RelativePath()
+	if len(path1) != len(path2) {
+		return false
+	}
+	for i, part := range path1 {
+		if path2[i] != part {
+			return false
+		}
+	}
+	return true
+}
+
 // checkFile tests whether the file exists at a place in the index and checks
 // the number of children the directory has.
-func checkFile(t Tester, dir TestEntry, file TestEntry, index, length int, relpath string) {
+func checkFile(t Tester, dir Entry, file Entry, index, length int, relpath string) {
 	l, err := dir.List()
 	if err != nil {
 		t.Error("could not list directory:", err)
@@ -237,11 +272,11 @@ func checkFile(t Tester, dir TestEntry, file TestEntry, index, length int, relpa
 		t.Fatalf("len(List()): expected length=%d, got %d, for directory %s and file %s (list %s)", length, len(l), dir, file, l)
 		return
 	}
-	if !testEqual(t, l[index].(TestEntry), file) {
+	if !testEqual(t, l[index], file) {
 		t.Errorf("root1.List()[%d] (%s) is not the same as the file added (%s)", index, l[index], file)
 	}
-	if file.RelativePath() != relpath {
-		t.Errorf("%s: expected RelativePath to give %s, not %s", file, relpath, file.RelativePath())
+	if pathJoin(file.RelativePath()) != relpath {
+		t.Errorf("%s: expected RelativePath to give %s, not %s", file, relpath, pathJoin(file.RelativePath()))
 	}
 }
 
@@ -253,16 +288,24 @@ func getFile(parent Entry, name string) Entry {
 	}
 	for _, child := range list {
 		if child.Name() == name {
-			return child.(TestEntry)
+			return child
 		}
 	}
 	return nil
 }
 
-func testEqual(t Tester, file1, file2 TestEntry) bool {
+func testEqual(t Tester, file1, file2 Entry) bool {
 	equal, err := Equal(file1, file2, false)
 	if err != nil {
 		t.Fatalf("could not compare files %s and %s: %s", file1, file2, err)
 	}
 	return equal
+}
+
+func infoFromEntry(t Tester, e Entry) FileInfo {
+	info, err := e.Info()
+	if err != nil {
+		t.Fatal("Info() returned error:", err)
+	}
+	return info
 }

@@ -32,6 +32,7 @@ import (
 	"io/ioutil"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/aykevl/dtsync/tree"
 	"github.com/aykevl/dtsync/tree/file"
@@ -45,7 +46,7 @@ type testCase struct {
 	fileCount int
 }
 
-func NewTestRoot(t *testing.T) tree.TestEntry {
+func NewTestRoot(t *testing.T) tree.TestTree {
 	if testing.Short() {
 		return memory.NewRoot()
 	} else {
@@ -57,13 +58,13 @@ func NewTestRoot(t *testing.T) tree.TestEntry {
 	}
 }
 
-func removeTestRoots(t *testing.T, filesystems ...tree.Entry) {
+func removeTestRoots(t *testing.T, filesystems ...tree.TestTree) {
 	for _, fs := range filesystems {
 		if _, ok := fs.(*memory.Entry); ok {
 			// Don't try to remove an in-memory filesystem.
 			continue
 		}
-		err := fs.Remove()
+		_, err := fs.Remove(&tree.FileInfoStruct{})
 		if err != nil {
 			t.Error("could not remove test dir:", err)
 		}
@@ -83,8 +84,8 @@ func TestSync(t *testing.T) {
 	if err != nil {
 		t.Error("could not save replica state:", err)
 	}
-	for _, fs := range []tree.TestEntry{fs1, fs2} {
-		list, err := fs.List()
+	for _, fs := range []tree.TestTree{fs1, fs2} {
+		list, err := fs.(tree.LocalTree).Root().List()
 		if err != nil {
 			t.Errorf("could not get list for %s: %s", fs, err)
 		}
@@ -120,18 +121,20 @@ func TestSync(t *testing.T) {
 		jobName      string
 		jobAction    Action
 		jobFileCount int
-		fileAction   func(fs tree.TestEntry) error
+		fileAction   func(fs tree.TestTree) error
 	}{
-		{"dir", ACTION_COPY, 2, func(fs tree.TestEntry) error {
-			dir, err := fs.CreateDir("dir")
+		{"dir", ACTION_COPY, 2, func(fs tree.TestTree) error {
+			_, err := fs.CreateDir("dir", &tree.FileInfoStruct{})
 			if err != nil {
 				return err
 			}
-			_, err = dir.(tree.TestEntry).AddRegular("file.txt", []byte("abc"))
+			_, err = fs.AddRegular([]string{"dir", "file.txt"}, []byte("abc"))
 			return err
 		}},
-		{"dir", ACTION_REMOVE, 1, func(fs tree.TestEntry) error {
-			return getFile(fs, "dir").Remove()
+		{"dir", ACTION_REMOVE, 1, func(fs tree.TestTree) error {
+			dir := getFile(fs, "dir")
+			_, err = fs.Remove(tree.NewFileInfo([]string{"dir"}, tree.TYPE_DIRECTORY, dir.ModTime(), 0, nil))
+			return err
 		}},
 	}
 
@@ -141,14 +144,14 @@ func TestSync(t *testing.T) {
 	defer removeTestRoots(t, fs1, fs2, fsCheck)
 	fsNames := []struct {
 		name string
-		fs   tree.TestEntry
+		fs   tree.TestTree
 	}{
 		{"fs1", fs1},
 		{"fs2", fs2},
 		{"fsCheck", fsCheck},
 	}
 	for _, fs := range fsNames {
-		fs.fs.AddRegular(STATUS_FILE, []byte(`Content-Type: text/tab-separated-values; charset=utf-8
+		fs.fs.AddRegular([]string{STATUS_FILE}, []byte(`Content-Type: text/tab-separated-values; charset=utf-8
 Identity: `+fs.name+`
 Generation: 1
 
@@ -158,7 +161,7 @@ path	fingerprint	hash	replica	generation
 
 	for _, scanTwice := range []bool{true, false} {
 		for _, swapped := range []bool{false, true} {
-			for _, fsCheckWith := range []tree.TestEntry{fs2, fs1} {
+			for _, fsCheckWith := range []tree.TestTree{fs2, fs1} {
 				for _, tc := range testCases {
 					applyTestCase(t, fs1, tc)
 					runTestCase(t, fs1, fs2, fsCheck, fsCheckWith, swapped, scanTwice, tc)
@@ -173,37 +176,31 @@ path	fingerprint	hash	replica	generation
 	}
 }
 
-func applyTestCase(t *testing.T, fs tree.TestEntry, tc testCase) {
+func applyTestCase(t *testing.T, fs tree.TestTree, tc testCase) {
 	parts := strings.Split(tc.file, "/")
-	parent := fs
-	for i := 0; i < len(parts)-1; i++ {
-		parent = getFile(parent, parts[i])
-	}
 	name := parts[len(parts)-1]
 
 	var err error
 	switch tc.action {
 	case ACTION_COPY: // add
 		if tc.contents != nil {
-			_, err = parent.AddRegular(name, tc.contents)
+			_, err = fs.AddRegular(parts, tc.contents)
 		} else {
-			_, err = parent.CreateDir(name)
+			_, err = fs.CreateDir(name, tree.NewFileInfo(parts[:len(parts)-1], tree.TYPE_DIRECTORY, time.Time{}, 0, nil))
 		}
 	case ACTION_UPDATE:
-		child := getFile(parent, name)
-		if child == nil {
-			t.Fatalf("could not find file %s to update", tc.file)
-		}
-		err = child.SetContents(tc.contents)
+		err = fs.SetContents(parts, tc.contents)
 		if err != nil {
-			t.Fatalf("could not set file contents to file %s: %s", child, err)
+			t.Fatalf("could not set file contents to file %s: %s", tc.file, err)
 		}
 	case ACTION_REMOVE:
-		child := getFile(parent, name)
-		if child == nil {
-			t.Fatalf("could not find file %s to remove", tc.file)
+		child := getFile(fs, tc.file)
+		info, err := child.Info()
+		assert(err)
+		_, err = fs.Remove(info)
+		if err != nil {
+			t.Fatalf("could not remove child %s (%s): %s", child, info, err)
 		}
-		err = child.Remove()
 	default:
 		t.Fatalf("unknown action: %d", tc.action)
 	}
@@ -212,7 +209,7 @@ func applyTestCase(t *testing.T, fs tree.TestEntry, tc testCase) {
 	}
 }
 
-func runTestCase(t *testing.T, fs1, fs2, fsCheck, fsCheckWith tree.TestEntry, swap, scanTwice bool, tc testCase) {
+func runTestCase(t *testing.T, fs1, fs2, fsCheck, fsCheckWith tree.TestTree, swap, scanTwice bool, tc testCase) {
 	t.Logf("Action: %s %s", tc.action, tc.file)
 	failedBefore := t.Failed()
 	statusBefore := readStatuses(t, fs1, fs2)
@@ -238,7 +235,7 @@ func runTestCase(t *testing.T, fs1, fs2, fsCheck, fsCheckWith tree.TestEntry, sw
 	}
 }
 
-func runTestCaseSync(t *testing.T, tc *testCase, fs1, fs2 tree.TestEntry, jobDirection int, scanTwice bool) {
+func runTestCaseSync(t *testing.T, tc *testCase, fs1, fs2 tree.TestTree, jobDirection int, scanTwice bool) {
 	result := runTestCaseScan(t, tc, fs1, fs2, jobDirection)
 	if t.Failed() {
 		return
@@ -315,11 +312,11 @@ func runTestCaseSync(t *testing.T, tc *testCase, fs1, fs2 tree.TestEntry, jobDir
 		}
 	}
 
-	list1, err := fs1.List()
+	list1, err := fs1.(tree.LocalTree).Root().List()
 	if err != nil {
 		t.Errorf("could not get list for %s: %s", fs1, err)
 	}
-	list2, err := fs2.List()
+	list2, err := fs2.(tree.LocalTree).Root().List()
 	if err != nil {
 		t.Errorf("could not get list for %s: %s", fs2, err)
 	}
@@ -328,7 +325,7 @@ func runTestCaseSync(t *testing.T, tc *testCase, fs1, fs2 tree.TestEntry, jobDir
 	}
 }
 
-func runTestCaseScan(t *testing.T, tc *testCase, fs1, fs2 tree.TestEntry, jobDirection int) *Result {
+func runTestCaseScan(t *testing.T, tc *testCase, fs1, fs2 tree.TestTree, jobDirection int) *Result {
 	result, err := Scan(fs1, fs2)
 	if err != nil {
 		t.Errorf("could not sync after: %s %s: %s", tc.action, tc.file, err)
@@ -336,7 +333,7 @@ func runTestCaseScan(t *testing.T, tc *testCase, fs1, fs2 tree.TestEntry, jobDir
 	}
 
 	if len(result.jobs) != 1 {
-		t.Errorf("list of jobs is expected to be 1, but actually is %d %v", len(result.jobs), result.jobs)
+		t.Errorf("list of jobs is expected to be 1, but actually is %d: %v", len(result.jobs), result.jobs)
 		if err := result.SaveStatus(); err != nil {
 			t.Errorf("could not save status: %s", err)
 		}
@@ -354,34 +351,39 @@ func runTestCaseScan(t *testing.T, tc *testCase, fs1, fs2 tree.TestEntry, jobDir
 	return result
 }
 
-func getFile(parent tree.TestEntry, name string) tree.TestEntry {
-	list, err := parent.List()
-	assert(err)
-	for _, child := range list {
-		if child.Name() == name {
-			return child.(tree.TestEntry)
+func getFile(fs tree.TestTree, relpath string) tree.Entry {
+	parts := strings.Split(relpath, "/")
+	file := fs.(tree.LocalTree).Root()
+	for _, name := range parts {
+		list, err := file.List()
+		assert(err)
+		for _, child := range list {
+			if child.Name() == name {
+				file = child
+				break
+			}
 		}
 	}
-	return nil
+	return file
 }
 
-func getEntriesExcept(parent tree.TestEntry, except string) []tree.TestEntry {
+func getEntriesExcept(parent tree.Entry, except string) []tree.Entry {
 	list, err := parent.List()
 	assert(err)
 
-	listEntries := make([]tree.TestEntry, 0, len(list)-1)
+	listEntries := make([]tree.Entry, 0, len(list)-1)
 	for _, entry := range list {
 		if entry.Name() == except {
 			continue
 		}
-		listEntries = append(listEntries, entry.(tree.TestEntry))
+		listEntries = append(listEntries, entry)
 	}
 	return listEntries
 }
 
-func fsEqual(fs1, fs2 tree.TestEntry) bool {
-	list1 := getEntriesExcept(fs1, STATUS_FILE)
-	list2 := getEntriesExcept(fs2, STATUS_FILE)
+func fsEqual(fs1, fs2 tree.TestTree) bool {
+	list1 := getEntriesExcept(fs1.(tree.LocalTree).Root(), STATUS_FILE)
+	list2 := getEntriesExcept(fs2.(tree.LocalTree).Root(), STATUS_FILE)
 
 	if len(list1) != len(list2) {
 		return false
@@ -402,7 +404,7 @@ func fsEqual(fs1, fs2 tree.TestEntry) bool {
 
 // readStatuses returns the contents of the status files in the provided
 // directories.
-func readStatuses(t *testing.T, roots ...tree.TestEntry) [][]byte {
+func readStatuses(t *testing.T, roots ...tree.TestTree) [][]byte {
 	statusData := make([][]byte, len(roots))
 	for i, fs := range roots {
 		if fs == nil {

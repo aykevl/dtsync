@@ -30,17 +30,18 @@ package memory
 
 import (
 	"bytes"
+
+	"github.com/aykevl/dtsync/tree"
 )
 
-// fileCopier implements an io.WriteCloser with a callback that's called when
-// the file is closed. It uses bytes.Buffer internally.
+// fileCopier implements tree.FileCopier. It uses bytes.Buffer internally.
 type fileCopier struct {
 	bytes.Buffer
-	callback func(*bytes.Buffer)
+	callback func(*bytes.Buffer) (tree.FileInfo, tree.FileInfo)
 }
 
 // newFileCopier returns a new fileCopier with the given callback.
-func newFileCopier(callback func(*bytes.Buffer)) *fileCopier {
+func newFileCopier(callback func(*bytes.Buffer) (tree.FileInfo, tree.FileInfo)) *fileCopier {
 	return &fileCopier{
 		callback: callback,
 	}
@@ -48,7 +49,28 @@ func newFileCopier(callback func(*bytes.Buffer)) *fileCopier {
 
 // Close calls the callback. bytes.Buffer doesn't have a .Close() method, so we
 // don't need to call that one.
-func (fc *fileCopier) Close() error {
+func (fc *fileCopier) Finish() (tree.FileInfo, tree.FileInfo, error) {
+	info, parentInfo := fc.callback(&fc.Buffer)
+	return info, parentInfo, nil
+}
+
+// fileCloser implements an io.WriteCloser with a callback that's called when
+// the file is closed. It uses bytes.Buffer internally.
+type fileCloser struct {
+	bytes.Buffer
+	callback func(*bytes.Buffer)
+}
+
+// newFileCloser returns a new fileCloser with the given callback.
+func newFileCloser(callback func(*bytes.Buffer)) *fileCloser {
+	return &fileCloser{
+		callback: callback,
+	}
+}
+
+// Close calls the callback. bytes.Buffer doesn't have a .Close() method, so we
+// don't need to call that one.
+func (fc *fileCloser) Close() error {
 	fc.callback(&fc.Buffer)
 	return nil
 }

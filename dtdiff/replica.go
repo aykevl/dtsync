@@ -60,13 +60,15 @@ var (
 
 type Replica struct {
 	// generation starts at 1, 0 means 'no generation'
-	generation int
-	isChanged  bool // true if there was a change
-	identity   string
-	knowledge  map[string]int
-	replicaSet *ReplicaSet
-	rootEntry  *Entry
-	header     textproto.MIMEHeader
+	generation         int
+	isChanged          bool // true if there was a change in generation (any file added/deleted/updated)
+	isMetaChanged      bool // true if the metadata of any files changed
+	isKnowledgeChanged bool // true if the Knowledge header was updated
+	identity           string
+	knowledge          map[string]int
+	replicaSet         *ReplicaSet
+	rootEntry          *Entry
+	header             textproto.MIMEHeader
 }
 
 func loadReplica(replicaSet *ReplicaSet, file io.Reader) (*Replica, error) {
@@ -80,6 +82,7 @@ func loadReplica(replicaSet *ReplicaSet, file io.Reader) (*Replica, error) {
 
 	if file == nil {
 		// This is a blank replica, create initial data
+		r.isChanged = true
 		r.generation = 1
 		r.identity = makeRandomString(24)
 		r.knowledge = make(map[string]int, 1)
@@ -127,15 +130,26 @@ func (r *Replica) markChanged() {
 	}
 }
 
-// Changed returns true if this replica got updates (presumably during the last
-// scan).
+func (r *Replica) markMetaChanged() {
+	r.isMetaChanged = true
+}
+
+// ChangedAny returns true if this replica got any updated (presumably during
+// the last scan).
+func (r *Replica) ChangedAny() bool {
+	return r.isChanged || r.isMetaChanged || r.isKnowledgeChanged
+}
+
+// Changed returns true if this replica got a change in it's own files (data or
+// metadata)
 func (r *Replica) Changed() bool {
-	return r.isChanged
+	return r.isChanged || r.isMetaChanged
 }
 
 func (r *Replica) include(other *Replica) {
 	for id, gen := range other.knowledge {
 		if r.knowledge[id] < gen {
+			r.isKnowledgeChanged = true
 			r.knowledge[id] = gen
 		}
 	}

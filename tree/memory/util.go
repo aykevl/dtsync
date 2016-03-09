@@ -1,4 +1,4 @@
-// file_test.go
+// util.go
 //
 // Copyright (c) 2016, Ayke van Laethem
 // All rights reserved.
@@ -26,40 +26,18 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-package file
+package memory
 
-import (
-	"testing"
-
-	"github.com/aykevl/dtsync/tree"
-)
-
-// TestFilesystem tests the memory-based filesystem memory.Entry.
-func TestFilesystem(t *testing.T) {
-	root1, err := NewTestRoot()
-	if err != nil {
-		t.Fatal("could not create root1:", err)
+// validName returns true if this name is the empty string or contains invalid
+// characters.
+func validName(name string) bool {
+	if name == "" {
+		return false
 	}
-	defer func() {
-		_, err := root1.Remove(&tree.FileInfoStruct{})
-		if err != nil {
-			t.Fatal("could not remove root1 after use:", err)
+	for _, c := range name {
+		if c == '/' || c == 0 {
+			return false
 		}
-	}()
-
-	root2, err := NewTestRoot()
-	if err != nil {
-		t.Fatal("could not create root2:", err)
 	}
-	defer func() {
-		_, err := root2.Remove(&tree.FileInfoStruct{})
-		if err != nil {
-			t.Fatal("could not remove root2 after use:", err)
-		}
-	}()
-
-	t.Log("root1:", root1.path)
-	t.Log("root2:", root2.path)
-
-	tree.TreeTest(t, root1, root2)
+	return true
 }

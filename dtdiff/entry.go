@@ -30,9 +30,9 @@ package dtdiff
 
 import (
 	"bytes"
-	"path"
 	"sort"
 	"strconv"
+	"time"
 
 	"github.com/aykevl/dtsync/tree"
 )
@@ -44,6 +44,7 @@ type Entry struct {
 	revReplica    string
 	revGeneration int
 	fingerprint   string
+	fileInfo      *tree.FingerprintInfo // parsed fingerprint
 	hash          []byte
 	children      map[string]*Entry
 	parent        *Entry
@@ -61,17 +62,11 @@ func (e *Entry) Name() string {
 }
 
 // RelativePath returns the path relative to the root
-func (e *Entry) RelativePath() string {
-	return path.Join(e.RelativePathElements()...)
-}
-
-// RelativePathElements returns the RelativePath as a list (not joined together
-// with /)
-func (e *Entry) RelativePathElements() []string {
+func (e *Entry) RelativePath() []string {
 	if e.parent == nil {
 		return nil
 	} else {
-		return append(e.parent.RelativePathElements(), e.name)
+		return append(e.parent.RelativePath(), e.name)
 	}
 }
 
@@ -96,6 +91,29 @@ func (e *Entry) Type() tree.Type {
 	default:
 		return tree.TYPE_UNKNOWN
 	}
+}
+
+// ParseFingerprint parses the fingerprint of this entry. This is needed for
+// ModTime() and Size().
+func (e *Entry) ParseFingerprint() error {
+	fileInfo, err := tree.ParseFingerprint(e.fingerprint)
+	if err != nil {
+		return err
+	}
+	e.fileInfo = fileInfo
+	return nil
+}
+
+// ModTime returns the last modification time from the fingerprint. It panics if
+// the fingerprint hasn't been parsed with ParseFingerprint().
+func (e *Entry) ModTime() time.Time {
+	return e.fileInfo.ModTime
+}
+
+// Size returns the filesize (for regular files) from the fingerprint. It panics if
+// the fingerprint hasn't been parsed with ParseFingerprint().
+func (e *Entry) Size() int64 {
+	return e.fileInfo.Size
 }
 
 // Add new entry by recursively finding the parent
@@ -232,9 +250,9 @@ func (e *Entry) List() []*Entry {
 }
 
 // Add a new status entry.
-func (e *Entry) Add(name, fingerprint string, hash []byte) (*Entry, error) {
+func (e *Entry) Add(info tree.FileInfo) (*Entry, error) {
 	e.replica.markChanged()
-	return e.addChild(name, e.replica.identity, e.replica.generation, fingerprint, hash)
+	return e.addChild(info.Name(), e.replica.identity, e.replica.generation, tree.Fingerprint(info), info.Hash())
 }
 
 // AddCopy copies the status entry to here, keeping the revision.
@@ -246,7 +264,11 @@ func (e *Entry) AddCopy(other *Entry) (*Entry, error) {
 // Update updates the revision if the file was changed. The file is not changed
 // if the fingerprint but not the hash changed.
 func (e *Entry) Update(fingerprint string, hash []byte) {
-	e.fingerprint = fingerprint
+	if fingerprint != e.fingerprint {
+		e.replica.markMetaChanged()
+		e.fingerprint = fingerprint
+		e.fileInfo = nil
+	}
 	e.UpdateHash(hash)
 }
 
@@ -268,6 +290,7 @@ func (e *Entry) UpdateFrom(other *Entry) {
 	e.revReplica = other.revReplica
 	e.revGeneration = other.revGeneration
 	e.fingerprint = other.fingerprint
+	e.fileInfo = nil
 	e.hash = other.hash
 }
 

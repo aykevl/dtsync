@@ -34,7 +34,6 @@ package memory
 import (
 	"bytes"
 	"io"
-	"path/filepath"
 	"time"
 
 	"github.com/aykevl/dtsync/tree"
@@ -63,6 +62,27 @@ func (e *Entry) String() string {
 	return "memory.Entry(" + e.name + ")"
 }
 
+func (e *Entry) root() *Entry {
+	root := e
+	for root.parent != nil {
+		root = root.parent
+	}
+	return root
+}
+
+// Tree returns the root Entry.
+func (e *Entry) Tree() tree.Tree {
+	return e.root()
+}
+
+func (e *Entry) Root() tree.Entry {
+	return e.root()
+}
+
+func (e *Entry) isRoot() bool {
+	return e.parent == nil
+}
+
 // Type returns the file type (file, directory)
 func (e *Entry) Type() tree.Type {
 	return e.fileType
@@ -75,31 +95,15 @@ func (e *Entry) Name() string {
 
 func (e *Entry) pathElements() []string {
 	if e.parent == nil {
-		parts := make([]string, 1)
-		parts[0] = e.Name()
+		parts := make([]string, 0, 1)
 		return parts
 	}
 	return append(e.parent.pathElements(), e.Name())
 }
 
 // RelativePath returns the path relative to the root.
-func (e *Entry) RelativePath() string {
-	return filepath.Join(e.pathElements()...)
-}
-
-// Get returns the child that may not be a direct child.
-func (e *Entry) Get(path []string) (tree.Entry, error) {
-	child := e
-	for _, name := range path {
-		if name == "" {
-			panic("path contains empty string")
-		}
-		child = child.children[name]
-		if child == nil {
-			return nil, tree.ErrNotFound
-		}
-	}
-	return child, nil
+func (e *Entry) RelativePath() []string {
+	return e.pathElements()
 }
 
 // Size returns the filesize for files, or the number of direct children for
@@ -122,17 +126,34 @@ func (e *Entry) ModTime() time.Time {
 
 // Fingerprint returns a fingerprint calculated from the file's metadata.
 func (e *Entry) Fingerprint() string {
-	return tree.Fingerprint(e)
+	return tree.Fingerprint(e.info())
 }
 
 // Hash returns the blake2b hash of this file.
 func (e *Entry) Hash() ([]byte, error) {
+	return e.hash(), nil
+}
+
+func (e *Entry) hash() []byte {
+	if e.Type() != tree.TYPE_REGULAR {
+		return nil
+	}
 	hash := tree.NewHash()
 	_, err := hash.Write(e.contents)
 	if err != nil {
 		panic(err) // hash writer may not return an error
 	}
-	return hash.Sum(nil), nil
+	return hash.Sum(nil)
+}
+
+func (e *Entry) info() tree.FileInfo {
+	return tree.NewFileInfo(e.RelativePath(), e.fileType, e.modTime, e.Size(), e.hash())
+}
+
+// Info returns a FileInfo object. It won't return an error (there are no IO
+// errors in an in-memory filesystem).
+func (e *Entry) Info() (tree.FileInfo, error) {
+	return e.info(), nil
 }
 
 // List returns a list of directory entries for directories. It returns an error
@@ -150,86 +171,97 @@ func (e *Entry) List() ([]tree.Entry, error) {
 	return ret, nil
 }
 
-// CopyTo copies this file into the given parent, returning an error if the file
+// get returns the child Entry from the path.
+func (e *Entry) get(path []string) *Entry {
+	child := e
+	for _, part := range path {
+		child = child.children[part]
+		if child == nil {
+			return nil
+		}
+	}
+	return child
+}
+
+// Copy copies this file into the given parent, returning an error if the file
 // already exists.
-func (e *Entry) CopyTo(otherParent tree.Entry) (tree.Entry, []byte, error) {
-	file, ok := otherParent.(tree.FileEntry)
+func (e *Entry) Copy(source, targetParent tree.FileInfo, otherTree tree.Tree) (tree.FileInfo, tree.FileInfo, error) {
+	s := e.get(source.RelativePath())
+	if s == nil {
+		return nil, nil, tree.ErrNotFound
+	}
+	t, ok := otherTree.(tree.FileTree)
 	if !ok {
 		return nil, nil, tree.ErrNotImplemented
 	}
 
-	switch e.fileType {
+	switch s.fileType {
 	case tree.TYPE_REGULAR:
-		other, out, err := file.CreateFile(e.name, e.modTime)
+		out, err := t.CreateFile(s.name, targetParent, source)
 		if err != nil {
 			return nil, nil, err
 		}
-		_, err = out.Write(e.contents)
+		_, err = out.Write(s.contents)
 		if err != nil {
 			return nil, nil, err
 		}
-		err = out.Close()
+		info, parentInfo, err := out.Finish()
 		if err != nil {
 			return nil, nil, err
 		}
-		hash, err := e.Hash()
-		if err != nil {
-			// we're hasing a buffer, that may not return an error
-			panic(err)
-		}
-		return other, hash, nil
+		return info, parentInfo, nil
 
 	default:
 		return nil, nil, tree.ErrNotImplemented
 	}
 }
 
-// UpdateOver copies data and metadata to the given other file.
-func (e *Entry) UpdateOver(other tree.Entry) ([]byte, error) {
-	file, ok := other.(tree.FileEntry)
+// Update copies data and metadata to the given other file.
+func (e *Entry) Update(source, target tree.FileInfo, other tree.Tree) (tree.FileInfo, tree.FileInfo, error) {
+	s := e.get(source.RelativePath())
+	if s == nil {
+		return nil, nil, tree.ErrNotFound
+	}
+	t, ok := other.(tree.FileTree)
 	if !ok {
-		return nil, tree.ErrNotImplemented
+		return nil, nil, tree.ErrNotImplemented
 	}
 
-	switch e.fileType {
+	switch s.fileType {
 	case tree.TYPE_REGULAR:
-		out, err := file.UpdateFile(e.modTime)
+		out, err := t.UpdateFile(target, source)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 
-		_, err = out.Write(e.contents)
+		_, err = out.Write(s.contents)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 
-		err = out.Close()
-		if err != nil {
-			return nil, err
-		}
-
-		hash, err := e.Hash()
-		if err != nil {
-			// we're hasing a buffer, that may not return an error
-			panic(err)
-		}
-
-		return hash, nil
+		return out.Finish()
 
 	default:
-		return nil, tree.ErrNotImplemented
+		return nil, nil, tree.ErrNotImplemented
 	}
 }
 
-// Remove removes this file or directory tree, recursively.
-func (e *Entry) Remove() error {
-	if e.parent.children[e.name] != e {
+// Remove removes the specified entry, recursively.
+func (e *Entry) Remove(info tree.FileInfo) (tree.FileInfo, error) {
+	child := e.get(info.RelativePath())
+	if child == nil {
+		return nil, tree.ErrNotFound
+	}
+	if child.parent.children[child.name] != child {
 		// already removed?
-		return tree.ErrNotFound
+		return nil, tree.ErrNotFound
 	}
-	delete(e.parent.children, e.name)
-	e.parent.modTime = time.Now()
-	return nil
+	if child.Fingerprint() != tree.Fingerprint(info) {
+		return nil, tree.ErrChanged
+	}
+	delete(child.parent.children, child.name)
+	child.parent.modTime = time.Now()
+	return child.parent.info(), nil
 }
 
 // GetFile returns a file handle (io.ReadCloser) that can be used to read a
@@ -246,56 +278,68 @@ func (e *Entry) GetFile(name string) (io.ReadCloser, error) {
 // child file that can be used to save the replica state.
 func (e *Entry) SetFile(name string) (io.WriteCloser, error) {
 	if child, ok := e.children[name]; ok {
-		return newFileCopier(func(buf *bytes.Buffer) {
+		return newFileCloser(func(buf *bytes.Buffer) {
 			child.contents = buf.Bytes()
 		}), nil
 	} else {
-		return newFileCopier(func(buf *bytes.Buffer) {
-			e.AddRegular(name, buf.Bytes())
+		return newFileCloser(func(buf *bytes.Buffer) {
+			e.AddRegular([]string{name}, buf.Bytes())
 		}), nil
 	}
 }
 
 // CreateDir creates a directory with the given name.
-func (e *Entry) CreateDir(name string) (tree.Entry, error) {
+func (e *Entry) CreateDir(name string, parentInfo tree.FileInfo) (tree.FileInfo, error) {
+	parent := e.get(parentInfo.RelativePath())
+	if parent == nil {
+		return nil, tree.ErrNotFound
+	}
 	child := &Entry{
 		fileType: tree.TYPE_DIRECTORY,
 		modTime:  time.Now(),
 		name:     name,
-		parent:   e,
+		parent:   parent,
 	}
-	err := e.addChild(child)
+	err := parent.addChild(child)
 	if err != nil {
 		return nil, err
 	}
-	return child, nil
+	return child.info(), nil
 }
 
 // CreateFile is part of tree.FileEntry. It returns the created entry, a
 // WriteCloser to write the data to, and possibly an error.
 // The file's contents is stored when the returned WriteCloser is closed.
-func (e *Entry) CreateFile(name string, modTime time.Time) (tree.Entry, io.WriteCloser, error) {
+func (e *Entry) CreateFile(name string, parent, source tree.FileInfo) (tree.Copier, error) {
+	p := e.get(parent.RelativePath())
+	if p == nil {
+		return nil, tree.ErrNotFound
+	}
 	child := &Entry{
 		fileType: tree.TYPE_REGULAR,
-		modTime:  modTime,
+		modTime:  source.ModTime(),
 		name:     name,
-		parent:   e,
+		parent:   p,
 	}
-	err := e.addChild(child)
+	err := p.addChild(child)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
-	file := newFileCopier(func(buffer *bytes.Buffer) {
+	file := newFileCopier(func(buffer *bytes.Buffer) (tree.FileInfo, tree.FileInfo) {
 		child.contents = buffer.Bytes()
+		return child.info(), child.parent.info()
 	})
 
-	return child, file, nil
+	return file, nil
 }
 
 func (e *Entry) addChild(child *Entry) error {
 	if e.fileType != tree.TYPE_DIRECTORY {
 		return tree.ErrNoDirectory
+	}
+	if child.parent != e {
+		panic("addChild to wrong parent")
 	}
 	if e.children == nil {
 		e.children = make(map[string]*Entry)
@@ -303,7 +347,7 @@ func (e *Entry) addChild(child *Entry) error {
 	if _, ok := e.children[child.Name()]; ok {
 		return tree.ErrAlreadyExists
 	}
-	if !tree.ValidName(child.name) {
+	if !validName(child.name) {
 		return tree.ErrInvalidName
 	}
 
@@ -314,28 +358,37 @@ func (e *Entry) addChild(child *Entry) error {
 
 // UpdateFile is part of tree.FileEntry and implements replacing a file.
 // When closing the returned WriteCloser, the file is actually replaced.
-func (e *Entry) UpdateFile(modTime time.Time) (io.WriteCloser, error) {
-	if e.fileType != tree.TYPE_REGULAR {
+func (e *Entry) UpdateFile(file, source tree.FileInfo) (tree.Copier, error) {
+	child := e.get(file.RelativePath())
+	if child == nil {
+		return nil, tree.ErrNotFound
+	}
+	if child.fileType != tree.TYPE_REGULAR {
 		return nil, tree.ErrNoRegular
 	}
-	file := newFileCopier(func(buffer *bytes.Buffer) {
-		e.modTime = modTime
-		e.contents = buffer.Bytes()
-	})
-	return file, nil
+	return newFileCopier(func(buffer *bytes.Buffer) (tree.FileInfo, tree.FileInfo) {
+		child.modTime = source.ModTime()
+		child.contents = buffer.Bytes()
+		return child.info(), child.parent.info()
+	}), nil
 }
 
 // AddRegular creates a new regular file.
 // This function only exists for testing purposes.
-func (e *Entry) AddRegular(name string, contents []byte) (tree.FileEntry, error) {
+func (e *Entry) AddRegular(path []string, contents []byte) (tree.Entry, error) {
+	parent := e.get(path[:len(path)-1])
+	if parent == nil {
+		return nil, tree.ErrNotFound
+	}
+
 	child := &Entry{
 		fileType: tree.TYPE_REGULAR,
 		modTime:  time.Now(),
-		name:     name,
+		name:     path[len(path)-1],
 		contents: contents,
-		parent:   e,
+		parent:   parent,
 	}
-	err := e.addChild(child)
+	err := parent.addChild(child)
 	if err != nil {
 		return nil, err
 	}
@@ -344,13 +397,24 @@ func (e *Entry) AddRegular(name string, contents []byte) (tree.FileEntry, error)
 
 // GetContents returns a reader to read the contents of the file. Must be closed
 // after use.
-func (e *Entry) GetContents() (io.ReadCloser, error) {
-	return newReadCloseBuffer(e.contents), nil
+func (e *Entry) GetContents(path []string) (io.ReadCloser, error) {
+	if !e.isRoot() {
+		panic("not a root")
+	}
+	child := e.get(path)
+	if child == nil {
+		return nil, tree.ErrNotFound
+	}
+	return newReadCloseBuffer(child.contents), nil
 }
 
 // SetContents sets the internal contents of the file, for debugging.
-func (e *Entry) SetContents(contents []byte) error {
-	e.modTime = time.Now()
-	e.contents = contents
+func (e *Entry) SetContents(path []string, contents []byte) error {
+	child := e.get(path)
+	if child == nil {
+		return tree.ErrNotFound
+	}
+	child.modTime = time.Now()
+	child.contents = contents
 	return nil
 }

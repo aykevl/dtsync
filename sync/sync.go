@@ -34,7 +34,7 @@ package sync
 import (
 	"errors"
 	"io"
-	"path/filepath"
+	"path"
 
 	"github.com/aykevl/dtsync/dtdiff"
 	"github.com/aykevl/dtsync/tree"
@@ -55,8 +55,8 @@ const STATUS_FILE = ".dtsync"
 // then be applied.
 type Result struct {
 	rs         *dtdiff.ReplicaSet
-	root1      tree.Entry
-	root2      tree.Entry
+	root1      tree.Tree
+	root2      tree.Tree
 	jobs       []*Job
 	countTotal int
 	countError int
@@ -66,7 +66,7 @@ type Result struct {
 
 // Scan the two filesystem roots for changes, and return results with a list of
 // sync jobs.
-func Scan(dir1, dir2 tree.Entry) (*Result, error) {
+func Scan(dir1, dir2 tree.Tree) (*Result, error) {
 	if dir1 == dir2 {
 		return nil, ErrSameRoot
 	}
@@ -108,7 +108,7 @@ func Scan(dir1, dir2 tree.Entry) (*Result, error) {
 	return r, nil
 }
 
-func getStatus(dir tree.Entry) (io.ReadCloser, error) {
+func getStatus(dir tree.Tree) (io.ReadCloser, error) {
 	file, err := dir.GetFile(STATUS_FILE)
 	if err == tree.ErrNotFound {
 		return nil, nil
@@ -120,11 +120,16 @@ func getStatus(dir tree.Entry) (io.ReadCloser, error) {
 
 func (r *Result) scan() error {
 	var scanners [2]chan error
-	roots := []tree.Entry{r.root1, r.root2}
+	roots := []tree.Tree{r.root1, r.root2}
 	for i := range roots {
 		scanners[i] = make(chan error)
 		go func(i int) {
-			scanners[i] <- r.scanDir(roots[i], r.rs.Get(i).Root())
+			switch root := roots[i].(type) {
+			case tree.LocalTree:
+				scanners[i] <- r.scanDir(root.Root(), r.rs.Get(i).Root())
+			default:
+				panic("root does not implement tree.LocalTree")
+			}
 		}(i)
 	}
 	select {
@@ -187,15 +192,11 @@ func (r *Result) scanDir(dir tree.Entry, statusDir *dtdiff.Entry) error {
 
 		if status == nil {
 			// add status
-			var hash []byte
-			var err error
-			if file.Type() == tree.TYPE_REGULAR {
-				hash, err = file.Hash()
-				if err != nil {
-					return err
-				}
+			info, err := file.Info()
+			if err != nil {
+				return err
 			}
-			status, err = statusDir.Add(file.Name(), file.Fingerprint(), hash)
+			status, err = statusDir.Add(info)
 			if err != nil {
 				panic(err) // must not happen
 			}
@@ -301,13 +302,12 @@ func (r *Result) reconcile(statusDir1, statusDir2 *dtdiff.Entry) {
 						job.action = ACTION_COPY
 						job.direction = 1
 					} else {
+						// TODO: check for conflicts (a new or updated file
+						// inside status1).
 						job.action = ACTION_REMOVE
 						job.direction = -1
 					}
 					r.jobs = append(r.jobs, job)
-				}
-				if status1.Type() == tree.TYPE_DIRECTORY {
-					r.reconcile(status1, nil)
 				}
 
 			} else if status2 != nil {
@@ -316,13 +316,12 @@ func (r *Result) reconcile(statusDir1, statusDir2 *dtdiff.Entry) {
 						job.action = ACTION_COPY
 						job.direction = -1
 					} else {
+						// TODO: check for conflicts (a new or updated file
+						// inside status1).
 						job.action = ACTION_REMOVE
 						job.direction = 1
 					}
 					r.jobs = append(r.jobs, job)
-				}
-				if status2.Type() == tree.TYPE_DIRECTORY {
-					r.reconcile(nil, status2)
 				}
 
 			} else {
@@ -379,7 +378,7 @@ func iterateEntries(statusDir1, statusDir2 *dtdiff.Entry) func() (*dtdiff.Entry,
 }
 
 func (r *Result) isIgnored(file tree.Entry) bool {
-	relpath := file.RelativePath()
+	relpath := path.Join(file.RelativePath()...)
 	for _, pattern := range r.ignore {
 		if len(pattern) == 0 {
 			continue
@@ -387,13 +386,13 @@ func (r *Result) isIgnored(file tree.Entry) bool {
 		// TODO: use a more advanced pattern matching method.
 		if pattern[0] == '/' {
 			// Match relative to the root.
-			if match, err := filepath.Match(pattern[1:], relpath); match && err == nil {
+			if match, err := path.Match(pattern[1:], relpath); match && err == nil {
 				return true
 			}
 		} else {
 			// Match only the name. This does not work when the pattern contains
 			// slashes.
-			if match, err := filepath.Match(pattern, file.Name()); match && err == nil {
+			if match, err := path.Match(pattern, file.Name()); match && err == nil {
 				return true
 			}
 		}
@@ -424,7 +423,7 @@ func (r *Result) SaveStatus() error {
 }
 
 // serializeStatus saves the status for one replica.
-func (r *Result) serializeStatus(replica *dtdiff.Replica, root tree.Entry) error {
+func (r *Result) serializeStatus(replica *dtdiff.Replica, root tree.Tree) error {
 	outstatus, err := root.SetFile(STATUS_FILE)
 	if err != nil {
 		return err

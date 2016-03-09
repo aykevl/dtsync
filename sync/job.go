@@ -30,6 +30,7 @@ package sync
 
 import (
 	"bytes"
+	"path"
 
 	"github.com/aykevl/dtsync/dtdiff"
 	"github.com/aykevl/dtsync/tree"
@@ -150,52 +151,37 @@ func (j *Job) Apply() error {
 			return err
 		}
 	case ACTION_UPDATE:
-		// Get the required file entries.
-		file1, err := root1.Get(status1.RelativePathElements())
+		err := status1.ParseFingerprint()
 		if err != nil {
 			return err
 		}
-
-		parts2 := status2.RelativePathElements()
-		file2, err := root2.Get(parts2)
+		err = status2.ParseFingerprint()
 		if err != nil {
 			return err
 		}
-		parent2, err := root2.Get(parts2[:len(parts2)-1])
+		info, parentInfo, err := root1.Update(status1, status2, root2)
 		if err != nil {
 			return err
 		}
-
-		hash, err := file1.UpdateOver(file2)
-		if err != nil {
-			return err
-		}
-		if !bytes.Equal(hash, status1.Hash()) {
+		if !bytes.Equal(info.Hash(), status1.Hash()) {
 			// The first file got updated between the scan and update.
 			// TODO Should we report this as an error?
-			status1.UpdateHash(hash)
+			status1.UpdateHash(info.Hash())
 		}
-		status2.UpdateFrom(status1)
-		if statusParent2 != nil {
-			statusParent2.Update(parent2.Fingerprint(), nil)
-		}
+		status2.Update(tree.Fingerprint(info), info.Hash())
+		statusParent2.Update(tree.Fingerprint(parentInfo), nil)
 	case ACTION_REMOVE:
-		parts2 := status2.RelativePathElements()
-		file2, err := root2.Get(parts2)
-		if err != nil {
-			return err
-		}
-		parent2, err := root2.Get(parts2[:len(parts2)-1])
+		err := status2.ParseFingerprint()
 		if err != nil {
 			return err
 		}
 
-		err = file2.Remove()
+		parentInfo, err := root2.Remove(status2)
 		if err != nil {
 			return err
 		}
 		status2.Remove()
-		statusParent2.Update(parent2.Fingerprint(), nil)
+		statusParent2.Update(tree.Fingerprint(parentInfo), nil)
 	default:
 		panic("unknown action (must not happen)")
 	}
@@ -208,67 +194,40 @@ func (j *Job) Apply() error {
 	return nil
 }
 
-func copyFile(root1, root2 tree.Entry, status1, statusParent2 *dtdiff.Entry) error {
-	file1, err := root1.Get(status1.RelativePathElements())
+func copyFile(root1, root2 tree.Tree, status1, statusParent2 *dtdiff.Entry) error {
+	err := status1.ParseFingerprint()
 	if err != nil {
 		return err
 	}
-	parent2, err := root2.Get(statusParent2.RelativePathElements())
-	if err != nil {
-		return err
-	}
-
-	return copyFileSub(root1, root2, file1, parent2, status1, statusParent2)
-}
-
-func copyFileSub(root1, root2, file1, parent2 tree.Entry, status1, statusParent2 *dtdiff.Entry) error {
-	if file1.Type() == tree.TYPE_DIRECTORY {
-		parent2, ok := parent2.(tree.FileEntry)
-		if !ok {
-			return tree.ErrNotImplemented
-		}
-		file2, err := parent2.CreateDir(file1.Name())
-		if err != nil {
-			// TODO revert
-			return err
-		}
-		status2, err := statusParent2.Add(file2.Name(), file2.Fingerprint(), nil)
+	if status1.Type() == tree.TYPE_DIRECTORY {
+		info, err := root2.CreateDir(status1.Name(), statusParent2)
 		if err != nil {
 			return err
 		}
-		statusParent2.Update(parent2.Fingerprint(), nil)
-
-		list, err := file1.List()
+		status2, err := statusParent2.Add(info)
 		if err != nil {
-			// TODO revert
-			return err
+			panic(err)
 		}
-		statusList := status1.List()
-		if len(list) != len(statusList) {
-			// TODO this might occur when something changes between scanning
-			// and applying the job.
-			panic("list must be equal to statusList")
-		}
-		for i, child1 := range list {
-			childStatus1 := statusList[i]
-			if child1.Name() != childStatus1.Name() {
-				panic("list must be equal to statusList")
-			}
-			err := copyFileSub(root1, root2, child1, file2, childStatus1, status2)
+		list := status1.List()
+		for _, child1 := range list {
+			err := copyFile(root1, root2, child1, status2)
 			if err != nil {
 				// TODO revert
 				return err
 			}
 		}
-		return nil
 	} else {
-		file2, hash, err := file1.CopyTo(parent2)
-		if err == nil {
-			_, err = statusParent2.Add(file2.Name(), file2.Fingerprint(), hash)
-			statusParent2.Update(parent2.Fingerprint(), nil)
+		info, parentInfo, err := root1.Copy(status1, statusParent2, root2)
+		if err != nil {
+			return err
 		}
-		return err
+		statusParent2.Update(tree.Fingerprint(parentInfo), nil)
+		_, err = statusParent2.Add(info)
+		if err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
 // Direction returns the sync direction of this file, with 1 for left-to-right,
@@ -349,8 +308,11 @@ func (j *Job) status(status, statusParent, otherStatus, otherStatusParent *dtdif
 func (j *Job) RelativePath() string {
 	// This must be updated when we implement file or directory moves: then the
 	// paths cannot be assumed to be the same.
+	var relpath []string
 	if j.status1 == nil {
-		return j.status2.RelativePath()
+		relpath = j.status2.RelativePath()
+	} else {
+		relpath = j.status1.RelativePath()
 	}
-	return j.status1.RelativePath()
+	return path.Join(relpath...)
 }
