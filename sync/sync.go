@@ -415,11 +415,17 @@ func (r *Result) markSynced() {
 
 // SaveStatus saves a status file to the root of both replicas.
 func (r *Result) SaveStatus() error {
-	err := r.serializeStatus(r.rs.Get(0), r.root1)
-	if err != nil {
-		return err
+	for i, root := range []tree.Tree{r.root1, r.root2} {
+		replica := r.rs.Get(i)
+		if !replica.ChangedAny() {
+			continue
+		}
+		err := r.serializeStatus(replica, root)
+		if err != nil {
+			return err
+		}
 	}
-	return r.serializeStatus(r.rs.Get(1), r.root2)
+	return nil
 }
 
 // serializeStatus saves the status for one replica.
