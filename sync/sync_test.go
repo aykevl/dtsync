@@ -167,7 +167,10 @@ path	fingerprint	hash	replica	generation
 					runTestCase(t, fs1, fs2, fsCheck, fsCheckWith, swapped, scanTwice, tc)
 				}
 				for _, ctc := range complexTestCases {
-					ctc.fileAction(fs1)
+					err := ctc.fileAction(fs1)
+					if err != nil {
+						t.Fatal("could not apply complex test case:", err)
+					}
 					tc := testCase{ctc.jobName, ctc.jobAction, nil, ctc.jobFileCount}
 					runTestCase(t, fs1, fs2, fsCheck, fsCheckWith, swapped, scanTwice, tc)
 				}
@@ -215,9 +218,9 @@ func runTestCase(t *testing.T, fs1, fs2, fsCheck, fsCheckWith tree.TestTree, swa
 	statusBefore := readStatuses(t, fs1, fs2)
 
 	if swap {
-		runTestCaseSync(t, &tc, fs2, fs1, -1, scanTwice)
+		runTestCaseSync(t, &tc, fs2, fs1, -1, scanTwice, false)
 	} else {
-		runTestCaseSync(t, &tc, fs1, fs2, 1, scanTwice)
+		runTestCaseSync(t, &tc, fs1, fs2, 1, scanTwice, false)
 	}
 
 	if t.Failed() != failedBefore {
@@ -227,27 +230,44 @@ func runTestCase(t *testing.T, fs1, fs2, fsCheck, fsCheckWith tree.TestTree, swa
 	}
 
 	statusBefore = readStatuses(t, fsCheck, fsCheckWith)
-	runTestCaseSync(t, &tc, fsCheck, fsCheckWith, -1, scanTwice)
+	runTestCaseSync(t, &tc, fsCheck, fsCheckWith, -1, scanTwice, true)
 	if t.Failed() {
 		printStatus(t, "before (check)", statusBefore)
 		printStatus(t, "after (check)", readStatuses(t, fs1, fs2))
-		t.FailNow()
 	}
 }
 
-func runTestCaseSync(t *testing.T, tc *testCase, fs1, fs2 tree.TestTree, jobDirection int, scanTwice bool) {
+func runTestCaseSync(t *testing.T, tc *testCase, fs1, fs2 tree.TestTree, jobDirection int, scanTwice, secondSync bool) {
 	result := runTestCaseScan(t, tc, fs1, fs2, jobDirection)
 	if t.Failed() {
 		return
 	}
+	replica1a := result.rs.Get(0)
+	replica2a := result.rs.Get(1)
+	if jobDirection == 1 {
+		if !replica1a.Changed() {
+			t.Errorf("replica 1 %s was not changed while test case was applied to the left side", replica1a)
+		}
+		if replica2a.Changed() {
+			t.Errorf("replica 2 %s was changed while test case was applied to the left side", replica2a)
+		}
+	} else {
+		if replica1a.Changed() {
+			t.Errorf("replica 1 %s was changed while test case was applied to the right side", replica1a)
+		}
+		if replica2a.Changed() == secondSync {
+			t.Errorf("replica 2 %s was changed? (=%s) while test case was applied to the right side", replica2a, replica2a.Changed())
+			panic("abc")
+		}
+	}
+
+	statusBefore := readStatuses(t, fs1, fs2)
 
 	if scanTwice {
 		// Save, and scan again, to test whether there were any changes.
 		if err := result.SaveStatus(); err != nil {
 			t.Errorf("could not save status: %s", err)
 		}
-		replica1a := result.rs.Get(0)
-		replica2a := result.rs.Get(1)
 
 		result = runTestCaseScan(t, tc, fs1, fs2, jobDirection)
 		replica1b := result.rs.Get(0)
@@ -284,6 +304,11 @@ func runTestCaseSync(t *testing.T, tc *testCase, fs1, fs2 tree.TestTree, jobDire
 		if err := result.SaveStatus(); err != nil {
 			t.Errorf("could not save status: %s", err)
 		}
+		if t.Failed() {
+			printStatus(t, "before (not changed)", statusBefore)
+			printStatus(t, "after (not changed)", readStatuses(t, fs1, fs2))
+			t.FailNow()
+		}
 
 		result, err := Scan(fs1, fs2)
 		if err != nil {
@@ -294,9 +319,9 @@ func runTestCaseSync(t *testing.T, tc *testCase, fs1, fs2 tree.TestTree, jobDire
 			replica2 := result.rs.Get(1)
 			fail := false
 			if ch1, ch2 := replica1.Changed(), replica2.Changed(); ch1 || ch2 {
+				fail = true
 				t.Errorf("one of the replicas was changed with identical trees: (%s: %v, %s: %v)", replica1, ch1, replica2, ch2)
 				if err := result.SaveStatus(); err != nil {
-					fail = true
 					t.Errorf("could not save status: %s", err)
 				}
 			}
