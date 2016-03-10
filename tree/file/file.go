@@ -51,53 +51,51 @@ const (
 // Entry is one file or directory in the filesystem. It additionally contains
 // it's name, parent, root, and stat() result.
 type Entry struct {
-	name    string
-	root    *Tree
-	parents []string
-	st      os.FileInfo
+	root *Tree
+	path []string
+	st   os.FileInfo
 }
 
 // String returns a string representation of this file, for debugging.
 func (e *Entry) String() string {
-	return "file.Entry(" + e.path() + ")"
+	return "file.Entry(" + e.fullPath() + ")"
 }
 
 // Name returns the filename.
 func (e *Entry) Name() string {
-	return e.name
+	if len(e.path) == 0 {
+		return ""
+	}
+	return e.path[len(e.path)-1]
 }
 
 // path returns the full path for this entry.
-func (e *Entry) path() string {
-	parts := make([]string, 1, len(e.parents)+2)
+func (e *Entry) fullPath() string {
+	parts := make([]string, 1, len(e.path)+1)
 	parts[0] = e.root.path
-	parts = append(parts, e.parents...)
-	parts = append(parts, e.name)
+	parts = append(parts, e.path...)
 	return filepath.Join(parts...)
 }
 
 // parentPath returns the path of the parent entry
 func (e *Entry) parentPath() string {
-	if len(e.parents) == 0 && e.name == "" {
+	if len(e.path) == 0 {
 		panic("trying to get the parentPath of the root")
 	}
-	parts := make([]string, 1, len(e.parents)+1)
+	parts := make([]string, 1, len(e.path))
 	parts[0] = e.root.path
-	parts = append(parts, e.parents...)
+	parts = append(parts, e.path[:len(e.path)-1]...)
 	return filepath.Join(parts...)
 }
 
-func (e *Entry) isRoot() bool {
-	return len(e.parents) == 0 && e.name == ""
+func (e *Entry) RelativePath() []string {
+	return e.path
 }
 
-func (e *Entry) RelativePath() []string {
-	if e.isRoot() {
-		return nil
-	}
-	parts := make([]string, 0, len(e.parents)+1)
-	parts = append(parts, e.parents...)
-	parts = append(parts, e.name)
+func (e *Entry) childPath(name string) []string {
+	parts := make([]string, 0, len(e.path)+1)
+	parts = append(parts, e.path...)
+	parts = append(parts, name)
 	return parts
 }
 
@@ -136,7 +134,7 @@ func (e *Entry) Hash() ([]byte, error) {
 		return nil, nil
 	}
 	hash := tree.NewHash()
-	file, err := os.Open(e.path())
+	file, err := os.Open(e.fullPath())
 	if err != nil {
 		return nil, err
 	}
@@ -170,17 +168,16 @@ func (e *Entry) Tree() tree.Tree {
 
 // List returns a directory listing, sorted by name.
 func (e *Entry) List() ([]tree.Entry, error) {
-	list, err := ioutil.ReadDir(e.path())
+	list, err := ioutil.ReadDir(e.fullPath())
 	if err != nil {
 		return nil, err
 	}
 	listEntries := make([]tree.Entry, len(list))
 	for i, st := range list {
 		listEntries[i] = &Entry{
-			st:      st,
-			name:    st.Name(),
-			root:    e.root,
-			parents: e.RelativePath(),
+			st:   st,
+			path: e.childPath(st.Name()),
+			root: e.root,
 		}
 	}
 	tree.SortEntries(listEntries)

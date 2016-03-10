@@ -92,42 +92,37 @@ func (r *Tree) Root() tree.Entry {
 }
 
 func (r *Tree) entryFromPath(path []string) *Entry {
-	if len(path) == 0 {
-		return &Entry{
-			root: r,
-		}
-	}
-	if len(path) == 1 {
-		return &Entry{
-			name: path[0],
-			root: r,
-		}
-	}
 	return &Entry{
-		name:    path[len(path)-1],
-		parents: path[:len(path)-1],
-		root:    r,
+		root: r,
+		path: path,
 	}
 }
 
 // CreateDir adds a single child directory.
 func (r *Tree) CreateDir(name string, parent tree.FileInfo) (tree.FileInfo, error) {
-	if !validPath(parent.RelativePath()) || !validName(name) {
+	parentPath := parent.RelativePath()
+	path := make([]string, 0, len(parentPath)+1)
+	path = append(path, parentPath...)
+	path = append(path, name)
+	if !validPath(path) {
 		return nil, tree.ErrInvalidName
 	}
+
 	child := Entry{
-		name:    name,
-		root:    r,
-		parents: parent.RelativePath(),
+		path: path,
+		root: r,
 	}
-	err := os.Mkdir(child.path(), 0777)
+
+	err := os.Mkdir(child.fullPath(), 0777)
 	if err != nil {
 		return nil, err
 	}
-	child.st, err = os.Lstat(child.path())
+
+	child.st, err = os.Lstat(child.fullPath())
 	if err != nil {
 		return nil, err
 	}
+
 	return child.makeInfo(nil), nil
 }
 
@@ -201,7 +196,7 @@ func (r *Tree) Update(source, target tree.FileInfo, other tree.Tree) (tree.FileI
 func (r *Tree) openSource(source tree.FileInfo, other tree.Tree) (*os.File, error) {
 	e := r.entryFromPath(source.RelativePath())
 
-	in, err := os.Open(e.path())
+	in, err := os.Open(e.fullPath())
 	if err != nil {
 		return nil, err
 	}
@@ -224,7 +219,7 @@ func (r *Tree) openSource(source tree.FileInfo, other tree.Tree) (*os.File, erro
 // parent, or an error.
 func (r *Tree) Remove(file tree.FileInfo) (tree.FileInfo, error) {
 	e := r.entryFromPath(file.RelativePath())
-	st, err := os.Lstat(e.path())
+	st, err := os.Lstat(e.fullPath())
 	if err != nil {
 		return nil, err
 	}
@@ -235,14 +230,14 @@ func (r *Tree) Remove(file tree.FileInfo) (tree.FileInfo, error) {
 	} else if file.Type() == tree.TYPE_DIRECTORY {
 		// move to temporary location to provide atomicity in removing a
 		// directory tree
-		oldPath := e.path()
-		tmpName := TEMPPREFIX + e.name + TEMPSUFFIX
+		oldPath := e.fullPath()
+		tmpName := TEMPPREFIX + e.Name() + TEMPSUFFIX
 		tmpPath := filepath.Join(e.parentPath(), tmpName)
 		err := os.Rename(oldPath, tmpPath)
 		if err != nil {
 			return nil, err
 		}
-		e.name = tmpName
+		e.path[len(e.path)-1] = tmpName
 	} else {
 		if e.Fingerprint() != tree.Fingerprint(file) {
 			return nil, tree.ErrChanged
@@ -255,7 +250,7 @@ func (r *Tree) Remove(file tree.FileInfo) (tree.FileInfo, error) {
 	}
 
 	var parentInfo tree.FileInfo
-	if !e.isRoot() {
+	if len(e.path) != 0 {
 		st, err = os.Lstat(e.parentPath())
 		if err != nil {
 			return nil, err
@@ -282,7 +277,7 @@ func (e *Entry) removeSelf() error {
 	}
 
 	// Actually remove the file or (empty) directory
-	err := os.Remove(e.path())
+	err := os.Remove(e.fullPath())
 	if err != nil {
 		return err
 	}
@@ -306,11 +301,11 @@ func (r *Tree) GetFile(name string) (io.ReadCloser, error) {
 
 func (r *Tree) SetFile(name string) (io.WriteCloser, error) {
 	e := Entry{
-		name: name,
+		path: []string{name},
 		root: r,
 	}
-	tempPath := filepath.Join(e.parentPath(), TEMPPREFIX+e.name+TEMPSUFFIX)
-	destPath := e.path()
+	tempPath := filepath.Join(e.parentPath(), TEMPPREFIX+name+TEMPSUFFIX)
+	destPath := e.fullPath()
 	fp, err := os.Create(tempPath)
 	if err != nil {
 		return nil, err
@@ -325,13 +320,16 @@ func (r *Tree) SetFile(name string) (io.WriteCloser, error) {
 
 // CreateFile creates the child, implementing tree.FileEntry. This function is useful for Copy.
 func (r *Tree) CreateFile(name string, parent, source tree.FileInfo) (tree.Copier, error) {
+	parentPath := parent.RelativePath()
+	path := make([]string, 0, len(parentPath))
+	path = append(path, parentPath...)
+	path = append(path, name)
 	child := Entry{
-		name:    name,
-		root:    r,
-		parents: parent.RelativePath(),
+		path: path,
+		root: r,
 	}
 
-	_, err := os.Lstat(child.path())
+	_, err := os.Lstat(child.fullPath())
 	if err == nil {
 		return nil, tree.ErrAlreadyExists
 	} else if !os.IsNotExist(err) {
@@ -351,7 +349,7 @@ func (r *Tree) UpdateFile(file, source tree.FileInfo) (tree.Copier, error) {
 	e := r.entryFromPath(file.RelativePath())
 
 	// TODO: maybe we should repeat this check when the copy/update is finished?
-	st, err := os.Lstat(e.path())
+	st, err := os.Lstat(e.fullPath())
 	if err != nil {
 		return nil, err
 	}
@@ -366,7 +364,7 @@ func (r *Tree) UpdateFile(file, source tree.FileInfo) (tree.Copier, error) {
 // replaceFile replaces the current file without checking for a type. Used by
 // CreateFile and UpdateFile.
 func (e *Entry) replaceFile(source tree.FileInfo, hash hash.Hash) (tree.Copier, error) {
-	tempPath := filepath.Join(e.parentPath(), TEMPPREFIX+e.name+TEMPSUFFIX)
+	tempPath := filepath.Join(e.parentPath(), TEMPPREFIX+e.Name()+TEMPSUFFIX)
 	fp, err := os.Create(tempPath)
 	if err != nil {
 		return nil, err
@@ -381,12 +379,12 @@ func (e *Entry) replaceFile(source tree.FileInfo, hash hash.Hash) (tree.Copier, 
 					return nil, nil, err
 				}
 			}
-			err = os.Rename(tempPath, e.path())
+			err = os.Rename(tempPath, e.fullPath())
 			if err != nil {
 				return nil, nil, err
 			}
 
-			e.st, err = os.Lstat(e.path())
+			e.st, err = os.Lstat(e.fullPath())
 			if err != nil {
 				return nil, nil, err
 			}
@@ -418,7 +416,7 @@ func (r *Tree) AddRegular(path []string, contents []byte) (tree.Entry, error) {
 	}
 
 	child := r.entryFromPath(path)
-	file, err := os.Create(child.path())
+	file, err := os.Create(child.fullPath())
 	if err != nil {
 		return nil, err
 	}
