@@ -40,9 +40,8 @@ import (
 	"strings"
 
 	"github.com/aykevl/unitsv"
+	"github.com/aykevl/dtsync/version"
 )
-
-const VERSION = "dtsync 0.1"
 
 type Header textproto.MIMEHeader
 
@@ -312,7 +311,7 @@ func (r *Replica) Serialize(out io.Writer) error {
 
 	writer := bufio.NewWriter(out)
 	// Don't look at the error return values, errors will be caught in .Flush().
-	writeKeyValue(writer, "Version", VERSION)
+	writeKeyValue(writer, "Version", version.VERSION)
 	writeKeyValue(writer, "Content-Type", "text/tab-separated-values; charset=utf-8")
 	writeKeyValue(writer, "Identity", r.identity)
 	writeKeyValue(writer, "Generation", strconv.Itoa(r.generation))
