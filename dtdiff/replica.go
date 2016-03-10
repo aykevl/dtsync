@@ -261,7 +261,7 @@ func (r *Replica) load(file io.Reader) error {
 		}
 		revReplica := peers[revReplicaIndex]
 		revGeneration, err := strconv.Atoi(fields[TSV_GENERATION])
-		if err != nil || revGeneration < 1 || revGeneration > r.knowledge[peers[revReplicaIndex]] {
+		if err != nil || revGeneration < 1 {
 			return ErrInvalidEntryGeneration
 		}
 		fingerprint := fields[TSV_FINGERPRINT]
