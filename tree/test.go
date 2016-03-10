@@ -90,7 +90,7 @@ func TreeTest(t Tester, fs1, fs2 TestTree) {
 
 	info2, _, err := fs1.Copy(infoFromEntry(t, file1), &FileInfoStruct{}, fs2)
 	if err != nil {
-		t.Fatalf("failed to copy file %s to %s: %s", file1, root2, err)
+		t.Fatalf("failed to copy file %s to %s: %s", file1, fs2, err)
 	}
 	file2 := getFile(root2, "file.txt")
 	checkFile(t, root2, file2, 0, 1, "file.txt")
@@ -150,7 +150,7 @@ func TreeTest(t Tester, fs1, fs2 TestTree) {
 	}
 	dir1 := getFile(root1, "dir")
 	if !sameInfo(t, infoDir1, dir1) {
-		t.Errorf("FileInfo of %d does not match the return value of CreateDir", dir1)
+		t.Errorf("FileInfo of %s does not match the return value of CreateDir", dir1)
 	}
 	infoDir2, err := fs2.CreateDir("dir", &FileInfoStruct{})
 	if err != nil {
@@ -158,7 +158,7 @@ func TreeTest(t Tester, fs1, fs2 TestTree) {
 	}
 	dir2 := getFile(root2, "dir")
 	if !sameInfo(t, infoDir2, dir2) {
-		t.Errorf("FileInfo of %d does not match the return value of CreateDir", dir2)
+		t.Errorf("FileInfo of %s does not match the return value of CreateDir", dir2)
 	}
 	checkFile(t, root1, dir1, 0, 2, "dir")
 	checkFile(t, root2, dir2, 0, 2, "dir")
