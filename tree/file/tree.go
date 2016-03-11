@@ -136,7 +136,7 @@ func (r *Tree) Copy(source, targetParent tree.FileInfo, other tree.Tree) (tree.F
 
 	switch source.Type() {
 	case tree.TYPE_REGULAR:
-		inf, err := r.openSource(source, other)
+		inf, err := r.openSource(source)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -168,7 +168,7 @@ func (r *Tree) Update(source, target tree.FileInfo, other tree.Tree) (tree.FileI
 
 	switch source.Type() {
 	case tree.TYPE_REGULAR:
-		inf, err := r.openSource(source, other)
+		inf, err := r.openSource(source)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -193,7 +193,7 @@ func (r *Tree) Update(source, target tree.FileInfo, other tree.Tree) (tree.FileI
 	}
 }
 
-func (r *Tree) openSource(source tree.FileInfo, other tree.Tree) (*os.File, error) {
+func (r *Tree) openSource(source tree.FileInfo) (*os.File, error) {
 	e := r.entryFromPath(source.RelativePath())
 
 	in, err := os.Open(e.fullPath())
