@@ -375,7 +375,7 @@ func (e *Entry) UpdateFile(file, source tree.FileInfo) (tree.Copier, error) {
 
 // AddRegular creates a new regular file.
 // This function only exists for testing purposes.
-func (e *Entry) AddRegular(path []string, contents []byte) (tree.Entry, error) {
+func (e *Entry) AddRegular(path []string, contents []byte) (tree.FileInfo, error) {
 	parent := e.get(path[:len(path)-1])
 	if parent == nil {
 		return nil, tree.ErrNotFound
@@ -392,7 +392,7 @@ func (e *Entry) AddRegular(path []string, contents []byte) (tree.Entry, error) {
 	if err != nil {
 		return nil, err
 	}
-	return child, nil
+	return child.info(), nil
 }
 
 // GetContents returns a reader to read the contents of the file. Must be closed

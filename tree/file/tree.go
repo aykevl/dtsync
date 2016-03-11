@@ -410,7 +410,7 @@ func (r *Tree) GetContents(path []string) (io.ReadCloser, error) {
 
 // AddRegular implements tree.TestTree by adding a single file with the given
 // name and contents.
-func (r *Tree) AddRegular(path []string, contents []byte) (tree.Entry, error) {
+func (r *Tree) AddRegular(path []string, contents []byte) (tree.FileInfo, error) {
 	if len(path) == 0 || !validPath(path) {
 		return nil, tree.ErrInvalidName
 	}
@@ -434,7 +434,7 @@ func (r *Tree) AddRegular(path []string, contents []byte) (tree.Entry, error) {
 	if err != nil {
 		return nil, err
 	}
-	return child, nil
+	return child.makeInfo(nil), nil
 }
 
 // SetContents writes contents to this file, for testing.

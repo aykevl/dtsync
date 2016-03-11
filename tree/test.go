@@ -38,7 +38,9 @@ import (
 type TestTree interface {
 	FileTree
 
-	AddRegular(path []string, contents []byte) (Entry, error)
+	// AddRegular sets the file at the path to the specified contents. The
+	// FileInfo returned does not have to contain the hash.
+	AddRegular(path []string, contents []byte) (FileInfo, error)
 	SetContents(path []string, contents []byte) error
 }
 
@@ -82,15 +84,15 @@ func TreeTest(t Tester, fs1, fs2 TestTree) {
 	root1 := fs1.(LocalTree).Root()
 	root2 := fs2.(LocalTree).Root()
 
-	file1, err := fs1.AddRegular(pathSplit("file.txt"), nil)
+	info1, err := fs1.AddRegular(pathSplit("file.txt"), nil)
 	if err != nil {
 		t.Fatal("could not add file:", err)
 	}
-	checkFile(t, root1, file1, 0, 1, "file.txt")
+	checkInfo(t, root1, info1, 0, 1, "file.txt")
 
-	info2, _, err := fs1.Copy(infoFromEntry(t, file1), &FileInfoStruct{}, fs2)
+	info2, _, err := fs1.Copy(info1, &FileInfoStruct{}, fs2)
 	if err != nil {
-		t.Fatalf("failed to copy file %s to %s: %s", file1, fs2, err)
+		t.Fatalf("failed to copy file %s to %s: %s", info1, fs2, err)
 	}
 	file2 := getFile(root2, "file.txt")
 	checkFile(t, root2, file2, 0, 1, "file.txt")
@@ -103,14 +105,14 @@ func TreeTest(t Tester, fs1, fs2 TestTree) {
 	}
 
 	quickBrowFox := "The quick brown fox jumps over the lazy dog.\n"
-	err = fs1.SetContents(file1.RelativePath(), []byte(quickBrowFox))
+	err = fs1.SetContents(info1.RelativePath(), []byte(quickBrowFox))
 	if err != nil {
-		t.Fatalf("could not set contents to file %s: %s", file1, err)
+		t.Fatalf("could not set contents to file %s: %s", info1, err)
 	}
 	if testEqual(t, root1, root2) {
 		t.Error("root1 is equal to root2 after file1 got updated")
 	}
-	file1 = getFile(root1, "file.txt")
+	file1 := getFile(root1, "file.txt")
 
 	hash, err := file1.Hash()
 	if err != nil {
@@ -167,15 +169,15 @@ func TreeTest(t Tester, fs1, fs2 TestTree) {
 		t.Error("root1 is not equal to root2 after CreateDir")
 	}
 
-	child1, err := fs1.AddRegular(pathSplit("dir/file2.txt"), []byte("My ship is full of eels."))
+	childinfo1, err := fs1.AddRegular(pathSplit("dir/file2.txt"), []byte("My ship is full of eels."))
 	if err != nil {
 		t.Fatalf("could not create child in directory %s: %s", dir1, err)
 	}
-	checkFile(t, dir1, child1, 0, 1, "dir/file2.txt")
+	checkInfo(t, dir1, childinfo1, 0, 1, "dir/file2.txt")
 
-	_, _, err = fs1.Copy(infoFromEntry(t, child1), infoFromEntry(t, dir2), fs2)
+	_, _, err = fs1.Copy(childinfo1, infoFromEntry(t, dir2), fs2)
 	if err != nil {
-		t.Errorf("could not copy entry %s to dir %s: %s", child1, dir2, err)
+		t.Errorf("could not copy entry %s to dir %s: %s", childinfo1, dir2, err)
 	}
 
 	if !testEqual(t, root1, root2) {
@@ -277,6 +279,31 @@ func checkFile(t Tester, dir Entry, file Entry, index, length int, relpath strin
 	}
 	if pathJoin(file.RelativePath()) != relpath {
 		t.Errorf("%s: expected RelativePath to give %s, not %s", file, relpath, pathJoin(file.RelativePath()))
+	}
+}
+
+// checkInfo tests whether the file exists at a place in the index and checks
+// the number of children the directory has.
+func checkInfo(t Tester, dir Entry, info FileInfo, index, length int, relpath string) {
+	l, err := dir.List()
+	if err != nil {
+		t.Error("could not list directory:", err)
+		return
+	}
+	if len(l) != length {
+		t.Fatalf("len(List()): expected length=%d, got %d, for directory %s and file %s (list %s)", length, len(l), dir, info, l)
+		return
+	}
+	file := l[index]
+	info2, err := file.Info()
+	if err != nil {
+		t.Fatalf("could not get info from %s: %s", info, err)
+	}
+	if Fingerprint(info) != Fingerprint(info2) {
+		t.Errorf("root1.List()[%d] (%s) is not the same as the file added (%s)", index, l[index], info)
+	}
+	if pathJoin(info.RelativePath()) != relpath {
+		t.Errorf("%s: expected RelativePath to give %s, not %s", info, relpath, pathJoin(info.RelativePath()))
 	}
 }
 

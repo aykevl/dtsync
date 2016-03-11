@@ -242,6 +242,10 @@ func (fi *FileInfoStruct) Type() Type {
 	return fi.fileType
 }
 
+func (fi *FileInfoStruct) String() string {
+	return "FileInfoStruct{" + strings.Join(fi.path, "/") + "," + Fingerprint(fi) + "}"
+}
+
 // Fingerprint returns a fingerprint for this file.
 func Fingerprint(e FileInfo) string {
 	parts := make([]string, 0, 4)
