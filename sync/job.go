@@ -159,7 +159,7 @@ func (j *Job) Apply() error {
 		if err != nil {
 			return err
 		}
-		info, parentInfo, err := root1.Update(status1, status2, root2)
+		info, parentInfo, err := tree.Update(root1, root2, status1, status2)
 		if err != nil {
 			return err
 		}
@@ -217,7 +217,7 @@ func copyFile(root1, root2 tree.Tree, status1, statusParent2 *dtdiff.Entry) erro
 			}
 		}
 	} else {
-		info, parentInfo, err := root1.Copy(status1, statusParent2, root2)
+		info, parentInfo, err := tree.Copy(root1, root2, status1, statusParent2)
 		if err != nil {
 			return err
 		}

@@ -126,74 +126,7 @@ func (r *Tree) CreateDir(name string, parent tree.FileInfo) (tree.FileInfo, erro
 	return child.makeInfo(nil), nil
 }
 
-// Copy copies this file into the otherParent. The latter must be a directory.
-// Only implemented for regular files, not directories.
-func (r *Tree) Copy(source, targetParent tree.FileInfo, other tree.Tree) (tree.FileInfo, tree.FileInfo, error) {
-	otherFileTree, ok := other.(tree.FileTree)
-	if !ok {
-		return nil, nil, tree.ErrNotImplemented
-	}
-
-	switch source.Type() {
-	case tree.TYPE_REGULAR:
-		inf, err := r.openSource(source)
-		if err != nil {
-			return nil, nil, err
-		}
-		defer inf.Close()
-
-		outf, err := otherFileTree.CreateFile(source.Name(), targetParent, source)
-		if err != nil {
-			return nil, nil, err
-		}
-		_, err = io.Copy(outf, inf)
-		if err != nil {
-			// TODO outf.Revert()?
-			return nil, nil, err
-		}
-		// outf.Finish() usually does an fsync and rename (and closes the file)
-		return outf.Finish()
-
-	default:
-		return nil, nil, tree.ErrNotImplemented
-	}
-}
-
-// Update replaces this file with the contents and modtime of the other file.
-func (r *Tree) Update(source, target tree.FileInfo, other tree.Tree) (tree.FileInfo, tree.FileInfo, error) {
-	otherFileTree, ok := other.(tree.FileTree)
-	if !ok {
-		return nil, nil, tree.ErrNotImplemented
-	}
-
-	switch source.Type() {
-	case tree.TYPE_REGULAR:
-		inf, err := r.openSource(source)
-		if err != nil {
-			return nil, nil, err
-		}
-		if inf != nil {
-			defer inf.Close()
-		}
-
-		outf, err := otherFileTree.UpdateFile(target, source)
-		if err != nil {
-			return nil, nil, err
-		}
-
-		_, err = io.Copy(outf, inf)
-		if err != nil {
-			return nil, nil, err
-		}
-
-		return outf.Finish()
-
-	default:
-		return nil, nil, tree.ErrNotImplemented
-	}
-}
-
-func (r *Tree) openSource(source tree.FileInfo) (*os.File, error) {
+func (r *Tree) CopySource(source tree.FileInfo) (io.ReadCloser, error) {
 	e := r.entryFromPath(source.RelativePath())
 
 	in, err := os.Open(e.fullPath())

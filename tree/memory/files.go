@@ -57,13 +57,14 @@ func (fc *fileCopier) Finish() (tree.FileInfo, tree.FileInfo, error) {
 // fileCloser implements an io.WriteCloser with a callback that's called when
 // the file is closed. It uses bytes.Buffer internally.
 type fileCloser struct {
-	bytes.Buffer
+	*bytes.Buffer
 	callback func(*bytes.Buffer)
 }
 
 // newFileCloser returns a new fileCloser with the given callback.
 func newFileCloser(callback func(*bytes.Buffer)) *fileCloser {
 	return &fileCloser{
+		Buffer:   &bytes.Buffer{},
 		callback: callback,
 	}
 }
@@ -71,7 +72,7 @@ func newFileCloser(callback func(*bytes.Buffer)) *fileCloser {
 // Close calls the callback. bytes.Buffer doesn't have a .Close() method, so we
 // don't need to call that one.
 func (fc *fileCloser) Close() error {
-	fc.callback(&fc.Buffer)
+	fc.callback(fc.Buffer)
 	return nil
 }
 

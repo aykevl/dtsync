@@ -87,17 +87,6 @@ type Tree interface {
 	// mkdir: create a directory in this directory with the given name. The
 	// modification time is unknown and will likely be the current time.
 	CreateDir(name string, parent FileInfo) (FileInfo, error)
-	// Copy copies the object indicated by the source to the target in the other
-	// tree. It returns the file info of the copied file (which theoretically
-	// may be different from the hash in the provided FileInfo) and it's parent.
-	// It may also return an error when the source metadata (e.g. modtime) does
-	// not match the actual file.
-	// Before the actual copy, the fingerprint of the source is compared with
-	// the stat results of the source.
-	Copy(source, targetParent FileInfo, other Tree) (info FileInfo, parentInfo FileInfo, err error)
-	// Update is very similar to Copy. It replaces target with the data in
-	// source, updating the contents and file metadata.
-	Update(source, target FileInfo, other Tree) (info FileInfo, parentInfo FileInfo, err error)
 	// Remove removes the indicated file, but checks the fingerprint first. It
 	// returns ErrChanged if the metadata does not match, or another error if
 	// the remove failed.
@@ -126,8 +115,12 @@ type FileTree interface {
 	UpdateFile(file, source FileInfo) (Copier, error)
 
 	// GetContents returns a io.ReadCloser with the contents of this file.
-	// Useful for Equals()
+	// Useful for Equals().
 	GetContents(path []string) (io.ReadCloser, error)
+
+	// CopySource returns a io.ReadCloser, but checks first whether the FileInfo
+	// matches.
+	CopySource(info FileInfo) (io.ReadCloser, error)
 }
 
 type RemoteTree interface {
@@ -175,6 +168,85 @@ type Entry interface {
 	// Return a list of children, in alphabetic order.
 	// Returns an error when this is not a directory.
 	List() ([]Entry, error)
+}
+
+// Copy copies the object indicated by the source to the target in the other
+// tree. It returns the file info of the copied file (which theoretically may be
+// different from the hash in the provided FileInfo) and it's parent.  It may
+// also return an error when the source metadata (e.g. modtime) does not match
+// the actual file.
+// Before the actual copy, the fingerprint of the source is compared with the
+// stat results of the source.
+func Copy(this, other Tree, source, targetParent FileInfo) (info FileInfo, parentInfo FileInfo, err error) {
+	thisFileTree, ok := this.(FileTree)
+	if !ok {
+		return nil, nil, ErrNotImplemented
+	}
+	otherFileTree, ok := other.(FileTree)
+	if !ok {
+		return nil, nil, ErrNotImplemented
+	}
+
+	switch source.Type() {
+	case TYPE_REGULAR:
+		inf, err := thisFileTree.CopySource(source)
+		if err != nil {
+			return nil, nil, err
+		}
+		defer inf.Close()
+
+		outf, err := otherFileTree.CreateFile(source.Name(), targetParent, source)
+		if err != nil {
+			return nil, nil, err
+		}
+		_, err = io.Copy(outf, inf)
+		if err != nil {
+			// TODO outf.Revert()?
+			return nil, nil, err
+		}
+		// outf.Finish() usually does an fsync and rename (and closes the file)
+		return outf.Finish()
+
+	default:
+		return nil, nil, ErrNotImplemented
+	}
+}
+
+// Update replaces this file with the contents and modtime of the other file.
+// It is very similar to Copy.
+func Update(this, other Tree, source, target FileInfo) (FileInfo, FileInfo, error) {
+	thisFileTree, ok := this.(FileTree)
+	if !ok {
+		return nil, nil, ErrNotImplemented
+	}
+	otherFileTree, ok := other.(FileTree)
+	if !ok {
+		return nil, nil, ErrNotImplemented
+	}
+
+	switch source.Type() {
+	case TYPE_REGULAR:
+		inf, err := thisFileTree.CopySource(source)
+		if err != nil {
+			return nil, nil, err
+		}
+		defer inf.Close()
+
+		outf, err := otherFileTree.UpdateFile(target, source)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		_, err = io.Copy(outf, inf)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		return outf.Finish()
+
+	default:
+		return nil, nil, ErrNotImplemented
+	}
 }
 
 // FileInfo is like os.FileInfo, but specific for the Tree interface.

@@ -183,67 +183,19 @@ func (e *Entry) get(path []string) *Entry {
 	return child
 }
 
-// Copy copies this file into the given parent, returning an error if the file
-// already exists.
-func (e *Entry) Copy(source, targetParent tree.FileInfo, otherTree tree.Tree) (tree.FileInfo, tree.FileInfo, error) {
+// CopySource creates a bytes.Buffer reader to read the contents of this file.
+func (e *Entry) CopySource(source tree.FileInfo) (io.ReadCloser, error) {
 	s := e.get(source.RelativePath())
 	if s == nil {
-		return nil, nil, tree.ErrNotFound
+		return nil, tree.ErrNotFound
 	}
-	t, ok := otherTree.(tree.FileTree)
-	if !ok {
-		return nil, nil, tree.ErrNotImplemented
+	if tree.Fingerprint(s.info()) != tree.Fingerprint(source) {
+		return nil, tree.ErrChanged
 	}
-
-	switch s.fileType {
-	case tree.TYPE_REGULAR:
-		out, err := t.CreateFile(s.name, targetParent, source)
-		if err != nil {
-			return nil, nil, err
-		}
-		_, err = out.Write(s.contents)
-		if err != nil {
-			return nil, nil, err
-		}
-		info, parentInfo, err := out.Finish()
-		if err != nil {
-			return nil, nil, err
-		}
-		return info, parentInfo, nil
-
-	default:
-		return nil, nil, tree.ErrNotImplemented
-	}
-}
-
-// Update copies data and metadata to the given other file.
-func (e *Entry) Update(source, target tree.FileInfo, other tree.Tree) (tree.FileInfo, tree.FileInfo, error) {
-	s := e.get(source.RelativePath())
-	if s == nil {
-		return nil, nil, tree.ErrNotFound
-	}
-	t, ok := other.(tree.FileTree)
-	if !ok {
-		return nil, nil, tree.ErrNotImplemented
-	}
-
-	switch s.fileType {
-	case tree.TYPE_REGULAR:
-		out, err := t.UpdateFile(target, source)
-		if err != nil {
-			return nil, nil, err
-		}
-
-		_, err = out.Write(s.contents)
-		if err != nil {
-			return nil, nil, err
-		}
-
-		return out.Finish()
-
-	default:
-		return nil, nil, tree.ErrNotImplemented
-	}
+	return &fileCloser{
+		bytes.NewBuffer(s.contents),
+		func(buf *bytes.Buffer) {},
+	}, nil
 }
 
 // Remove removes the specified entry, recursively.

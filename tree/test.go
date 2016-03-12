@@ -90,7 +90,7 @@ func TreeTest(t Tester, fs1, fs2 TestTree) {
 	}
 	checkInfo(t, root1, info1, 0, 1, "file.txt")
 
-	info2, _, err := fs1.Copy(info1, &FileInfoStruct{}, fs2)
+	info2, _, err := Copy(fs1, fs2, info1, &FileInfoStruct{})
 	if err != nil {
 		t.Fatalf("failed to copy file %s to %s: %s", info1, fs2, err)
 	}
@@ -134,7 +134,7 @@ func TreeTest(t Tester, fs1, fs2 TestTree) {
 		t.Errorf("expected to get %#v but instead got %#v when reading from %s", quickBrowFox, string(buf), file1)
 	}
 
-	info, _, err := fs1.Update(infoFromEntry(t, file1), infoFromEntry(t, file2), file2.Tree())
+	info, _, err := Update(file1.Tree(), fs2, infoFromEntry(t, file1), infoFromEntry(t, file2))
 	if err != nil {
 		t.Fatal("failed to update file:", err)
 	}
@@ -175,7 +175,7 @@ func TreeTest(t Tester, fs1, fs2 TestTree) {
 	}
 	checkInfo(t, dir1, childinfo1, 0, 1, "dir/file2.txt")
 
-	_, _, err = fs1.Copy(childinfo1, infoFromEntry(t, dir2), fs2)
+	_, _, err = Copy(fs1, fs2, childinfo1, infoFromEntry(t, dir2))
 	if err != nil {
 		t.Errorf("could not copy entry %s to dir %s: %s", childinfo1, dir2, err)
 	}
