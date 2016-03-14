@@ -373,21 +373,26 @@ func (r *Tree) AddRegular(path []string, contents []byte) (tree.FileInfo, error)
 }
 
 // SetContents writes contents to this file, for testing.
-func (r *Tree) SetContents(path []string, contents []byte) error {
+func (r *Tree) SetContents(path []string, contents []byte) (tree.FileInfo, error) {
 	if !validPath(path) {
-		return tree.ErrInvalidName
+		return nil, tree.ErrInvalidName
 	}
-	fullPath := filepath.Join(r.path, filepath.Join(path...))
+
+	file := &Entry{
+		root: r,
+		path: path,
+	}
+	fullPath := file.fullPath()
 
 	fp, err := os.Create(fullPath)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer fp.Close()
 
 	_, err = fp.Write(contents)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// Sometimes, the OS doesn't save the exact time when overwriting a file.
@@ -395,10 +400,15 @@ func (r *Tree) SetContents(path []string, contents []byte) error {
 	err = os.Chtimes(fullPath, now, now)
 	if err != nil {
 		// could not update
-		return err
+		return nil, err
 	}
 
-	return fp.Sync()
+	file.st, err = fp.Stat()
+	if err != nil {
+		return nil, err
+	}
+
+	return file.makeInfo(nil), fp.Sync()
 }
 
 // validPath returns true if such a path is allowed as a file path (e.g. no null

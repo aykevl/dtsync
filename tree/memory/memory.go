@@ -361,12 +361,12 @@ func (e *Entry) GetContents(path []string) (io.ReadCloser, error) {
 }
 
 // SetContents sets the internal contents of the file, for debugging.
-func (e *Entry) SetContents(path []string, contents []byte) error {
+func (e *Entry) SetContents(path []string, contents []byte) (tree.FileInfo, error) {
 	child := e.get(path)
 	if child == nil {
-		return tree.ErrNotFound
+		return nil, tree.ErrNotFound
 	}
 	child.modTime = time.Now()
 	child.contents = contents
-	return nil
+	return child.info(), nil
 }

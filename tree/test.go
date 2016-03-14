@@ -41,7 +41,7 @@ type TestTree interface {
 	// AddRegular sets the file at the path to the specified contents. The
 	// FileInfo returned does not have to contain the hash.
 	AddRegular(path []string, contents []byte) (FileInfo, error)
-	SetContents(path []string, contents []byte) error
+	SetContents(path []string, contents []byte) (FileInfo, error)
 }
 
 // Generate a list of hashes (blake2b) to compare with the output of various
@@ -105,7 +105,7 @@ func TreeTest(t Tester, fs1, fs2 TestTree) {
 	}
 
 	quickBrowFox := "The quick brown fox jumps over the lazy dog.\n"
-	err = fs1.SetContents(info1.RelativePath(), []byte(quickBrowFox))
+	_, err = fs1.SetContents(info1.RelativePath(), []byte(quickBrowFox))
 	if err != nil {
 		t.Fatalf("could not set contents to file %s: %s", info1, err)
 	}

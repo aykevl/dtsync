@@ -192,7 +192,7 @@ func applyTestCase(t *testing.T, fs tree.TestTree, tc testCase) {
 			_, err = fs.CreateDir(name, tree.NewFileInfo(parts[:len(parts)-1], tree.TYPE_DIRECTORY, time.Time{}, 0, nil))
 		}
 	case ACTION_UPDATE:
-		err = fs.SetContents(parts, tc.contents)
+		_, err = fs.SetContents(parts, tc.contents)
 		if err != nil {
 			t.Fatalf("could not set file contents to file %s: %s", tc.file, err)
 		}
