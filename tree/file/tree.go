@@ -137,12 +137,14 @@ func (r *Tree) CopySource(source tree.FileInfo) (io.ReadCloser, error) {
 	// Make sure the file is still the same.
 	st, err := in.Stat()
 	if err != nil {
-		return in, err
+		in.Close()
+		return nil, err
 	}
 	e.st = st
 
 	if e.Fingerprint() != tree.Fingerprint(source) {
-		return in, tree.ErrChanged
+		in.Close()
+		return nil, tree.ErrChanged
 	}
 
 	return in, nil
