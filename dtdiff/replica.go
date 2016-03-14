@@ -55,7 +55,12 @@ var (
 	ErrInvalidPath            = errors.New("dtdiff: invalid or missing path in entry row")
 	ErrExists                 = errors.New("dtdiff: already exists")
 	ErrSameIdentity           = errors.New("dtdiff: two replicas with the same ID")
+	ErrSameRoot               = errors.New("dtdiff: trying to synchronize the same directory")
+	ErrCanceled               = errors.New("dtdiff: canceled") // must always be handled
 )
+
+// File where current status of the tree is stored.
+const STATUS_FILE = ".dtsync"
 
 type Replica struct {
 	// generation starts at 1, 0 means 'no generation'

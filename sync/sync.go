@@ -33,8 +33,6 @@ package sync
 
 import (
 	"errors"
-	"io"
-	"path"
 
 	"github.com/aykevl/dtsync/dtdiff"
 	"github.com/aykevl/dtsync/tree"
@@ -44,193 +42,40 @@ var (
 	ErrConflict       = errors.New("sync: job: unresolved conflict")
 	ErrUnimplemented  = errors.New("sync: job: unimplemented")
 	ErrAlreadyApplied = errors.New("sync: job: already applied")
-	ErrSameRoot       = errors.New("sync: trying to synchronize the same directory")
-	ErrCanceled       = errors.New("sync: canceled") // must always be handled
 )
-
-// File where current status of the tree is stored.
-const STATUS_FILE = ".dtsync"
 
 // Result is returned by Scan on success. It contains the scan jobs that can
 // then be applied.
 type Result struct {
 	rs         *dtdiff.ReplicaSet
-	root1      tree.Tree
-	root2      tree.Tree
+	fs1        tree.Tree
+	fs2        tree.Tree
 	jobs       []*Job
 	countTotal int
 	countError int
-	ignore     []string // paths to ignore
-	cancel     uint32   // set to non-0 if the scan should cancel
 }
 
 // Scan the two filesystem roots for changes, and return results with a list of
 // sync jobs.
-func Scan(dir1, dir2 tree.Tree) (*Result, error) {
-	if dir1 == dir2 {
-		return nil, ErrSameRoot
-	}
-
-	// Load replica status
-	statusFile1, err := getStatus(dir1)
-	if err != nil {
-		return nil, err
-	}
-	statusFile2, err := getStatus(dir2)
-	if err != nil {
-		return nil, err
-	}
-
-	rs, err := dtdiff.LoadReplicaSet(statusFile1, statusFile2)
+func Scan(fs1, fs2 tree.Tree) (*Result, error) {
+	rs, err := dtdiff.Scan(fs1, fs2)
 	if err != nil {
 		return nil, err
 	}
 
 	r := &Result{
-		rs:    rs,
-		root1: dir1,
-		root2: dir2,
-	}
-
-	// Get files to ignore.
-	for i := 0; i < 2; i++ {
-		header := rs.Get(i).Header()
-		r.ignore = append(r.ignore, header["Ignore"]...)
-	}
-
-	err = r.scan()
-	if err != nil {
-		return nil, err
-	}
-	if len(r.jobs) == 0 {
-		r.markSynced()
-	}
-	return r, nil
-}
-
-func getStatus(dir tree.Tree) (io.ReadCloser, error) {
-	file, err := dir.GetFile(STATUS_FILE)
-	if err == tree.ErrNotFound {
-		return nil, nil
-	} else if err != nil {
-		return nil, err
-	}
-	return file, nil
-}
-
-func (r *Result) scan() error {
-	var scanners [2]chan error
-	roots := []tree.Tree{r.root1, r.root2}
-	for i := range roots {
-		scanners[i] = make(chan error)
-		go func(i int) {
-			switch root := roots[i].(type) {
-			case tree.LocalTree:
-				scanners[i] <- r.scanDir(root.Root(), r.rs.Get(i).Root())
-			default:
-				panic("root does not implement tree.LocalTree")
-			}
-		}(i)
-	}
-	select {
-	case err := <-scanners[0]:
-		if err != nil {
-			r.cancel = 1
-			<-scanners[1]
-			return err
-		}
-		err = <-scanners[1]
-		if err != nil {
-			return err
-		}
-	case err := <-scanners[1]:
-		if err != nil {
-			r.cancel = 1
-			<-scanners[0]
-			return err
-		}
-		err = <-scanners[0]
-		if err != nil {
-			return err
-		}
+		rs:  rs,
+		fs1: fs1,
+		fs2: fs2,
 	}
 
 	// Reconcile changes
 	r.reconcile(r.rs.Get(0).Root(), r.rs.Get(1).Root())
-	return nil
-}
-
-// scanDir scans one side of the tree, updating the status tree to the current
-// status.
-func (r *Result) scanDir(dir tree.Entry, statusDir *dtdiff.Entry) error {
-	fileList, err := dir.List()
-	if err != nil {
-		return err
-	}
-	iterator := nextFileStatus(fileList, statusDir.List())
-
-	var file tree.Entry
-	var status *dtdiff.Entry
-	for {
-		if r.cancel != 0 {
-			return ErrCanceled
-		}
-
-		file, status = iterator()
-		if file != nil && r.isIgnored(file) {
-			file = nil
-		}
-
-		if file == nil && status == nil {
-			break
-		}
-		if file == nil {
-			// old status entry
-			status.Remove()
-			continue
-		}
-
-		if status == nil {
-			// add status
-			info, err := file.Info()
-			if err != nil {
-				return err
-			}
-			status, err = statusDir.Add(info)
-			if err != nil {
-				panic(err) // must not happen
-			}
-		} else {
-			// update status (if needed)
-			oldHash := status.Hash()
-			oldFingerprint := status.Fingerprint()
-			newFingerprint := file.Fingerprint()
-			var newHash []byte
-			var err error
-			if oldFingerprint == newFingerprint && oldHash != nil {
-				// Assume the hash stayed the same when the fingerprint is the
-				// same. But calculate a new hash if there is no hash.
-				newHash = oldHash
-			} else {
-				if file.Type() == tree.TYPE_REGULAR {
-					newHash, err = file.Hash()
-					if err != nil {
-						return err
-					}
-				}
-			}
-			status.Update(newFingerprint, newHash)
-		}
-
-		if file.Type() == tree.TYPE_DIRECTORY {
-			err := r.scanDir(file, status)
-			if err != nil {
-				return err
-			}
-		}
+	if len(r.jobs) == 0 {
+		r.markSynced()
 	}
 
-	return nil
+	return r, nil
 }
 
 // reconcile compares two status trees, calculating the difference as sync jobs.
@@ -343,8 +188,8 @@ func iterateEntries(statusDir1, statusDir2 *dtdiff.Entry) func() (*dtdiff.Entry,
 	if statusDir2 != nil {
 		listStatus2 = statusDir2.List()
 	}
-	iterStatus1 := iterateStatusSlice(listStatus1)
-	iterStatus2 := iterateStatusSlice(listStatus2)
+	iterStatus1 := dtdiff.IterateEntries(listStatus1)
+	iterStatus2 := dtdiff.IterateEntries(listStatus2)
 
 	status1 := <-iterStatus1
 	status2 := <-iterStatus2
@@ -358,7 +203,7 @@ func iterateEntries(statusDir1, statusDir2 *dtdiff.Entry) func() (*dtdiff.Entry,
 			status2Name = status2.Name()
 		}
 
-		name := leastName(status1Name, status2Name)
+		name := dtdiff.LeastName(status1Name, status2Name)
 		// All of the names are empty strings, so we must have reached the end.
 		if name == "" {
 			return nil, nil
@@ -377,29 +222,6 @@ func iterateEntries(statusDir1, statusDir2 *dtdiff.Entry) func() (*dtdiff.Entry,
 	}
 }
 
-func (r *Result) isIgnored(file tree.Entry) bool {
-	relpath := path.Join(file.RelativePath()...)
-	for _, pattern := range r.ignore {
-		if len(pattern) == 0 {
-			continue
-		}
-		// TODO: use a more advanced pattern matching method.
-		if pattern[0] == '/' {
-			// Match relative to the root.
-			if match, err := path.Match(pattern[1:], relpath); match && err == nil {
-				return true
-			}
-		} else {
-			// Match only the name. This does not work when the pattern contains
-			// slashes.
-			if match, err := path.Match(pattern, file.Name()); match && err == nil {
-				return true
-			}
-		}
-	}
-	return false
-}
-
 // Jobs returns a list of jobs. You can apply them via a call to .Apply(), or
 // you can call SyncAll() which does the same thing. When all jobs are
 // successfully applied, both trees are marked as successfully synchronized.
@@ -415,12 +237,12 @@ func (r *Result) markSynced() {
 
 // SaveStatus saves a status file to the root of both replicas.
 func (r *Result) SaveStatus() error {
-	for i, root := range []tree.Tree{r.root1, r.root2} {
+	for i, fs := range []tree.Tree{r.fs1, r.fs2} {
 		replica := r.rs.Get(i)
 		if !replica.ChangedAny() {
 			continue
 		}
-		err := r.serializeStatus(replica, root)
+		err := r.serializeStatus(replica, fs)
 		if err != nil {
 			return err
 		}
@@ -429,8 +251,8 @@ func (r *Result) SaveStatus() error {
 }
 
 // serializeStatus saves the status for one replica.
-func (r *Result) serializeStatus(replica *dtdiff.Replica, root tree.Tree) error {
-	outstatus, err := root.SetFile(STATUS_FILE)
+func (r *Result) serializeStatus(replica *dtdiff.Replica, fs tree.Tree) error {
+	outstatus, err := fs.SetFile(dtdiff.STATUS_FILE)
 	if err != nil {
 		return err
 	}

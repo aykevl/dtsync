@@ -31,6 +31,8 @@ package dtdiff
 import (
 	"math/rand"
 	"time"
+
+	"github.com/aykevl/dtsync/tree"
 )
 
 var letters = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
@@ -45,4 +47,70 @@ func makeRandomString(n int) string {
 
 func init() {
 	rand.Seed(time.Now().UnixNano())
+}
+
+func nextFileStatus(fileList []tree.Entry, statusList []*Entry) func() (tree.Entry, *Entry) {
+	fileIterator := iterateEntrySlice(fileList)
+	statusIterator := IterateEntries(statusList)
+
+	file := <-fileIterator
+	status := <-statusIterator
+	return func() (retFile tree.Entry, retStatus *Entry) {
+		fileName := ""
+		if file != nil {
+			fileName = file.Name()
+		}
+		statusName := ""
+		if status != nil {
+			statusName = status.Name()
+		}
+
+		name := LeastName(fileName, statusName)
+		if name == fileName {
+			retFile = file
+			file = <-fileIterator
+			for file != nil && file.Name() == name {
+				// In some very broken filesystems, or maybe some weirdly
+				// designed systems where a directory may contain multiple
+				// entries with the same name (MTP), this may actually happen.
+				// I've actually seen it in a corrupted FAT32 filesystem on
+				// Linux.
+				// TODO: maybe we should handle this event in some other way? Or
+				// maybe the actual Tree implementations should handle this?
+				file = <-fileIterator
+			}
+		}
+		if name == statusName {
+			retStatus = status
+			status = <-statusIterator
+		}
+
+		return
+	}
+}
+
+func iterateEntrySlice(list []tree.Entry) chan tree.Entry {
+	c := make(chan tree.Entry)
+	go func() {
+		for _, entry := range list {
+			if entry.Name() == STATUS_FILE {
+				continue
+			}
+			c <- entry
+		}
+		close(c)
+	}()
+	return c
+}
+
+// LeastName returns the alphabetically first name in the list that is not the
+// empty string.
+func LeastName(names ...string) string {
+	name := ""
+	for _, s := range names {
+		if s != "" && s < name || name == "" {
+			name = s
+		}
+	}
+	return name
 }

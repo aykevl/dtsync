@@ -318,3 +318,16 @@ func (es entrySlice) Swap(i, j int) {
 func sortEntries(list []*Entry) {
 	sort.Sort(entrySlice(list))
 }
+
+// IterateEntries returns a channel, reads from the channel will return each
+// entry in the slice.
+func IterateEntries(list []*Entry) chan *Entry {
+	c := make(chan *Entry)
+	go func() {
+		for _, entry := range list {
+			c <- entry
+		}
+		close(c)
+	}()
+	return c
+}

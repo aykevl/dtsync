@@ -69,9 +69,13 @@ func TestReplica(t *testing.T) {
 	file1 := bytes.NewBufferString(status1)
 	file2 := bytes.NewBufferString(status2)
 
-	rs, err := LoadReplicaSet(file1, file2)
-	if err != nil {
-		t.Fatal("failed to load replicas:", err)
+	rs := &ReplicaSet{}
+	for i, file := range []*bytes.Buffer{file1, file2} {
+		replica, err := loadReplica(rs, file)
+		if err != nil {
+			t.Fatal("failed to load replica:", err)
+		}
+		rs.set[i] = replica
 	}
 
 	root1 := rs.Get(0).Root()
@@ -138,6 +142,32 @@ func TestReplica(t *testing.T) {
 		output := buf.Bytes()
 		if !bytes.Equal(output, []byte(tc.output)) {
 			t.Errorf("replica %s does not have the expected output.\n\n*** Expected:\n%s\n\n*** Actual:\n%s", tc.replica, tc.output, string(output))
+		}
+	}
+}
+
+func TestLeastName(t *testing.T) {
+	testCases := []struct {
+		input  []string
+		output string
+	}{
+		{[]string{""}, ""},
+		{[]string{"a"}, "a"},
+		{[]string{"a", "b"}, "a"},
+		{[]string{"b", "a"}, "a"},
+		{[]string{"a", ""}, "a"},
+		{[]string{"", "a"}, "a"},
+		{[]string{"a", "", "b"}, "a"},
+		{[]string{"", "a", "b"}, "a"},
+		{[]string{"", "b", "a"}, "a"},
+		{[]string{"a", "", "b"}, "a"},
+		{[]string{"aba", "abc"}, "aba"},
+		{[]string{"a", "aba"}, "a"},
+	}
+	for _, tc := range testCases {
+		name := LeastName(tc.input...)
+		if name != tc.output {
+			t.Errorf("expected %#v but got %#v for input %#v", tc.output, name, tc.input)
 		}
 	}
 }

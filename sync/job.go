@@ -121,8 +121,8 @@ func (j *Job) Apply() error {
 	status2 := j.status2
 	statusParent1 := j.statusParent1
 	statusParent2 := j.statusParent2
-	root1 := j.result.root1
-	root2 := j.result.root2
+	fs1 := j.result.fs1
+	fs2 := j.result.fs2
 
 	switch j.Direction() {
 	case 1:
@@ -133,7 +133,7 @@ func (j *Job) Apply() error {
 		// swap: we're going the opposite direction
 		status1, status2 = status2, status1
 		statusParent1, statusParent2 = statusParent2, statusParent1
-		root1, root2 = root2, root1
+		fs1, fs2 = fs2, fs1
 	default:
 		panic("unknown direction")
 	}
@@ -146,7 +146,7 @@ func (j *Job) Apply() error {
 
 	switch j.Action() {
 	case ACTION_COPY:
-		err := copyFile(root1, root2, status1, statusParent2)
+		err := copyFile(fs1, fs2, status1, statusParent2)
 		if err != nil {
 			return err
 		}
@@ -159,7 +159,7 @@ func (j *Job) Apply() error {
 		if err != nil {
 			return err
 		}
-		info, parentInfo, err := tree.Update(root1, root2, status1, status2)
+		info, parentInfo, err := tree.Update(fs1, fs2, status1, status2)
 		if err != nil {
 			return err
 		}
@@ -176,7 +176,7 @@ func (j *Job) Apply() error {
 			return err
 		}
 
-		parentInfo, err := root2.Remove(status2)
+		parentInfo, err := fs2.Remove(status2)
 		if err != nil {
 			return err
 		}
@@ -194,13 +194,13 @@ func (j *Job) Apply() error {
 	return nil
 }
 
-func copyFile(root1, root2 tree.Tree, status1, statusParent2 *dtdiff.Entry) error {
+func copyFile(fs1, fs2 tree.Tree, status1, statusParent2 *dtdiff.Entry) error {
 	err := status1.ParseFingerprint()
 	if err != nil {
 		return err
 	}
 	if status1.Type() == tree.TYPE_DIRECTORY {
-		info, err := root2.CreateDir(status1.Name(), statusParent2)
+		info, err := fs2.CreateDir(status1.Name(), statusParent2)
 		if err != nil {
 			return err
 		}
@@ -210,14 +210,14 @@ func copyFile(root1, root2 tree.Tree, status1, statusParent2 *dtdiff.Entry) erro
 		}
 		list := status1.List()
 		for _, child1 := range list {
-			err := copyFile(root1, root2, child1, status2)
+			err := copyFile(fs1, fs2, child1, status2)
 			if err != nil {
 				// TODO revert
 				return err
 			}
 		}
 	} else {
-		info, parentInfo, err := tree.Copy(root1, root2, status1, statusParent2)
+		info, parentInfo, err := tree.Copy(fs1, fs2, status1, statusParent2)
 		if err != nil {
 			return err
 		}

@@ -34,9 +34,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/aykevl/dtsync/dtdiff"
 	"github.com/aykevl/dtsync/tree"
 	"github.com/aykevl/dtsync/tree/file"
 	"github.com/aykevl/dtsync/tree/memory"
+	"github.com/aykevl/dtsync/tree/remote"
 )
 
 type testCase struct {
@@ -151,7 +153,7 @@ func TestSync(t *testing.T) {
 		{"fsCheck", fsCheck},
 	}
 	for _, fs := range fsNames {
-		fs.fs.AddRegular([]string{STATUS_FILE}, []byte(`Content-Type: text/tab-separated-values; charset=utf-8
+		fs.fs.AddRegular([]string{dtdiff.STATUS_FILE}, []byte(`Content-Type: text/tab-separated-values; charset=utf-8
 Identity: `+fs.name+`
 Generation: 1
 
@@ -407,8 +409,8 @@ func getEntriesExcept(parent tree.Entry, except string) []tree.Entry {
 }
 
 func fsEqual(fs1, fs2 tree.TestTree) bool {
-	list1 := getEntriesExcept(fs1.(tree.LocalTree).Root(), STATUS_FILE)
-	list2 := getEntriesExcept(fs2.(tree.LocalTree).Root(), STATUS_FILE)
+	list1 := getEntriesExcept(fs1.(tree.LocalTree).Root(), dtdiff.STATUS_FILE)
+	list2 := getEntriesExcept(fs2.(tree.LocalTree).Root(), dtdiff.STATUS_FILE)
 
 	if len(list1) != len(list2) {
 		return false
@@ -435,7 +437,7 @@ func readStatuses(t *testing.T, roots ...tree.TestTree) [][]byte {
 		if fs == nil {
 			continue
 		}
-		statusFile, err := fs.GetFile(STATUS_FILE)
+		statusFile, err := fs.GetFile(dtdiff.STATUS_FILE)
 		if err != nil {
 			if err == tree.ErrNotFound {
 				continue
@@ -465,31 +467,5 @@ func printStatus(t *testing.T, moment string, statuses [][]byte) {
 func assert(err error) {
 	if err != nil {
 		panic("assert: " + err.Error())
-	}
-}
-
-func TestLeastName(t *testing.T) {
-	testCases := []struct {
-		input  []string
-		output string
-	}{
-		{[]string{""}, ""},
-		{[]string{"a"}, "a"},
-		{[]string{"a", "b"}, "a"},
-		{[]string{"b", "a"}, "a"},
-		{[]string{"a", ""}, "a"},
-		{[]string{"", "a"}, "a"},
-		{[]string{"a", "", "b"}, "a"},
-		{[]string{"", "a", "b"}, "a"},
-		{[]string{"", "b", "a"}, "a"},
-		{[]string{"a", "", "b"}, "a"},
-		{[]string{"aba", "abc"}, "aba"},
-		{[]string{"a", "aba"}, "a"},
-	}
-	for _, tc := range testCases {
-		name := leastName(tc.input...)
-		if name != tc.output {
-			t.Errorf("expected %#v but got %#v for input %#v", tc.output, name, tc.input)
-		}
 	}
 }
