@@ -48,15 +48,19 @@ type testCase struct {
 	fileCount int
 }
 
-func NewTestRoot(t *testing.T) tree.TestTree {
-	if testing.Short() {
+func newTestRoot(t *testing.T, scheme string) tree.TestTree {
+	switch scheme {
+	case "memory":
 		return memory.NewRoot()
-	} else {
+	case "file":
 		root, err := file.NewTestRoot()
 		if err != nil {
 			t.Fatal("could not create test root:", err)
 		}
 		return root
+	default:
+		t.Fatal("unknown scheme:", scheme)
+		return nil // keep the compiler happy
 	}
 }
 
@@ -74,8 +78,21 @@ func removeTestRoots(t *testing.T, filesystems ...tree.TestTree) {
 }
 
 func TestSync(t *testing.T) {
-	fs1 := NewTestRoot(t)
-	fs2 := NewTestRoot(t)
+	schemes := []string{"memory", "file"}
+	for i, scheme1 := range schemes {
+		for j := i; j < len(schemes); j++ {
+			scheme2 := schemes[j]
+			syncRoots(t, scheme1, scheme2)
+			if testing.Short() {
+				return
+			}
+		}
+	}
+}
+
+func syncRoots(t *testing.T, scheme1, scheme2 string) {
+	fs1 := newTestRoot(t, scheme1)
+	fs2 := newTestRoot(t, scheme2)
 	defer removeTestRoots(t, fs1, fs2)
 
 	result, err := Scan(fs1, fs2)
@@ -140,9 +157,9 @@ func TestSync(t *testing.T) {
 		}},
 	}
 
-	fs1 = NewTestRoot(t)
-	fs2 = NewTestRoot(t)
-	fsCheck := NewTestRoot(t)
+	fs1 = newTestRoot(t, scheme1)
+	fs2 = newTestRoot(t, scheme2)
+	fsCheck := newTestRoot(t, scheme2)
 	defer removeTestRoots(t, fs1, fs2, fsCheck)
 	fsNames := []struct {
 		name string

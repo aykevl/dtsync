@@ -42,6 +42,7 @@ var (
 	ErrConflict       = errors.New("sync: job: unresolved conflict")
 	ErrUnimplemented  = errors.New("sync: job: unimplemented")
 	ErrAlreadyApplied = errors.New("sync: job: already applied")
+	ErrUnknownScheme  = errors.New("sync: unknown scheme")
 )
 
 // Result is returned by Scan on success. It contains the scan jobs that can
