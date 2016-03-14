@@ -208,8 +208,14 @@ func (e *Entry) Remove(info tree.FileInfo) (tree.FileInfo, error) {
 		// already removed?
 		return nil, tree.ErrNotFound
 	}
-	if child.Fingerprint() != tree.Fingerprint(info) {
-		return nil, tree.ErrChanged
+	if child.Type() == tree.TYPE_DIRECTORY {
+		if child.Type() != info.Type() {
+			return nil, tree.ErrChanged
+		}
+	} else {
+		if child.Fingerprint() != tree.Fingerprint(info) {
+			return nil, tree.ErrChanged
+		}
 	}
 	delete(child.parent.children, child.name)
 	child.parent.modTime = time.Now()
