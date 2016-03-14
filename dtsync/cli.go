@@ -42,7 +42,6 @@ import (
 	"unicode"
 
 	"github.com/aykevl/dtsync/sync"
-	"github.com/aykevl/dtsync/tree/file"
 )
 
 var cpuprofile = flag.String("cpuprofile", "", "write CPU profile to file")
@@ -211,12 +210,12 @@ func main() {
 
 	root1 := flag.Arg(0)
 	root2 := flag.Arg(1)
-	fs1, err := file.NewRoot(root1)
+	fs1, err := sync.NewTree(root1)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Could not open first root %s: %s\n", root1, err)
 		return
 	}
-	fs2, err := file.NewRoot(root2)
+	fs2, err := sync.NewTree(root2)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Could not open second root %s: %s\n", root2, err)
 		return
