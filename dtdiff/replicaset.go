@@ -29,16 +29,12 @@
 package dtdiff
 
 import (
-	"path"
-
 	"github.com/aykevl/dtsync/tree"
 )
 
 // ReplicaSet is a combination of two replicas
 type ReplicaSet struct {
-	set    [2]*Replica
-	cancel uint32   // set to non-0 if the scan should cancel
-	ignore []string // paths to ignore
+	set [2]*Replica
 }
 
 func Scan(fs1, fs2 tree.Tree) (*ReplicaSet, error) {
@@ -49,41 +45,49 @@ func Scan(fs1, fs2 tree.Tree) (*ReplicaSet, error) {
 	rs := &ReplicaSet{}
 
 	// Load and scan replica status.
-	var scanErrors [2]chan error
 	var scanReplicas [2]chan *Replica
+	var scanStart [2]chan struct{}
+	var scanErrors [2]chan error
+	var scanCancel [2]chan struct{}
 	trees := []tree.Tree{fs1, fs2}
 	for i := range trees {
-		scanErrors[i] = make(chan error)
 		scanReplicas[i] = make(chan *Replica)
+		scanStart[i] = make(chan struct{}, 1)
+		scanErrors[i] = make(chan error)
+		scanCancel[i] = make(chan struct{}, 1)
 		go func(i int) {
 			switch fs := trees[i].(type) {
-			case tree.LocalTree:
+			case tree.LocalFileTree:
 				file, err := fs.GetFile(STATUS_FILE)
 				if err == tree.ErrNotFound {
 					// loadReplica doesn't return errors when creating a new
 					// replica.
-					replica, _ := loadReplica(rs, nil)
+					replica, _ := loadReplica(nil)
 					scanReplicas[i] <- replica
 					scanErrors[i] <- nil
 				} else if err != nil {
 					scanReplicas[i] <- nil
 					scanErrors[i] <- err
 				} else {
-					replica, err := loadReplica(rs, file)
+					replica, err := loadReplica(file)
 					if err != nil {
 						scanReplicas[i] <- nil
 						scanErrors[i] <- err
 					} else {
 						scanReplicas[i] <- replica
-						scanErrors[i] <- rs.scanDir(fs.Root(), replica.Root())
+						<-scanStart[i] // make sure replica.ignore is set
+						scanErrors[i] <- replica.scanDir(fs.Root(), replica.Root(), scanCancel[i])
 					}
 				}
 			default:
-				panic("tree does not implement tree.LocalTree")
+				panic("tree does not implement tree.LocalFileTree")
 			}
 		}(i)
 	}
 
+	var ignore [2][]string
+
+	// Wait for replicas to be loaded/opened.
 	for i := range scanReplicas {
 		replica := <-scanReplicas[i]
 		rs.set[i] = replica
@@ -91,9 +95,20 @@ func Scan(fs1, fs2 tree.Tree) (*ReplicaSet, error) {
 		// Get files to ignore.
 		if replica != nil {
 			header := replica.Header()
-			rs.ignore = append(rs.ignore, header["Ignore"]...)
+			ignore[i] = header["Ignore"]
 		}
 	}
+
+	// Set ignored files on both replicas.
+	for _, ignoreList := range ignore {
+		for _, replica := range rs.set {
+			replica.AddIgnore(ignoreList...)
+		}
+	}
+
+	// And now start the scan.
+	scanStart[0] <- struct{}{}
+	scanStart[1] <- struct{}{}
 
 	if rs.set[0] != nil && rs.set[1] != nil {
 		// There were no errors while opening the replicas.
@@ -113,7 +128,7 @@ func Scan(fs1, fs2 tree.Tree) (*ReplicaSet, error) {
 	select {
 	case err := <-scanErrors[0]:
 		if err != nil {
-			rs.cancel = 1
+			scanCancel[1] <- struct{}{}
 			<-scanErrors[1]
 			return nil, err
 		}
@@ -123,7 +138,7 @@ func Scan(fs1, fs2 tree.Tree) (*ReplicaSet, error) {
 		}
 	case err := <-scanErrors[1]:
 		if err != nil {
-			rs.cancel = 1
+			scanCancel[0] <- struct{}{}
 			<-scanErrors[0]
 			return nil, err
 		}
@@ -134,102 +149,6 @@ func Scan(fs1, fs2 tree.Tree) (*ReplicaSet, error) {
 	}
 
 	return rs, nil
-}
-
-// scanDir scans one side of the tree, updating the status tree to the current
-// status.
-func (rs *ReplicaSet) scanDir(dir tree.Entry, statusDir *Entry) error {
-	fileList, err := dir.List()
-	if err != nil {
-		return err
-	}
-	iterator := nextFileStatus(fileList, statusDir.List())
-
-	var file tree.Entry
-	var status *Entry
-	for {
-		if rs.cancel != 0 {
-			return ErrCanceled
-		}
-
-		file, status = iterator()
-		if file != nil && rs.isIgnored(file) {
-			file = nil
-		}
-
-		if file == nil && status == nil {
-			break
-		}
-		if file == nil {
-			// old status entry
-			status.Remove()
-			continue
-		}
-
-		if status == nil {
-			// add status
-			info, err := file.Info()
-			if err != nil {
-				return err
-			}
-			status, err = statusDir.Add(info)
-			if err != nil {
-				panic(err) // must not happen
-			}
-		} else {
-			// update status (if needed)
-			oldHash := status.Hash()
-			oldFingerprint := status.Fingerprint()
-			newFingerprint := file.Fingerprint()
-			var newHash []byte
-			var err error
-			if oldFingerprint == newFingerprint && oldHash != nil {
-				// Assume the hash stayed the same when the fingerprint is the
-				// same. But calculate a new hash if there is no hash.
-				newHash = oldHash
-			} else {
-				if file.Type() == tree.TYPE_REGULAR {
-					newHash, err = file.Hash()
-					if err != nil {
-						return err
-					}
-				}
-			}
-			status.Update(newFingerprint, newHash)
-		}
-
-		if file.Type() == tree.TYPE_DIRECTORY {
-			err := rs.scanDir(file, status)
-			if err != nil {
-				return err
-			}
-		}
-	}
-
-	return nil
-}
-
-func (rs *ReplicaSet) isIgnored(file tree.Entry) bool {
-	relpath := path.Join(file.RelativePath()...)
-	for _, pattern := range rs.ignore {
-		if len(pattern) == 0 {
-			continue
-		}
-		// TODO: use a more advanced pattern matching method.
-		if pattern[0] == '/' {
-			// Match relative to the root.
-			if match, err := path.Match(pattern[1:], relpath); match && err == nil {
-				return true
-			}
-		} else {
-			// Match only the name. This does not work when the pattern contains
-			// slashes.
-			if match, err := path.Match(pattern, file.Name()); match && err == nil {
-				return true
-			}
-		}
-	}
-	return false
 }
 
 // Get returns the replica by index

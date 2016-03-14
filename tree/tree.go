@@ -135,10 +135,13 @@ type RemoteTree interface {
 }
 
 type LocalTree interface {
-	Tree
-
 	// Root returns the root entry of this tree.
 	Root() Entry
+}
+
+type LocalFileTree interface {
+	LocalTree
+	FileTree
 }
 
 // Entry is one object tree, e.g. a file or directory. It can also be something

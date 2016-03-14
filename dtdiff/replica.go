@@ -35,10 +35,12 @@ import (
 	"io"
 	"mime"
 	"net/textproto"
+	"path"
 	"sort"
 	"strconv"
 	"strings"
 
+	"github.com/aykevl/dtsync/tree"
 	"github.com/aykevl/dtsync/version"
 	"github.com/aykevl/unitsv"
 )
@@ -70,14 +72,13 @@ type Replica struct {
 	isKnowledgeChanged bool // true if the Knowledge header was updated
 	identity           string
 	knowledge          map[string]int
-	replicaSet         *ReplicaSet
 	rootEntry          *Entry
 	header             textproto.MIMEHeader
+	ignore             []string // paths to ignore
 }
 
-func loadReplica(replicaSet *ReplicaSet, file io.Reader) (*Replica, error) {
+func loadReplica(file io.Reader) (*Replica, error) {
 	r := &Replica{
-		replicaSet: replicaSet,
 		rootEntry: &Entry{
 			children: make(map[string]*Entry),
 		},
@@ -106,24 +107,9 @@ func (r *Replica) String() string {
 	return "Replica(" + r.identity + "," + strconv.Itoa(r.generation) + ")"
 }
 
-// Set returns the ReplicaSet for this replica.
-func (r *Replica) Set() *ReplicaSet {
-	return r.replicaSet
-}
-
 // Root returns the root entry.
 func (r *Replica) Root() *Entry {
 	return r.rootEntry
-}
-
-func (r *Replica) other() *Replica {
-	if r.replicaSet.set[0] == r {
-		return r.replicaSet.set[1]
-	} else if r.replicaSet.set[1] == r {
-		return r.replicaSet.set[0]
-	} else {
-		return nil
-	}
 }
 
 func (r *Replica) markChanged() {
@@ -391,4 +377,110 @@ func (e *Entry) serializeChildren(tsvWriter *unitsv.Writer, peerIndex map[string
 func writeKeyValue(out *bufio.Writer, key, value string) error {
 	_, err := out.WriteString(key + ": " + value + "\n")
 	return err
+}
+
+func (r *Replica) scan(fs tree.LocalFileTree) error {
+	return r.scanDir(fs.Root(), r.Root(), nil)
+}
+
+// scanDir scans one side of the tree, updating the status tree to the current
+// status.
+func (r *Replica) scanDir(dir tree.Entry, statusDir *Entry, cancel chan struct{}) error {
+	fileList, err := dir.List()
+	if err != nil {
+		return err
+	}
+	iterator := nextFileStatus(fileList, statusDir.List())
+
+	var file tree.Entry
+	var status *Entry
+	for {
+		select {
+		case <-cancel:
+			return ErrCanceled
+		default:
+		}
+
+		file, status = iterator()
+		if file != nil && r.isIgnored(file) {
+			file = nil
+		}
+
+		if file == nil && status == nil {
+			break
+		}
+		if file == nil {
+			// old status entry
+			status.Remove()
+			continue
+		}
+
+		if status == nil {
+			// add status
+			info, err := file.Info()
+			if err != nil {
+				return err
+			}
+			status, err = statusDir.Add(info)
+			if err != nil {
+				panic(err) // must not happen
+			}
+		} else {
+			// update status (if needed)
+			oldHash := status.Hash()
+			oldFingerprint := status.Fingerprint()
+			newFingerprint := file.Fingerprint()
+			var newHash []byte
+			var err error
+			if oldFingerprint == newFingerprint && oldHash != nil {
+				// Assume the hash stayed the same when the fingerprint is the
+				// same. But calculate a new hash if there is no hash.
+				newHash = oldHash
+			} else {
+				if file.Type() == tree.TYPE_REGULAR {
+					newHash, err = file.Hash()
+					if err != nil {
+						return err
+					}
+				}
+			}
+			status.Update(newFingerprint, newHash)
+		}
+
+		if file.Type() == tree.TYPE_DIRECTORY {
+			err := r.scanDir(file, status, cancel)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+func (r *Replica) isIgnored(file tree.Entry) bool {
+	relpath := path.Join(file.RelativePath()...)
+	for _, pattern := range r.ignore {
+		if len(pattern) == 0 {
+			continue
+		}
+		// TODO: use a more advanced pattern matching method.
+		if pattern[0] == '/' {
+			// Match relative to the root.
+			if match, err := path.Match(pattern[1:], relpath); match && err == nil {
+				return true
+			}
+		} else {
+			// Match only the name. This does not work when the pattern contains
+			// slashes.
+			if match, err := path.Match(pattern, file.Name()); match && err == nil {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func (r *Replica) AddIgnore(ignore ...string) {
+	r.ignore = append(r.ignore, ignore...)
 }

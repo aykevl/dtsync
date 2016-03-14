@@ -71,7 +71,7 @@ func TestReplica(t *testing.T) {
 
 	rs := &ReplicaSet{}
 	for i, file := range []*bytes.Buffer{file1, file2} {
-		replica, err := loadReplica(rs, file)
+		replica, err := loadReplica(file)
 		if err != nil {
 			t.Fatal("failed to load replica:", err)
 		}
