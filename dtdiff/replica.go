@@ -39,8 +39,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/aykevl/unitsv"
 	"github.com/aykevl/dtsync/version"
+	"github.com/aykevl/unitsv"
 )
 
 type Header textproto.MIMEHeader
