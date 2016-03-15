@@ -403,14 +403,19 @@ func (r *Replica) scanDir(dir tree.Entry, statusDir *Entry, cancel chan struct{}
 
 		file, status = iterator()
 		if file != nil && r.isIgnored(file) {
-			file = nil
+			// Keep status (don't remove) if it exists, in case the file is
+			// un-ignored. It may be desirable to make this configurable.
+			continue
 		}
 
 		if file == nil && status == nil {
 			break
 		}
 		if file == nil {
-			// old status entry
+			// This is an old status entry: the file has been removed.
+			// Now we delete it, but we could improve by, for example, keeping
+			// all old entries for up to a month in case the entries appear
+			// again (e.g. the filesystem was not mounted).
 			status.Remove()
 			continue
 		}
