@@ -283,17 +283,6 @@ func (e *Entry) UpdateHash(hash []byte) {
 	}
 }
 
-// UpdateFrom sets this entry as updated from the other entry, copying the
-// revision and modification time.
-func (e *Entry) UpdateFrom(other *Entry) {
-	e.replica.markChanged()
-	e.revReplica = other.revReplica
-	e.revGeneration = other.revGeneration
-	e.fingerprint = other.fingerprint
-	e.fileInfo = nil
-	e.hash = other.hash
-}
-
 // Remove this entry.
 func (e *Entry) Remove() {
 	e.replica.markChanged()
