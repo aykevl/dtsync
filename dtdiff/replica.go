@@ -55,6 +55,7 @@ var (
 	ErrInvalidReplicaIndex    = errors.New("dtdiff: invalid or missing replica index in entry row")
 	ErrInvalidEntryGeneration = errors.New("dtdiff: invalid generation number in entry row")
 	ErrInvalidPath            = errors.New("dtdiff: invalid or missing path in entry row")
+	ErrInvalidFingerprint     = errors.New("dtdiff: invalid or missing fingerprint in entry row")
 	ErrExists                 = errors.New("dtdiff: already exists")
 	ErrSameIdentity           = errors.New("dtdiff: two replicas with the same ID")
 	ErrSameRoot               = errors.New("dtdiff: trying to synchronize the same directory")

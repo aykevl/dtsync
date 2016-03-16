@@ -140,6 +140,9 @@ func (e *Entry) addChild(name string, revReplica string, revGeneration int, fing
 		// duplicate path
 		return nil, ErrExists
 	}
+	if fingerprint == "" {
+		return nil, ErrInvalidFingerprint
+	}
 	newEntry := &Entry{
 		name:          name,
 		revReplica:    revReplica,
@@ -264,6 +267,10 @@ func (e *Entry) AddCopy(other *Entry) (*Entry, error) {
 // Update updates the revision if the file was changed. The file is not changed
 // if the fingerprint but not the hash changed.
 func (e *Entry) Update(fingerprint string, hash []byte) {
+	if fingerprint == "" {
+		// programming error
+		panic("invalid fingerprint")
+	}
 	if fingerprint != e.fingerprint {
 		e.replica.markMetaChanged()
 		e.fingerprint = fingerprint
