@@ -79,8 +79,22 @@ func Scan(fs1, fs2 tree.Tree) (*ReplicaSet, error) {
 						scanErrors[i] <- replica.scanDir(fs.Root(), replica.Root(), scanCancel[i])
 					}
 				}
+			case tree.RemoteTree:
+				reader, err := fs.RemoteScan()
+				if err != nil {
+					scanReplicas[i] <- nil
+					scanErrors[i] <- err
+				}
+				replica, err := loadReplica(reader)
+				if err != nil {
+					scanReplicas[i] <- nil
+					scanErrors[i] <- err
+				} else {
+					scanReplicas[i] <- replica
+					scanErrors[i] <- nil
+				}
 			default:
-				panic("tree does not implement tree.LocalFileTree")
+				panic("tree does not implement tree.LocalFileTree or tree.RemoteTree")
 			}
 		}(i)
 	}

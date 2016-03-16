@@ -49,11 +49,13 @@ import (
 // The type used for TYPE_* constants
 type Type int
 
-// Constants used as Type() return values
+// Constants used as Type() return values.
+//
+// See also: tree/remote/messages.proto
 const (
-	TYPE_REGULAR   Type = iota
-	TYPE_DIRECTORY Type = iota
-	TYPE_UNKNOWN   Type = iota
+	TYPE_UNKNOWN   Type = 0
+	TYPE_REGULAR   Type = 1
+	TYPE_DIRECTORY Type = 2
 )
 
 func (t Type) Char() string {

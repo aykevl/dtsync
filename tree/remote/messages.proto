@@ -1,0 +1,58 @@
+package remote;
+
+enum Command {
+	NONE    = 0; // must not be used
+	DATA    = 1;
+	SCAN    = 2;
+	MKDIR   = 3;
+	REMOVE  = 4;
+	GETFILE = 5;
+	SETFILE = 6;
+	CREATE  = 7;
+	UPDATE  = 8;
+	GETCONT = 9;  // only for testing
+	COPYSRC = 10;
+	ADDFILE = 11; // only for testing
+	SETCONT = 12; // only for testing
+	INFO    = 13; // only for testing
+}
+
+// See TYPE_* constants in tree/tree.go
+enum FileType {
+	UNKNOWN   = 0; // must not be used
+	REGULAR   = 1;
+	DIRECTORY = 2;
+}
+
+enum DataStatus {
+	NORMAL = 0; // still sending/receiving (optional)
+	FINISH = 1; // last block
+	CANCEL = 2; // there is an error
+}
+
+message FileInfo {
+	repeated string   path      = 1;
+	optional FileType type      = 2;
+	optional sint64   modTime   = 3;
+	optional sint64   size      = 4;
+	optional bytes    hash      = 5;
+}
+
+message Request {
+	optional Command    command    = 1; // required
+	optional uint64     requestId  = 2; // required
+	optional FileInfo   fileInfo1  = 3; // meaning depends on command
+	optional FileInfo   fileInfo2  = 4; // meaning depends on command
+	optional string     name       = 5;
+	optional bytes      data       = 6;
+	optional DataStatus status     = 7;
+}
+
+message Response {
+	optional Command  command    = 1; // optional, DATA if set
+	optional uint64   requestId  = 2; // required
+	optional string   error      = 3; // set on errors
+	optional FileInfo fileInfo   = 4;
+	optional FileInfo parentInfo = 5;
+	optional bytes    data       = 6;
+}

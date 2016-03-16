@@ -58,6 +58,12 @@ func newTestRoot(t *testing.T, scheme string) tree.TestTree {
 			t.Fatal("could not create test root:", err)
 		}
 		return root
+	case "remote-memory":
+		root, err := remote.TestClient()
+		if err != nil {
+			t.Fatal("could not create test client:", err)
+		}
+		return root
 	default:
 		t.Fatal("unknown scheme:", scheme)
 		return nil // keep the compiler happy
@@ -70,6 +76,10 @@ func removeTestRoots(t *testing.T, filesystems ...tree.TestTree) {
 			// Don't try to remove an in-memory filesystem.
 			continue
 		}
+		if _, ok := fs.(*remote.Client); ok {
+			// The remote client is also just a memory filesystem.
+			continue
+		}
 		_, err := fs.Remove(&tree.FileInfoStruct{})
 		if err != nil {
 			t.Error("could not remove test dir:", err)
@@ -78,7 +88,7 @@ func removeTestRoots(t *testing.T, filesystems ...tree.TestTree) {
 }
 
 func TestSync(t *testing.T) {
-	schemes := []string{"memory", "file"}
+	schemes := []string{"memory", "file", "remote-memory"}
 	for i, scheme1 := range schemes {
 		for j := i; j < len(schemes); j++ {
 			scheme2 := schemes[j]

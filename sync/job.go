@@ -199,6 +199,12 @@ func copyFile(fs1, fs2 tree.Tree, status1, statusParent2 *dtdiff.Entry) error {
 	if err != nil {
 		return err
 	}
+	if len(statusParent2.RelativePath()) > 0 {
+		err := statusParent2.ParseFingerprint()
+		if err != nil {
+			return err
+		}
+	}
 	if status1.Type() == tree.TYPE_DIRECTORY {
 		info, err := fs2.CreateDir(status1.Name(), statusParent2)
 		if err != nil {

@@ -78,6 +78,27 @@ type Replica struct {
 	ignore             []string // paths to ignore
 }
 
+func ScanTree(fs tree.LocalFileTree) (*Replica, error) {
+	var replica *Replica
+	file, err := fs.GetFile(STATUS_FILE)
+	if err == tree.ErrNotFound {
+		replica, err = loadReplica(nil)
+		if err != nil {
+			return nil, err
+		}
+	} else if err != nil {
+		return nil, err
+	} else {
+		replica, _ = loadReplica(file)
+	}
+
+	err = replica.scan(fs)
+	if err != nil {
+		return nil, err
+	}
+	return replica, nil
+}
+
 func loadReplica(file io.Reader) (*Replica, error) {
 	r := &Replica{
 		rootEntry: &Entry{
