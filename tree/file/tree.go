@@ -411,6 +411,20 @@ func (r *Tree) SetContents(path []string, contents []byte) (tree.FileInfo, error
 	return file.makeInfo(nil), fp.Sync()
 }
 
+// ReadInfo returns the FileInfo for the specified file.
+func (r *Tree) ReadInfo(path []string) (tree.FileInfo, error) {
+	file := &Entry{
+		root: r,
+		path: path,
+	}
+	st, err := os.Lstat(file.fullPath())
+	if err != nil {
+		return nil, err
+	}
+	file.st = st
+	return file.makeInfo(nil), nil
+}
+
 // validPath returns true if such a path is allowed as a file path (e.g. no null
 // bytes or directory separators in filenames).
 func validPath(path []string) bool {

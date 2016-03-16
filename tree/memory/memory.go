@@ -156,6 +156,16 @@ func (e *Entry) Info() (tree.FileInfo, error) {
 	return e.info(), nil
 }
 
+// ReadInfo returns the FileInfo for the specified file, or tree.ErrNotFound if
+// the file doesn't exist.
+func (e *Entry) ReadInfo(path []string) (tree.FileInfo, error) {
+	f := e.get(path)
+	if f == nil {
+		return nil, tree.ErrNotFound
+	}
+	return f.info(), nil
+}
+
 // List returns a list of directory entries for directories. It returns an error
 // when attempting to list something other than a directory.
 func (e *Entry) List() ([]tree.Entry, error) {

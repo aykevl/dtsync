@@ -103,8 +103,12 @@ func syncRoots(t *testing.T, scheme1, scheme2 string) {
 	if err != nil {
 		t.Error("could not save replica state:", err)
 	}
-	for _, fs := range []tree.TestTree{fs1, fs2} {
-		list, err := fs.(tree.LocalTree).Root().List()
+	for _, testFS := range []tree.TestTree{fs1, fs2} {
+		fs, ok := testFS.(tree.LocalTree)
+		if !ok {
+			continue
+		}
+		list, err := fs.Root().List()
 		if err != nil {
 			t.Errorf("could not get list for %s: %s", fs, err)
 		}
@@ -151,8 +155,11 @@ func syncRoots(t *testing.T, scheme1, scheme2 string) {
 			return err
 		}},
 		{"dir", ACTION_REMOVE, 1, func(fs tree.TestTree) error {
-			dir := getFile(fs, "dir")
-			_, err = fs.Remove(tree.NewFileInfo([]string{"dir"}, tree.TYPE_DIRECTORY, dir.ModTime(), 0, nil))
+			info, err := fs.ReadInfo([]string{"dir"})
+			if err != nil {
+				t.Fatalf("could not get info for dir: %s", err)
+			}
+			_, err = fs.Remove(info)
 			return err
 		}},
 	}
@@ -216,12 +223,11 @@ func applyTestCase(t *testing.T, fs tree.TestTree, tc testCase) {
 			t.Fatalf("could not set file contents to file %s: %s", tc.file, err)
 		}
 	case ACTION_REMOVE:
-		child := getFile(fs, tc.file)
-		info, err := child.Info()
+		info, err := fs.ReadInfo(strings.Split(tc.file, "/"))
 		assert(err)
 		_, err = fs.Remove(info)
 		if err != nil {
-			t.Fatalf("could not remove child %s (%s): %s", child, info, err)
+			t.Fatalf("could not remove file %s: %s: %s", tc.file, info, err)
 		}
 	default:
 		t.Fatalf("unknown action: %d", tc.action)
@@ -263,20 +269,32 @@ func runTestCaseSync(t *testing.T, tc *testCase, fs1, fs2 tree.TestTree, jobDire
 	}
 	replica1a := result.rs.Get(0)
 	replica2a := result.rs.Get(1)
-	if jobDirection == 1 {
-		if !replica1a.Changed() {
-			t.Errorf("replica 1 %s was not changed while test case was applied to the left side", replica1a)
+
+	// False if one (or both) of the trees is connected over a network.
+	localSync := true
+	for _, fs := range []tree.TestTree{fs1, fs2} {
+		if _, ok := fs.(tree.LocalTree); !ok {
+			localSync = false
 		}
-		if replica2a.Changed() {
-			t.Errorf("replica 2 %s was changed while test case was applied to the left side", replica2a)
-		}
-	} else {
-		if replica1a.Changed() {
-			t.Errorf("replica 1 %s was changed while test case was applied to the right side", replica1a)
-		}
-		if replica2a.Changed() == secondSync {
-			t.Errorf("replica 2 %s was changed? (=%s) while test case was applied to the right side", replica2a, replica2a.Changed())
-			panic("abc")
+	}
+
+	// Changed() works a bit different over a network connection.
+	if localSync {
+		if jobDirection == 1 {
+			if !replica1a.Changed() {
+				t.Errorf("replica 1 %s was not changed while test case was applied to the left side", replica1a)
+			}
+			if replica2a.Changed() {
+				t.Errorf("replica 2 %s was changed while test case was applied to the left side", replica2a)
+			}
+		} else {
+			if replica1a.Changed() {
+				t.Errorf("replica 1 %s was changed while test case was applied to the right side", replica1a)
+			}
+			if replica2a.Changed() == secondSync {
+				t.Errorf("replica 2 %s was changed? (=%s) while test case was applied to the right side", replica2a, replica2a.Changed())
+				panic("abc")
+			}
 		}
 	}
 
@@ -356,16 +374,18 @@ func runTestCaseSync(t *testing.T, tc *testCase, fs1, fs2 tree.TestTree, jobDire
 		}
 	}
 
-	list1, err := fs1.(tree.LocalTree).Root().List()
-	if err != nil {
-		t.Errorf("could not get list for %s: %s", fs1, err)
-	}
-	list2, err := fs2.(tree.LocalTree).Root().List()
-	if err != nil {
-		t.Errorf("could not get list for %s: %s", fs2, err)
-	}
-	if len(list1) != tc.fileCount || len(list2) != tc.fileCount {
-		t.Errorf("unexpected number of files after first sync (expected %d): fs1=%d fs2=%d", tc.fileCount, len(list1), len(list2))
+	if localSync {
+		list1, err := fs1.(tree.LocalTree).Root().List()
+		if err != nil {
+			t.Errorf("could not get list for %s: %s", fs1, err)
+		}
+		list2, err := fs2.(tree.LocalTree).Root().List()
+		if err != nil {
+			t.Errorf("could not get list for %s: %s", fs2, err)
+		}
+		if len(list1) != tc.fileCount || len(list2) != tc.fileCount {
+			t.Errorf("unexpected number of files after first sync (expected %d): fs1=%d fs2=%d", tc.fileCount, len(list1), len(list2))
+		}
 	}
 }
 
@@ -395,22 +415,6 @@ func runTestCaseScan(t *testing.T, tc *testCase, fs1, fs2 tree.TestTree, jobDire
 	return result
 }
 
-func getFile(fs tree.TestTree, relpath string) tree.Entry {
-	parts := strings.Split(relpath, "/")
-	file := fs.(tree.LocalTree).Root()
-	for _, name := range parts {
-		list, err := file.List()
-		assert(err)
-		for _, child := range list {
-			if child.Name() == name {
-				file = child
-				break
-			}
-		}
-	}
-	return file
-}
-
 func getEntriesExcept(parent tree.Entry, except string) []tree.Entry {
 	list, err := parent.List()
 	assert(err)
@@ -426,8 +430,18 @@ func getEntriesExcept(parent tree.Entry, except string) []tree.Entry {
 }
 
 func fsEqual(fs1, fs2 tree.TestTree) bool {
-	list1 := getEntriesExcept(fs1.(tree.LocalTree).Root(), dtdiff.STATUS_FILE)
-	list2 := getEntriesExcept(fs2.(tree.LocalTree).Root(), dtdiff.STATUS_FILE)
+	// If one isn't local, don't continue the test (assume it's okay).
+	localFS1, ok := fs1.(tree.LocalTree)
+	if !ok {
+		return true
+	}
+	localFS2, ok := fs2.(tree.LocalTree)
+	if !ok {
+		return true
+	}
+
+	list1 := getEntriesExcept(localFS1.Root(), dtdiff.STATUS_FILE)
+	list2 := getEntriesExcept(localFS2.Root(), dtdiff.STATUS_FILE)
 
 	if len(list1) != len(list2) {
 		return false

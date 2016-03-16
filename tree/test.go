@@ -42,6 +42,9 @@ type TestTree interface {
 	// FileInfo returned does not have to contain the hash.
 	AddRegular(path []string, contents []byte) (FileInfo, error)
 	SetContents(path []string, contents []byte) (FileInfo, error)
+
+	// Info returns the FileInfo for a particular path.
+	ReadInfo(path []string) (FileInfo, error)
 }
 
 // Generate a list of hashes (blake2b) to compare with the output of various
