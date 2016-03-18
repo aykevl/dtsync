@@ -46,7 +46,8 @@ import (
 
 // Errors defined by the remote package.
 var (
-	ErrNoClient        = errors.New("remote: this is not a client")
+	ErrNoClient        = errors.New("remote: this is not a dtsync client")
+	ErrNoServer        = errors.New("remote: this is not a dtsync server")
 	ErrInvalidId       = errors.New("remote: invalid request ID")
 	ErrInvalidRequest  = errors.New("remote: invalid request")
 	ErrInvalidPath     = errors.New("remote: invalid path")

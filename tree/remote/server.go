@@ -35,6 +35,7 @@ import (
 
 	"github.com/aykevl/dtsync/dtdiff"
 	"github.com/aykevl/dtsync/tree"
+	"github.com/aykevl/dtsync/version"
 	"github.com/golang/protobuf/proto"
 )
 
@@ -74,6 +75,13 @@ func NewServer(r io.ReadCloser, w io.WriteCloser, fs tree.LocalFileTree) *Server
 func (s *Server) Run() error {
 	r := bufio.NewReader(s.reader)
 	w := bufio.NewWriter(s.writer)
+
+	w.WriteString("dtsync server: " + version.VERSION + "\n")
+	err := w.Flush()
+	if err != nil {
+		return err
+	}
+
 	line, err := r.ReadString('\n')
 	if err != nil {
 		return err

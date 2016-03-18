@@ -31,6 +31,7 @@ package remote
 import (
 	"bufio"
 	"io"
+	"strings"
 
 	"github.com/aykevl/dtsync/tree"
 	"github.com/aykevl/dtsync/version"
@@ -85,13 +86,25 @@ func NewClient(r io.ReadCloser, w io.WriteCloser) (*Client, error) {
 		w:           w,
 		closeWait:   make(chan struct{}),
 	}
+
+	reader := bufio.NewReader(r)
 	writer := bufio.NewWriter(w)
+
 	writer.WriteString("dtsync client: " + version.VERSION + "\n")
 	err := writer.Flush()
 	if err != nil {
 		return nil, err
 	}
-	go c.run(bufio.NewReader(r), writer)
+
+	line, err := reader.ReadString('\n')
+	if err != nil {
+		return nil, err
+	}
+	if !strings.HasPrefix(line, "dtsync server: ") {
+		return nil, ErrNoServer
+	}
+
+	go c.run(reader, writer)
 	return c, nil
 }
 
