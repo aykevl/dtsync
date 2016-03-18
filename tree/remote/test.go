@@ -29,7 +29,7 @@
 package remote
 
 import (
-	"io"
+	"os"
 
 	"github.com/aykevl/dtsync/tree/memory"
 )
@@ -39,8 +39,16 @@ import (
 func TestClient() (*Client, error) {
 	memoryFS := memory.NewRoot()
 
-	clientReader, serverWriter := io.Pipe()
-	serverReader, clientWriter := io.Pipe()
+	// Use os.Pipe, not io.Pipe, as os.Pipe provides buffering (and looks more
+	// like a network connection).
+	clientReader, serverWriter, err := os.Pipe()
+	if err != nil {
+		return nil, err
+	}
+	serverReader, clientWriter, err := os.Pipe()
+	if err != nil {
+		return nil, err
+	}
 
 	server := NewServer(serverReader, serverWriter, memoryFS)
 	go func() {
