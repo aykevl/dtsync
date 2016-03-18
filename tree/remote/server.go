@@ -50,8 +50,8 @@ type replyResponse struct {
 // Server is an instance of the server side of a dtsync connection. It receives
 // commands and processes them, but does not initiate anything.
 type Server struct {
-	w         *bufio.Writer
-	r         *bufio.Reader
+	reader    io.ReadCloser
+	writer    io.WriteCloser
 	fs        tree.LocalFileTree
 	replyChan chan replyResponse
 }
@@ -59,10 +59,10 @@ type Server struct {
 // NewServer returns a *Server for the given reader, writer, and filesystem
 // tree. It does not start communication: start .Run() in a separate goroutine
 // for that.
-func NewServer(r io.Reader, w io.Writer, fs tree.LocalFileTree) *Server {
+func NewServer(r io.ReadCloser, w io.WriteCloser, fs tree.LocalFileTree) *Server {
 	s := &Server{
-		w:         bufio.NewWriter(w),
-		r:         bufio.NewReader(r),
+		reader:    r,
+		writer:    w,
 		fs:        fs,
 		replyChan: make(chan replyResponse), // may not be buffered for synchronisation
 	}
@@ -72,7 +72,9 @@ func NewServer(r io.Reader, w io.Writer, fs tree.LocalFileTree) *Server {
 // Run runs in a goroutine, until the server experiences a fatal (connection)
 // error. It is used to handle concurrent requests and responses.
 func (s *Server) Run() error {
-	line, err := s.r.ReadString('\n')
+	r := bufio.NewReader(s.reader)
+	w := bufio.NewWriter(s.writer)
+	line, err := r.ReadString('\n')
 	if err != nil {
 		return err
 	}
@@ -83,19 +85,29 @@ func (s *Server) Run() error {
 	recvStreams := make(map[uint64]chan []byte)
 
 	readChan := make(chan receivedData)
-	go runReceiver(s.r, readChan)
+	go runReceiver(r, readChan)
 
 	// TODO: some goroutines might hang after returning an error
 
 	for {
 		select {
 		case reply := <-s.replyChan:
-			err := s.doReply(reply)
+			err := s.doReply(w, reply)
 			if err != nil {
 				return err
 			}
 		case recv := <-readChan:
 			if recv.err != nil {
+				if recv.err == io.EOF {
+					debugLog("S: CLOSING")
+					// Closing an already-closed pipe might give errors (but we
+					// don't know, so ignore).
+					err2 := s.reader.Close()
+					if err2 != nil {
+						debugLog("S: error on reader close:", err2)
+					}
+					return s.writer.Close()
+				}
 				return recv.err
 			}
 			msg := &Request{}
@@ -108,7 +120,7 @@ func (s *Server) Run() error {
 			}
 			debugLog("S: recv command", *msg.RequestId, Command_name[int32(*msg.Command)])
 			if err := s.handleRequest(msg, recvStreams); err != nil {
-				if err2 := s.doReply(replyResponse{*msg.RequestId, nil, err}); err2 != nil {
+				if err2 := s.doReply(w, replyResponse{*msg.RequestId, nil, err}); err2 != nil {
 					// Error while sending an error reply.
 					return err2
 				}
@@ -206,7 +218,7 @@ func (s *Server) handleRequest(msg *Request, recvStreams map[uint64]chan []byte)
 }
 
 // doReply writes the Response to the pipe.
-func (s *Server) doReply(reply replyResponse) error {
+func (s *Server) doReply(w *bufio.Writer, reply replyResponse) error {
 	requestId := reply.requestId
 	var msg *Response
 	if reply.msg != nil {
@@ -230,9 +242,9 @@ func (s *Server) doReply(reply replyResponse) error {
 		return err
 	}
 
-	s.w.Write(proto.EncodeVarint(uint64(len(buf))))
-	s.w.Write(buf)
-	return s.w.Flush()
+	w.Write(proto.EncodeVarint(uint64(len(buf))))
+	w.Write(buf)
+	return w.Flush()
 }
 
 // replyError is a shorthand for sending an error to the client.

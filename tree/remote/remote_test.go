@@ -36,17 +36,41 @@ import (
 )
 
 func TestRemote(t *testing.T) {
-	fs1, err := TestClient()
-	if err != nil {
-		t.Fatal("could not make test client:", err)
+	var fsList [2]*Client
+	for i, _ := range fsList {
+		var err error
+		fsList[i], err = TestClient()
+		if err != nil {
+			t.Fatal("could not make test client:", err)
+		}
+		defer func() {
+			fs := fsList[i]
+			if fs == nil {
+				// already closed
+				return
+			}
+			err := fs.Close()
+			if err != nil {
+				t.Fatal("could not close test client:", err)
+			} else {
+				t.Log("closed server")
+			}
+		}()
 	}
-	fs2, err := TestClient()
-	if err != nil {
-		t.Fatal("could not make test client:", err)
-	}
+	fs1 := fsList[0]
+	fs2 := fsList[1]
 	fsCheck := memory.NewRoot()
+
 	tree.TreeTest(t, fs1, fsCheck)
 	tree.TreeTest(t, fsCheck, fs1)
 	tree.TreeTest(t, fs1, fs2)
 	tree.TreeTest(t, fs2, fs1)
+
+	for i, fs := range fsList {
+		err := fs.Close()
+		fsList[i] = nil
+		if err != nil {
+			t.Error("could not close test client:", err)
+		}
+	}
 }

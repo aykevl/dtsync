@@ -2,19 +2,24 @@ package remote;
 
 enum Command {
 	NONE    = 0; // must not be used
-	DATA    = 1;
-	SCAN    = 2;
-	MKDIR   = 3;
-	REMOVE  = 4;
-	GETFILE = 5;
-	SETFILE = 6;
-	CREATE  = 7;
-	UPDATE  = 8;
-	GETCONT = 9;  // only for testing
-	COPYSRC = 10;
-	ADDFILE = 11; // only for testing
-	SETCONT = 12; // only for testing
-	INFO    = 13; // only for testing
+	CLOSE   = 1; // unused
+	DATA    = 2;
+	SCAN    = 3;
+
+	MKDIR   = 10;
+	REMOVE  = 11;
+	CREATE  = 14;
+	UPDATE  = 15;
+	COPYSRC = 16;
+
+	GETFILE = 20;
+	SETFILE = 21;
+
+	// testing commands
+	GETCONT = 30;
+	ADDFILE = 31;
+	SETCONT = 32;
+	INFO    = 33;
 }
 
 // See TYPE_* constants in tree/tree.go

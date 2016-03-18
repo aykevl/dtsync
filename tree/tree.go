@@ -86,6 +86,10 @@ var (
 // (filesystem, sftp, remote filesystem, mtp, etc.). It may even be possible to
 // use it for very different trees, e.g. browser bookmark trees.
 type Tree interface {
+	// Close clears all resources allocated for this tree, if any. For example,
+	// it closes a network connection.
+	Close() error
+
 	// mkdir: create a directory in this directory with the given name. The
 	// modification time is unknown and will likely be the current time.
 	CreateDir(name string, parent FileInfo) (FileInfo, error)

@@ -151,6 +151,9 @@ func runReceiver(reader *bufio.Reader, readChan chan receivedData) {
 		buf := make([]byte, length)
 		_, err = io.ReadFull(reader, buf)
 		if err != nil {
+			if err == io.EOF {
+				err = io.ErrUnexpectedEOF
+			}
 			readChan <- receivedData{nil, err}
 			break
 		}

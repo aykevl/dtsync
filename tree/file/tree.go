@@ -87,6 +87,11 @@ func (r *Tree) String() string {
 	return "file.Tree(" + r.path + ")"
 }
 
+// Close does nothing: no files or directories are (currently) kept open.
+func (r *Tree) Close() error {
+	return nil
+}
+
 func (r *Tree) Root() tree.Entry {
 	return r.root
 }

@@ -72,14 +72,18 @@ type recvBlock struct {
 type Client struct {
 	sendRequest chan roundtripRequest
 	sendBlocks  chan sendBlock
+	w           io.WriteCloser
+	closeWait   chan struct{}
 }
 
 // NewClient writes the connection header and returns a new *Client. It also
 // starts a background goroutine to synchronize requests and responses.
-func NewClient(r io.Reader, w io.Writer) (*Client, error) {
+func NewClient(r io.ReadCloser, w io.WriteCloser) (*Client, error) {
 	c := &Client{
 		sendRequest: make(chan roundtripRequest),
 		sendBlocks:  make(chan sendBlock),
+		w:           w,
+		closeWait:   make(chan struct{}),
 	}
 	writer := bufio.NewWriter(w)
 	writer.WriteString("dtsync client: " + version.VERSION + "\n")
@@ -179,6 +183,11 @@ func (c *Client) run(r *bufio.Reader, w *bufio.Writer) {
 
 		case data := <-readChan:
 			if data.err != nil {
+				if data.err == io.EOF {
+					close(c.closeWait) // all reads will continue immediately
+					return
+				}
+				debugLog("C: read err:", data.err)
 				// All following request will return this error.
 				pipeErr = data.err
 				// TODO: close all open requests, with this error.
@@ -228,6 +237,18 @@ func (c *Client) run(r *bufio.Reader, w *bufio.Writer) {
 			}
 		}
 	}
+}
+
+// Close closes the connection, terminating the background goroutines.
+func (c *Client) Close() error {
+	debugLog("\nC: Close")
+
+	err := c.w.Close()
+	if err != nil {
+		return err
+	}
+	<-c.closeWait
+	return nil
 }
 
 // RemoteScan runs a remote scan command and returns an io.Reader with the new

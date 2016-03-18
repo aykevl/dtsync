@@ -46,9 +46,11 @@ func TestClient() (*Client, error) {
 	go func() {
 		err := server.Run()
 		if err != nil {
-			// TODO: use a more graceful error here. For some reason, it looks
-			// like calling t.Fatal() from a goroutine isn't supported.
+			// TODO: use a more graceful error here. Calling t.Fatal() from a
+			// goroutine isn't supported.
 			panic("error while running server: " + err.Error())
+		} else {
+			debugLog("S: CLOSED")
 		}
 	}()
 

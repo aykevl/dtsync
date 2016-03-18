@@ -62,6 +62,12 @@ func (e *Entry) String() string {
 	return "memory.Entry(" + e.name + ")"
 }
 
+// Close does nothing: there are no resources allocated that won't be collected
+// by the garbage collector.
+func (e *Entry) Close() error {
+	return nil
+}
+
 func (e *Entry) root() *Entry {
 	root := e
 	for root.parent != nil {
