@@ -123,12 +123,18 @@ func (s *Server) Run() error {
 			if err != nil {
 				return err
 			}
+			var err error
+			var requestId uint64
 			if msg.Command == nil || msg.RequestId == nil {
-				return ErrInvalidRequest
+				// send error to requestId 0
+				err = invalidRequest{"command or requestId not set"}
+			} else {
+				requestId = *msg.RequestId
+				debugLog("S: recv command", requestId, Command_name[int32(*msg.Command)])
+				err = s.handleRequest(msg, recvStreams)
 			}
-			debugLog("S: recv command", *msg.RequestId, Command_name[int32(*msg.Command)])
-			if err := s.handleRequest(msg, recvStreams); err != nil {
-				if err2 := s.doReply(w, replyResponse{*msg.RequestId, nil, err}); err2 != nil {
+			if err != nil {
+				if err2 := s.doReply(w, replyResponse{requestId, nil, err}); err2 != nil {
 					// Error while sending an error reply.
 					return err2
 				}
@@ -141,8 +147,11 @@ func (s *Server) handleRequest(msg *Request, recvStreams map[uint64]chan []byte)
 	switch *msg.Command {
 	case Command_DATA:
 		stream, ok := recvStreams[*msg.RequestId]
-		if !ok || msg.GetStatus() < DataStatus_NORMAL || msg.GetStatus() > DataStatus_CANCEL {
-			return ErrInvalidRequest
+		if !ok {
+			return invalidRequest{"unknown stream"}
+		}
+		if msg.GetStatus() < DataStatus_NORMAL || msg.GetStatus() > DataStatus_CANCEL {
+			return invalidRequest{"DataStatus is outside range NORMAL-CANCEL"}
 		}
 		if msg.Data != nil {
 			stream <- msg.Data
@@ -164,31 +173,34 @@ func (s *Server) handleRequest(msg *Request, recvStreams map[uint64]chan []byte)
 	case Command_MKDIR:
 		// Client wants to create a directory.
 		if msg.FileInfo1 == nil || msg.Name == nil {
-			return ErrInvalidRequest
+			return invalidRequest{"MKDIR expects fileInfo1 and name fields"}
 		}
 		go s.mkdir(*msg.RequestId, *msg.Name, msg.FileInfo1)
 	case Command_REMOVE:
 		// Client wants to create a directory.
 		if msg.FileInfo1 == nil || msg.FileInfo1.Path == nil || msg.FileInfo1.Type == nil {
-			return ErrInvalidRequest
+			return invalidRequest{"REMOVE expects fileInfo1 with path and type"}
 		}
 		go s.remove(*msg.RequestId, msg.FileInfo1)
 	case Command_GETFILE:
-		if msg.FileInfo1 == nil || len(msg.FileInfo1.Path) != 1 {
-			return ErrInvalidRequest
+		if msg.Name == nil {
+			return invalidRequest{"GETFILE expects name field"}
 		}
-		go s.getFile(*msg.RequestId, msg.FileInfo1.Path[0])
+		go s.getFile(*msg.RequestId, *msg.Name)
 	case Command_SETFILE:
-		if msg.FileInfo1 == nil || msg.FileInfo1.Path == nil {
-			return ErrInvalidRequest
+		if msg.Name == nil {
+			return invalidRequest{"SETFILE expects name field"}
 		}
 		dataChan := make(chan []byte, 1)
-		go s.setFile(*msg.RequestId, msg.FileInfo1.Path, dataChan)
+		go s.setFile(*msg.RequestId, *msg.Name, dataChan)
 		recvStreams[*msg.RequestId] = dataChan
 	case Command_CREATE, Command_UPDATE:
 		// Client wants to write a file.
-		if msg.FileInfo1 == nil || msg.FileInfo2 == nil || (*msg.Command == Command_CREATE && msg.Name == nil) {
-			return ErrInvalidRequest
+		if msg.FileInfo1 == nil || msg.FileInfo2 == nil {
+			return invalidRequest{"CREATE/UPDATE expects fileInfo1 and fileInfo2"}
+		}
+		if *msg.Command == Command_CREATE && msg.Name == nil {
+			return invalidRequest{"CREATE expects name to be set"}
 		}
 		dataChan := make(chan []byte, 1)
 		recvStreams[*msg.RequestId] = dataChan
@@ -201,26 +213,26 @@ func (s *Server) handleRequest(msg *Request, recvStreams map[uint64]chan []byte)
 		// Client requests a file.
 		if msg.FileInfo1 == nil || msg.FileInfo1.Type == nil || msg.FileInfo1.Path == nil ||
 			msg.FileInfo1.ModTime == nil || msg.FileInfo1.Size == nil {
-			return ErrInvalidRequest
+			return invalidRequest{"COPYSRC expects fileInfo1 with type, path, modTime and size fields"}
 		}
 		go s.copySource(*msg.RequestId, msg.FileInfo1)
 	case Command_ADDFILE:
 		if msg.FileInfo1 == nil || msg.FileInfo1.Path == nil || msg.Data == nil {
-			return ErrInvalidRequest
+			return invalidRequest{"ADDFILE expects fileInfo1 with path and data"}
 		}
 		go s.addFile(*msg.RequestId, msg.FileInfo1.Path, msg.Data)
 	case Command_SETCONT:
 		if msg.FileInfo1 == nil || msg.FileInfo1.Path == nil || msg.Data == nil {
-			return ErrInvalidRequest
+			return invalidRequest{"SETCONT expects fileInfo1 with path and data"}
 		}
 		go s.setContents(*msg.RequestId, msg.FileInfo1.Path, msg.Data)
 	case Command_INFO:
 		if msg.FileInfo1 == nil || msg.FileInfo1.Path == nil {
-			return ErrInvalidRequest
+			return invalidRequest{"INFO expects fileInfo1 with path"}
 		}
 		go s.readInfo(*msg.RequestId, msg.FileInfo1.Path)
 	default:
-		return ErrInvalidRequest
+		return invalidRequest{"unknown command"}
 	}
 	return nil
 }
@@ -260,19 +272,14 @@ func (s *Server) replyError(requestId uint64, err error) {
 	s.replyChan <- replyResponse{requestId, nil, err}
 }
 
-func (s *Server) setFile(requestId uint64, path []string, dataChan chan []byte) {
+func (s *Server) setFile(requestId uint64, name string, dataChan chan []byte) {
 	defer func() {
 		// Drain the dataChan (on errors), so the receiver won't block there.
 		for _ = range dataChan {
 		}
 	}()
 
-	if len(path) != 1 {
-		s.replyError(requestId, ErrInvalidPath)
-		return
-	}
-
-	writer, err := s.fs.SetFile(path[0])
+	writer, err := s.fs.SetFile(name)
 	if err != nil {
 		s.replyError(requestId, err)
 		return

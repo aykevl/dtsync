@@ -311,9 +311,7 @@ func (c *Client) GetFile(name string) (io.ReadCloser, error) {
 	command := Command_GETFILE
 	return c.recvFile(&Request{
 		Command: &command,
-		FileInfo1: &FileInfo{
-			Path: []string{name},
-		},
+		Name: &name,
 	})
 }
 
@@ -322,9 +320,7 @@ func (c *Client) SetFile(name string) (io.WriteCloser, error) {
 	command := Command_SETFILE
 	request := &Request{
 		Command: &command,
-		FileInfo1: &FileInfo{
-			Path: []string{name},
-		},
+		Name: &name,
 	}
 	reader, writer := io.Pipe()
 	ch := c.handleReply(request, reader, nil)

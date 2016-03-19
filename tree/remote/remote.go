@@ -49,7 +49,6 @@ var (
 	ErrNoClient        = errors.New("remote: this is not a dtsync client")
 	ErrNoServer        = errors.New("remote: this is not a dtsync server")
 	ErrInvalidId       = errors.New("remote: invalid request ID")
-	ErrInvalidRequest  = errors.New("remote: invalid request")
 	ErrInvalidPath     = errors.New("remote: invalid path")
 	ErrInvalidResponse = errors.New("remote: invalid response")
 	ErrNoTests         = errors.New("remote: this is not a test tree")
@@ -61,6 +60,14 @@ type RemoteError struct {
 
 func (e RemoteError) Error() string {
 	return "remote error: " + e.message
+}
+
+type invalidRequest struct {
+	message string
+}
+
+func (e invalidRequest) Error() string {
+	return "invalid request: " + e.message
 }
 
 func remoteError(message string) error {
