@@ -263,7 +263,7 @@ func (s *Server) replyError(requestId uint64, err error) {
 func (s *Server) setFile(requestId uint64, path []string, dataChan chan []byte) {
 	defer func() {
 		// Drain the dataChan (on errors), so the receiver won't block there.
-		for range dataChan {
+		for _ = range dataChan {
 		}
 	}()
 
@@ -390,7 +390,7 @@ func (s *Server) handleCopier(requestId uint64, dataChan chan []byte, cp tree.Co
 
 	// Drain channel when there are errors.
 	defer func() {
-		for range dataChan {
+		for _ = range dataChan {
 		}
 	}()
 
