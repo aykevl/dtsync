@@ -81,7 +81,7 @@ type Replica struct {
 func ScanTree(fs tree.LocalFileTree, recvOptionsChan, sendOptionsChan chan tree.ScanOptions) (*Replica, error) {
 	var replica *Replica
 	file, err := fs.GetFile(STATUS_FILE)
-	if err == tree.ErrNotFound {
+	if tree.IsNotExist(err) {
 		replica, err = loadReplica(nil)
 		if err != nil {
 			return nil, err

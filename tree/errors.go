@@ -30,6 +30,7 @@ package tree
 
 import (
 	"errors"
+	"os"
 )
 
 // Error codes that can be used by any filesystem implementation.
@@ -50,6 +51,9 @@ func IsNotExist(err error) bool {
 		return false
 	}
 	if err == ErrNotFound {
+		return true
+	}
+	if os.IsNotExist(err) {
 		return true
 	}
 	return false

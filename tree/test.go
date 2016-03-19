@@ -125,7 +125,7 @@ func TreeTest(t Tester, fs1, fs2 TestTree) {
 		_, err := fs1.CreateFile("file.txt", &FileInfoStruct{}, info2)
 		if err == nil {
 			t.Error("file.txt was overwritten with CreateFile")
-		} else if err != ErrFound {
+		} else if !IsExist(err) {
 			t.Error("failed to try to overwrite file.txt with CreateFile:", err)
 		}
 
@@ -140,7 +140,7 @@ func TreeTest(t Tester, fs1, fs2 TestTree) {
 		_, err = fs1.UpdateFile(info, info2)
 		if err == nil {
 			t.Error("file-notexists.txt was created with UpdateFile")
-		} else if err != ErrNotFound {
+		} else if !IsNotExist(err) {
 			t.Error("failed to try to create file.txt with UpdateFile:", err)
 		}
 

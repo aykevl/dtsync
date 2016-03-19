@@ -59,14 +59,14 @@ func Scan(fs1, fs2 tree.Tree) (*ReplicaSet, error) {
 			switch fs := trees[i].(type) {
 			case tree.LocalFileTree:
 				file, err := fs.GetFile(STATUS_FILE)
-				if err != nil && err != tree.ErrNotFound {
+				if err != nil && !tree.IsNotExist(err) {
 					scanErrors[i] <- err
 					return
 				}
 
 				var replica *Replica
 				var ignore []string
-				if err == tree.ErrNotFound {
+				if tree.IsNotExist(err) {
 					// loadReplica doesn't return errors when creating a new
 					// replica.
 					replica, _ = loadReplica(nil)

@@ -52,11 +52,7 @@ func NewRoot(rootPath string) (*Tree, error) {
 	// Check that the path exists and is a directory.
 	st, err := os.Lstat(rootPath)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, tree.ErrNotFound
-		} else {
-			return nil, err
-		}
+		return nil, err
 	}
 	if !st.IsDir() {
 		return nil, tree.ErrNoDirectory
@@ -230,11 +226,7 @@ func (e *Entry) removeSelf() error {
 func (r *Tree) GetFile(name string) (io.ReadCloser, error) {
 	fp, err := os.Open(filepath.Join(r.path, name))
 	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, tree.ErrNotFound
-		} else {
-			return nil, err
-		}
+		return nil, err
 	}
 	return fp, nil
 }
@@ -290,9 +282,6 @@ func (r *Tree) UpdateFile(file, source tree.FileInfo) (tree.Copier, error) {
 
 	st, err := os.Lstat(e.fullPath())
 	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, tree.ErrNotFound
-		}
 		return nil, err
 	}
 	e.st = st
@@ -331,9 +320,6 @@ func (e *Entry) replaceFile(source tree.FileInfo, hash hash.Hash, update bool) (
 			// expected.
 			_, err := os.Lstat(e.fullPath())
 			if update && err != nil {
-				if os.IsNotExist(err) {
-					return nil, nil, tree.ErrNotFound
-				}
 				return nil, nil, err
 			}
 			if !update {
@@ -453,9 +439,6 @@ func (r *Tree) ReadInfo(path []string) (tree.FileInfo, error) {
 	}
 	st, err := os.Lstat(file.fullPath())
 	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, tree.ErrNotFound
-		}
 		return nil, err
 	}
 	file.st = st
