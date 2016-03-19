@@ -236,17 +236,21 @@ func (c *Client) run(r *bufio.Reader, w *bufio.Writer) {
 					continue
 				}
 				delete(inflight, *msg.RequestId)
-				if streamChan, ok := recvStreams[*msg.RequestId]; ok {
-					close(streamChan)
-					delete(recvStreams, *msg.RequestId)
-				}
 
 				if msg.Error != nil {
 					if stream, ok := recvStreams[*msg.RequestId]; ok {
 						stream <- recvBlock{*msg.RequestId, nil, remoteError(*msg.Error)}
 					}
+
+					replyChan <- roundtripResponse{nil, RemoteError{*msg.Error}}
+				} else {
+					replyChan <- roundtripResponse{msg, nil}
 				}
-				replyChan <- roundtripResponse{msg, nil}
+
+				if streamChan, ok := recvStreams[*msg.RequestId]; ok {
+					close(streamChan)
+					delete(recvStreams, *msg.RequestId)
+				}
 			}
 		}
 	}
@@ -552,6 +556,7 @@ func (c *Client) handleReply(request *Request, sendStream *io.PipeReader, recvSt
 					err := <-sendFinished
 					if err != nil {
 						returnChan <- roundtripResponse{nil, err}
+						return
 					}
 				}
 
@@ -559,12 +564,10 @@ func (c *Client) handleReply(request *Request, sendStream *io.PipeReader, recvSt
 					err := <-recvFinished
 					if err != nil {
 						returnChan <- roundtripResponse{nil, err}
+						return
 					}
 				}
 
-				if respData.resp != nil && respData.resp.Error != nil {
-					returnChan <- roundtripResponse{nil, RemoteError{*respData.resp.Error}}
-				}
 				returnChan <- respData
 				return
 			case err := <-sendFinished:
