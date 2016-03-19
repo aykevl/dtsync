@@ -35,15 +35,12 @@ package tree
 import (
 	"bytes"
 	"errors"
-	"hash"
 	"io"
 	"io/ioutil"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/codahale/blake2"
 )
 
 // The type used for TYPE_* constants
@@ -461,11 +458,6 @@ func Equal(file1, file2 Entry, includeDirModTime bool) (bool, error) {
 	default:
 		panic("unknown fileType")
 	}
-}
-
-// NewHash returns the hashing function used by interfaces implementing Entry.
-func NewHash() hash.Hash {
-	return blake2.New(&blake2.Config{Size: 32})
 }
 
 // Copier is returned by the Copy and Update methods. Calling Finish() closes
