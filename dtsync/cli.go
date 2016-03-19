@@ -193,7 +193,14 @@ func editJobs(result *sync.Result, root1, root2 string) bool {
 	return true
 }
 
+func usage() {
+	fmt.Fprintf(os.Stderr, "Usage: %s [options] <dir1> <dir2>\n", os.Args[0])
+	fmt.Fprintf(os.Stderr, "Options:\n")
+	flag.PrintDefaults()
+}
+
 func main() {
+	flag.Usage = usage
 	flag.Parse()
 
 	if *cpuprofile != "" {
@@ -229,7 +236,7 @@ func main() {
 	}
 
 	if flag.NArg() != 2 {
-		fmt.Fprintf(os.Stderr, "Provide exactly two directories on the command line (got %d).\n", flag.NArg())
+		usage()
 		return
 	}
 
