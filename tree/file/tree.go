@@ -276,7 +276,7 @@ func (r *Tree) CreateFile(name string, parent, source tree.FileInfo) (tree.Copie
 		return nil, err
 	}
 
-	return child.replaceFile(source, tree.NewHash())
+	return child.replaceFile(source, tree.NewHash(), false)
 }
 
 // UpdateFile replaces itself, to implement tree.FileEntry. This function is
@@ -288,7 +288,6 @@ func (r *Tree) UpdateFile(file, source tree.FileInfo) (tree.Copier, error) {
 
 	e := r.entryFromPath(file.RelativePath())
 
-	// TODO: maybe we should repeat this check when the copy/update is finished?
 	st, err := os.Lstat(e.fullPath())
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -301,12 +300,12 @@ func (r *Tree) UpdateFile(file, source tree.FileInfo) (tree.Copier, error) {
 		return nil, tree.ErrChanged
 	}
 
-	return e.replaceFile(source, tree.NewHash())
+	return e.replaceFile(source, tree.NewHash(), true)
 }
 
 // replaceFile replaces the current file without checking for a type. Used by
 // CreateFile and UpdateFile.
-func (e *Entry) replaceFile(source tree.FileInfo, hash hash.Hash) (tree.Copier, error) {
+func (e *Entry) replaceFile(source tree.FileInfo, hash hash.Hash, update bool) (tree.Copier, error) {
 	tempPath := filepath.Join(e.parentPath(), TEMPPREFIX+e.Name()+TEMPSUFFIX)
 	fp, err := os.Create(tempPath)
 	if err != nil {
@@ -327,6 +326,24 @@ func (e *Entry) replaceFile(source tree.FileInfo, hash hash.Hash) (tree.Copier, 
 					return nil, nil, err
 				}
 			}
+
+			// Test again whether the file indeed exists or not exists as
+			// expected.
+			_, err := os.Lstat(e.fullPath())
+			if update && err != nil {
+				if os.IsNotExist(err) {
+					return nil, nil, tree.ErrNotFound
+				}
+				return nil, nil, err
+			}
+			if !update {
+				if err == nil {
+					return nil, nil, tree.ErrFound
+				} else if !os.IsNotExist(err) {
+					return nil, nil, err
+				}
+			}
+
 			err = os.Rename(tempPath, e.fullPath())
 			if err != nil {
 				return nil, nil, err
