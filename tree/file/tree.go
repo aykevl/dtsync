@@ -291,6 +291,9 @@ func (r *Tree) UpdateFile(file, source tree.FileInfo) (tree.Copier, error) {
 	// TODO: maybe we should repeat this check when the copy/update is finished?
 	st, err := os.Lstat(e.fullPath())
 	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, tree.ErrNotFound
+		}
 		return nil, err
 	}
 	e.st = st

@@ -129,7 +129,22 @@ func TreeTest(t Tester, fs1, fs2 TestTree) {
 		}
 
 		if root2 != nil && !testEqual(t, root1, root2) {
-			t.Error("root1 is not equal to root2 after CreateFile+Cancel")
+			t.Error("root1 is not equal to root2 after CreateFile (try to overwrite)")
+		}
+
+		// Try updating a file that doesn't exist.
+		info := &FileInfoStruct{
+			path: []string{"file-notexists.txt"},
+		}
+		_, err = fs1.UpdateFile(info, info2)
+		if err == nil {
+			t.Error("file-notexists.txt was created with UpdateFile")
+		} else if err != ErrNotFound {
+			t.Error("failed to try to create file.txt with UpdateFile:", err)
+		}
+
+		if root2 != nil && !testEqual(t, root1, root2) {
+			t.Error("root1 is not equal to root2 after UpdateFile (try to create)")
 		}
 	}
 
