@@ -34,7 +34,6 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"net/textproto"
 	"os"
 	"os/exec"
 	"runtime/pprof"
@@ -131,10 +130,10 @@ func editJobs(result *sync.Result, root1, root2 string) bool {
 		return false
 	}
 	defer readTmpFile.Close()
-	reader := textproto.NewReader(bufio.NewReader(readTmpFile))
+	reader := bufio.NewReader(readTmpFile)
 	parseError := false
 	for {
-		line, err := reader.ReadLine()
+		line, err := reader.ReadString('\n')
 		if err != nil {
 			if err != io.EOF {
 				fmt.Fprintf(os.Stderr, "Could not read from temporary file after editing: %s\n", err)
@@ -142,6 +141,7 @@ func editJobs(result *sync.Result, root1, root2 string) bool {
 			}
 			break
 		}
+		line = line[:len(line)-1]
 		if line == "" || line[0] == '#' {
 			continue
 		}
