@@ -270,7 +270,7 @@ func (c *Client) run(r *bufio.Reader, w *bufio.Writer) {
 						stream <- recvBlock{*msg.RequestId, nil, remoteError(*msg.Error)}
 					}
 
-					replyChan <- roundtripResponse{nil, RemoteError{*msg.Error}}
+					replyChan <- roundtripResponse{nil, remoteError(*msg.Error)}
 				} else {
 					replyChan <- roundtripResponse{msg, nil}
 				}
@@ -416,7 +416,6 @@ func (c *Client) CreateFile(name string, parent, source tree.FileInfo) (tree.Cop
 
 func (c *Client) UpdateFile(file, source tree.FileInfo) (tree.Copier, error) {
 	debugLog("\nC: UpdateFile")
-	// TODO: merge with CreateFile
 	command := Command_UPDATE
 	request := &Request{
 		Command:   &command,
@@ -432,19 +431,20 @@ func (c *Client) handleFileSend(request *Request) (tree.Copier, error) {
 	ch := c.handleReply(request, reader, nil)
 
 	cp := &copier{
-		w:              writer,
-		fileInfoChan:   make(chan tree.FileInfo),
-		parentInfoChan: make(chan tree.FileInfo),
+		w:    writer,
+		done: make(chan struct{}),
 	}
 
 	go func() {
+		defer close(cp.done)
 		respData := <-ch
 		resp, err := respData.resp, respData.err
 		if err != nil {
 			cp.setError(err)
+			return
 		}
-		cp.fileInfoChan <- parseFileInfo(resp.FileInfo)
-		cp.parentInfoChan <- parseFileInfo(resp.ParentInfo)
+		cp.fileInfo = parseFileInfo(resp.FileInfo)
+		cp.parentInfo = parseFileInfo(resp.ParentInfo)
 	}()
 	return cp, nil
 }
@@ -556,6 +556,10 @@ func (c *Client) handleReply(request *Request, sendStream *io.PipeReader, recvSt
 				n, err := sendStream.Read(buf)
 				if err != nil && err != io.EOF {
 					c.sendBlocks <- sendBlock{id, nil, DataStatus_CANCEL}
+					if err == tree.ErrCancelled {
+						sendFinished <- nil
+						return
+					}
 					sendFinished <- err
 					return
 				}

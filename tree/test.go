@@ -33,6 +33,7 @@ import (
 	"encoding/hex"
 	"io/ioutil"
 	"strings"
+	"time"
 )
 
 type TestTree interface {
@@ -148,8 +149,42 @@ func TreeTest(t Tester, fs1, fs2 TestTree) {
 		}
 	}
 
+	// Try Copier.Cancel()
+	// info2 used, as it needs *any* FileInfo.
+	cp, err := fs1.CreateFile("file-create.txt", &FileInfoStruct{}, info2)
+	if err != nil {
+		t.Fatal("could not create file-create.txt:", err)
+	}
+	err = cp.Cancel()
+	if err != nil {
+		t.Error("could not cancel creation of file-create.txt:", err)
+	}
+
+	_, err = fs1.ReadInfo([]string{"file-create.txt"})
+	if err == nil {
+		t.Error("file-create.txt created while it should have been cancelled")
+	} else if !IsNotExist(err) {
+		t.Error("ReadInfo failed for file-create.txt:", err)
+	}
+
+	cp, err = fs1.UpdateFile(info1, NewFileInfo(info2.RelativePath(), TYPE_REGULAR, time.Time{}, 0, nil))
+	if err != nil {
+		t.Fatal("could not update file.txt:", err)
+	}
+	err = cp.Cancel()
+	if err != nil {
+		t.Error("could not cancel updating file.txt:", err)
+	}
+
+	info, err := fs1.ReadInfo([]string{"file.txt"})
+	if err != nil {
+		t.Error("cannot ReadInfo file.txt:", err)
+	} else if Fingerprint(info) != Fingerprint(info1) {
+		t.Error("file.txt updated while it was cancelled")
+	}
+
 	quickBrowFox := "The quick brown fox jumps over the lazy dog.\n"
-	info, err := fs1.SetContents(info1.RelativePath(), []byte(quickBrowFox))
+	info, err = fs1.SetContents(info1.RelativePath(), []byte(quickBrowFox))
 	if err != nil {
 		t.Fatalf("could not set contents to file %s: %s", info1, err)
 	}

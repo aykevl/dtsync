@@ -75,6 +75,8 @@ func remoteError(message string) error {
 	switch message {
 	case tree.ErrNotFound.Error():
 		return tree.ErrNotFound
+	case tree.ErrFound.Error():
+		return tree.ErrFound
 	default:
 		return RemoteError{message}
 	}

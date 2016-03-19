@@ -315,7 +315,12 @@ func (e *Entry) replaceFile(source tree.FileInfo, hash hash.Hash) (tree.Copier, 
 	return &fileHashWriter{
 		hash: hash,
 		fp:   fp,
-		closeCall: func(hash []byte) (tree.FileInfo, tree.FileInfo, error) {
+		finished: func(hash []byte) (tree.FileInfo, tree.FileInfo, error) {
+			defer func() {
+				if fp != nil {
+					os.Remove(tempPath)
+				}
+			}()
 			if !source.ModTime().IsZero() {
 				err = os.Chtimes(tempPath, source.ModTime(), source.ModTime())
 				if err != nil {
@@ -340,7 +345,11 @@ func (e *Entry) replaceFile(source tree.FileInfo, hash hash.Hash) (tree.Copier, 
 				st: parentSt,
 			}
 
+			fp = nil
 			return e.makeInfo(hash), parent.makeInfo(nil), nil
+		},
+		cancelled: func(hash []byte) error {
+			return os.Remove(tempPath)
 		},
 	}, nil
 }
@@ -427,6 +436,9 @@ func (r *Tree) ReadInfo(path []string) (tree.FileInfo, error) {
 	}
 	st, err := os.Lstat(file.fullPath())
 	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, tree.ErrNotFound
+		}
 		return nil, err
 	}
 	file.st = st

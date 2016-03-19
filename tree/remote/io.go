@@ -37,11 +37,12 @@ import (
 
 // copier wraps a PipeWriter to implement tree.Copier.
 type copier struct {
-	w              *io.PipeWriter
-	mutex          sync.Mutex
-	err            error
-	fileInfoChan   chan tree.FileInfo
-	parentInfoChan chan tree.FileInfo
+	w          *io.PipeWriter
+	mutex      sync.Mutex
+	err        error
+	fileInfo   tree.FileInfo
+	parentInfo tree.FileInfo
+	done       chan struct{}
 }
 
 func (c *copier) Write(p []byte) (int, error) {
@@ -55,17 +56,31 @@ func (c *copier) Write(p []byte) (int, error) {
 }
 
 func (c *copier) Finish() (tree.FileInfo, tree.FileInfo, error) {
-	c.w.Close() // io.PipeWriter does not return errors on close
+	_ = c.w.Close() // io.PipeWriter does not return errors on close
 
-	fileInfo := <-c.fileInfoChan
-	parentInfo := <-c.parentInfoChan
+	<-c.done
 
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
+
 	if c.err != nil {
 		return nil, nil, c.err
 	}
-	return fileInfo, parentInfo, nil
+	return c.fileInfo, c.parentInfo, nil
+}
+
+func (c *copier) Cancel() error {
+	_ = c.w.CloseWithError(tree.ErrCancelled)
+
+	<-c.done
+
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
+	if c.err != tree.ErrCancelled {
+		return c.err
+	}
+	return nil
 }
 
 func (c *copier) setError(err error) {

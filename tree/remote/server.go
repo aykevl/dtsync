@@ -412,6 +412,7 @@ func (s *Server) update(requestId uint64, fileInfo, sourceInfo *FileInfo, dataCh
 func (s *Server) handleCopier(requestId uint64, dataChan chan []byte, cp tree.Copier, err error) {
 	if err != nil {
 		s.replyError(requestId, err)
+		return
 	}
 
 	// Drain channel when there are errors.
@@ -421,11 +422,16 @@ func (s *Server) handleCopier(requestId uint64, dataChan chan []byte, cp tree.Co
 	}()
 
 	for block := range dataChan {
+		if block == nil {
+			cp.Cancel()
+			s.replyChan <- replyResponse{requestId, nil, nil}
+			return
+		}
 		_, err := cp.Write(block)
 		if err != nil {
 			s.replyError(requestId, err)
+			_ = cp.Cancel() // we can only reply one error
 			return
-			// TODO cp.Revert()?
 		}
 	}
 

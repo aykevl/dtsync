@@ -34,7 +34,6 @@ package tree
 
 import (
 	"bytes"
-	"errors"
 	"io"
 	"io/ioutil"
 	"sort"
@@ -65,18 +64,6 @@ func (t Type) Char() string {
 		return "?"
 	}
 }
-
-// Error codes that can be used by any filesystem implementation.
-var (
-	ErrNotImplemented     = errors.New("tree: not implemented")
-	ErrNoDirectory        = errors.New("tree: this is not a directory")
-	ErrNoRegular          = errors.New("tree: this is not a regular file")
-	ErrNotFound           = errors.New("tree: file not found")
-	ErrFound              = errors.New("tree: file already exists")
-	ErrInvalidName        = errors.New("tree: invalid file name")
-	ErrChanged            = errors.New("tree: updated file between scan and sync")
-	ErrParsingFingerprint = errors.New("tree: invalid fingerprint")
-)
 
 // Tree is an abstraction layer over various types of trees. It tries to be as
 // generic as possible, making it possible to synchronize varying types of trees
@@ -466,11 +453,13 @@ func Equal(file1, file2 Entry, includeDirModTime bool) (bool, error) {
 
 // Copier is returned by the Copy and Update methods. Calling Finish() closes
 // the file, possibly moves it to the destination location, and returns the
-// file's and the file parent's FileInfo.
+// file's and the file parent's FileInfo. Calling Cancel() tries to undo writing
+// the file.
 // It also implements io.Writer.
 type Copier interface {
 	Write([]byte) (n int, err error)
 	Finish() (info FileInfo, parentInfo FileInfo, err error)
+	Cancel() error
 }
 
 // ScanOptions sets some options in a tree.

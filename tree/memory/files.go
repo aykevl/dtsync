@@ -53,6 +53,12 @@ func (fc *fileCopier) Finish() (tree.FileInfo, tree.FileInfo, error) {
 	return fc.callback(&fc.Buffer)
 }
 
+// Cancel does nothing and returns nil. Things are only written when Finish() is
+// called, so Cancel is unnecessary.
+func (fc *fileCopier) Cancel() error {
+	return nil
+}
+
 // fileCloser implements an io.WriteCloser with a callback that's called when
 // the file is closed. It uses bytes.Buffer internally.
 type fileCloser struct {

@@ -40,7 +40,8 @@ import (
 type fileHashWriter struct {
 	fp        *os.File
 	hash      hash.Hash
-	closeCall func([]byte) (tree.FileInfo, tree.FileInfo, error)
+	finished  func([]byte) (tree.FileInfo, tree.FileInfo, error)
+	cancelled func([]byte) error
 }
 
 // Write calls Write on the underlying File object, and also adds the data to
@@ -50,7 +51,7 @@ func (w *fileHashWriter) Write(b []byte) (int, error) {
 	return w.fp.Write(b)
 }
 
-// Finish syncs and closes the file, and calls the callback.
+// Finish syncs and closes the file, and calls the finish callback.
 func (w *fileHashWriter) Finish() (tree.FileInfo, tree.FileInfo, error) {
 	err := w.fp.Sync()
 	if err != nil {
@@ -60,7 +61,16 @@ func (w *fileHashWriter) Finish() (tree.FileInfo, tree.FileInfo, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	return w.closeCall(w.hash.Sum(nil))
+	return w.finished(w.hash.Sum(nil))
+}
+
+// Cancel removes the temporary file, and calls the cancel callback.
+func (w *fileHashWriter) Cancel() error {
+	err := w.fp.Close()
+	if err != nil {
+		return err
+	}
+	return w.cancelled(w.hash.Sum(nil))
 }
 
 // fileWriter wraps an os.File, without any special things like FileInfo or
