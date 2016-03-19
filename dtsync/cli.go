@@ -41,10 +41,13 @@ import (
 	"unicode"
 
 	"github.com/aykevl/dtsync/sync"
+	"github.com/aykevl/dtsync/tree"
+	"github.com/aykevl/dtsync/tree/remote"
 )
 
 var cpuprofile = flag.String("cpuprofile", "", "write CPU profile to file")
 var editorCommand = flag.String("editor", "/usr/bin/editor", "Editor to use for editing jobs")
+var isServer = flag.Bool("server", false, "Run as server side process")
 
 func editJobs(result *sync.Result, root1, root2 string) bool {
 	jobs := result.Jobs()
@@ -201,6 +204,28 @@ func main() {
 		defer f.Close()
 		pprof.StartCPUProfile(f)
 		defer pprof.StopCPUProfile()
+	}
+
+	if *isServer {
+		if flag.NArg() != 1 {
+			fmt.Fprintf(os.Stderr, "Provide exactly one directory on the command line (got %d).\n", flag.NArg())
+			return
+		}
+		root, err := sync.NewTree(flag.Arg(0))
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Could not open root %s: %s\n", flag.Arg(0), err)
+			return
+		}
+		if localRoot, ok := root.(tree.LocalFileTree); !ok {
+			fmt.Fprintf(os.Stderr, "Cannot use non-local root\n")
+			return
+		} else {
+			err = remote.NewServer(os.Stdin, os.Stdout, localRoot).Run()
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Server error: %s\n", err)
+			}
+		}
+		return
 	}
 
 	if flag.NArg() != 2 {
