@@ -45,52 +45,68 @@ func Scan(fs1, fs2 tree.Tree) (*ReplicaSet, error) {
 	rs := &ReplicaSet{}
 
 	// Load and scan replica status.
-	var scanReplicas [2]chan *Replica
-	var scanStart [2]chan struct{}
+	var sendOptions [2]chan tree.ScanOptions // start scan on receive
 	var scanErrors [2]chan error
 	var scanCancel [2]chan struct{}
 	trees := []tree.Tree{fs1, fs2}
 	for i := range trees {
-		scanReplicas[i] = make(chan *Replica)
-		scanStart[i] = make(chan struct{}, 1)
+		sendOptions[i] = make(chan tree.ScanOptions, 1)
 		scanErrors[i] = make(chan error)
 		scanCancel[i] = make(chan struct{}, 1)
+	}
+	for i := range trees {
 		go func(i int) {
 			switch fs := trees[i].(type) {
 			case tree.LocalFileTree:
 				file, err := fs.GetFile(STATUS_FILE)
+				if err != nil && err != tree.ErrNotFound {
+					scanErrors[i] <- err
+					return
+				}
+
+				var replica *Replica
+				var ignore []string
 				if err == tree.ErrNotFound {
 					// loadReplica doesn't return errors when creating a new
 					// replica.
-					replica, _ := loadReplica(nil)
-					scanReplicas[i] <- replica
-					scanErrors[i] <- nil
-				} else if err != nil {
-					scanReplicas[i] <- nil
-					scanErrors[i] <- err
+					replica, _ = loadReplica(nil)
 				} else {
-					replica, err := loadReplica(file)
+					replica, err = loadReplica(file)
 					if err != nil {
-						scanReplicas[i] <- nil
 						scanErrors[i] <- err
-					} else {
-						scanReplicas[i] <- replica
-						<-scanStart[i] // make sure replica.ignore is set
-						scanErrors[i] <- replica.scanDir(fs.Root(), replica.Root(), scanCancel[i])
+						return
 					}
+					ignore = replica.Header()["Ignore"]
+					replica.AddIgnore(ignore...)
 				}
+				rs.set[i] = replica
+
+				// Let the other replica ignore using our rules.
+				sendOptions[(i+1)%2] <- tree.NewScanOptions(ignore)
+
+				// Follow ignore rules from the other replica.
+				options, ok := <-sendOptions[i]
+				if !ok {
+					// Something went wrong with the other replica.
+					// Cancel now.
+					return
+				}
+				replica.AddIgnore(options.Ignore()...)
+
+				// Now we can start.
+				scanErrors[i] <- replica.scanDir(fs.Root(), replica.Root(), scanCancel[i])
+
 			case tree.RemoteTree:
-				reader, err := fs.RemoteScan()
+				reader, err := fs.RemoteScan(sendOptions[i], sendOptions[(i+1)%2])
 				if err != nil {
-					scanReplicas[i] <- nil
 					scanErrors[i] <- err
 				}
+
 				replica, err := loadReplica(reader)
 				if err != nil {
-					scanReplicas[i] <- nil
 					scanErrors[i] <- err
 				} else {
-					scanReplicas[i] <- replica
+					rs.set[i] = replica
 					scanErrors[i] <- nil
 				}
 			default:
@@ -99,49 +115,10 @@ func Scan(fs1, fs2 tree.Tree) (*ReplicaSet, error) {
 		}(i)
 	}
 
-	var ignore [2][]string
-
-	// Wait for replicas to be loaded/opened.
-	for i := range scanReplicas {
-		replica := <-scanReplicas[i]
-		rs.set[i] = replica
-
-		// Get files to ignore.
-		if replica != nil {
-			header := replica.Header()
-			ignore[i] = header["Ignore"]
-		}
-	}
-
-	// Set ignored files on both replicas.
-	for _, ignoreList := range ignore {
-		for _, replica := range rs.set {
-			replica.AddIgnore(ignoreList...)
-		}
-	}
-
-	// And now start the scan.
-	scanStart[0] <- struct{}{}
-	scanStart[1] <- struct{}{}
-
-	if rs.set[0] != nil && rs.set[1] != nil {
-		// There were no errors while opening the replicas.
-
-		replica1 := rs.set[0]
-		replica2 := rs.set[1]
-
-		if replica1.identity == replica2.identity {
-			return nil, ErrSameIdentity
-		}
-
-		// let them know of each other
-		notifyReplica(replica1, replica2)
-		notifyReplica(replica2, replica1)
-	}
-
 	select {
 	case err := <-scanErrors[0]:
 		if err != nil {
+			close(sendOptions[1])
 			scanCancel[1] <- struct{}{}
 			<-scanErrors[1]
 			return nil, err
@@ -152,6 +129,7 @@ func Scan(fs1, fs2 tree.Tree) (*ReplicaSet, error) {
 		}
 	case err := <-scanErrors[1]:
 		if err != nil {
+			close(sendOptions[0])
 			scanCancel[0] <- struct{}{}
 			<-scanErrors[0]
 			return nil, err

@@ -52,6 +52,7 @@ var (
 	ErrInvalidPath     = errors.New("remote: invalid path")
 	ErrInvalidResponse = errors.New("remote: invalid response")
 	ErrNoTests         = errors.New("remote: this is not a test tree")
+	ErrConcurrentScan  = errors.New("remote: Scan() during scan")
 )
 
 type RemoteError struct {

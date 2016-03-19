@@ -1,25 +1,26 @@
 package remote;
 
 enum Command {
-	NONE    = 0; // must not be used
-	CLOSE   = 1; // unused
-	DATA    = 2;
-	SCAN    = 3;
+	NONE        = 0; // must not be used
+	CLOSE       = 1; // unused
+	DATA        = 2;
+	SCAN        = 3;
+	SCANOPTS    = 4;
 
-	MKDIR   = 10;
-	REMOVE  = 11;
-	CREATE  = 14;
-	UPDATE  = 15;
-	COPYSRC = 16;
+	MKDIR       = 10;
+	REMOVE      = 11;
+	CREATE      = 14;
+	UPDATE      = 15;
+	COPYSRC     = 16;
 
-	GETFILE = 20;
-	SETFILE = 21;
+	GETFILE     = 20;
+	SETFILE     = 21;
 
 	// testing commands
-	GETCONT = 30;
-	ADDFILE = 31;
-	SETCONT = 32;
-	INFO    = 33;
+	GETCONTENTS = 30;
+	ADDFILE     = 31;
+	SETCONTENTS = 32;
+	INFO        = 33;
 }
 
 // See TYPE_* constants in tree/tree.go
@@ -41,6 +42,10 @@ message FileInfo {
 	optional sint64   modTime   = 3;
 	optional sint64   size      = 4;
 	optional bytes    hash      = 5;
+}
+
+message ScanOptions {
+	repeated string ignore = 1;
 }
 
 message Request {

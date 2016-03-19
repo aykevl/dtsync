@@ -51,10 +51,11 @@ type replyResponse struct {
 // Server is an instance of the server side of a dtsync connection. It receives
 // commands and processes them, but does not initiate anything.
 type Server struct {
-	reader    io.ReadCloser
-	writer    io.WriteCloser
-	fs        tree.LocalFileTree
-	replyChan chan replyResponse
+	reader      io.ReadCloser
+	writer      io.WriteCloser
+	fs          tree.LocalFileTree
+	replyChan   chan replyResponse
+	currentScan chan *ScanOptions
 }
 
 // NewServer returns a *Server for the given reader, writer, and filesystem
@@ -169,7 +170,25 @@ func (s *Server) handleRequest(msg *Request, recvStreams map[uint64]chan []byte)
 			panic("unknown status")
 		}
 	case Command_SCAN:
-		go s.scan(*msg.RequestId)
+		if s.currentScan != nil {
+			return invalidRequest{"SCAN while a scan is already running"}
+		}
+		s.currentScan = make(chan *ScanOptions)
+		go s.scan(*msg.RequestId, s.currentScan)
+	case Command_SCANOPTS:
+		if msg.Data == nil {
+			return invalidRequest{"SCANSTATUS expects data field (ScanOptions)"}
+		}
+		if s.currentScan == nil {
+			return invalidRequest{"SCANSTATUS outside running scan or sending SCANSTATUS twice"}
+		}
+		status := &ScanOptions{}
+		err := proto.Unmarshal(msg.Data, status)
+		if err != nil {
+			return err
+		}
+		s.currentScan <- status
+		s.currentScan = nil
 	case Command_MKDIR:
 		// Client wants to create a directory.
 		if msg.FileInfo1 == nil || msg.Name == nil {
@@ -221,7 +240,7 @@ func (s *Server) handleRequest(msg *Request, recvStreams map[uint64]chan []byte)
 			return invalidRequest{"ADDFILE expects fileInfo1 with path and data"}
 		}
 		go s.addFile(*msg.RequestId, msg.FileInfo1.Path, msg.Data)
-	case Command_SETCONT:
+	case Command_SETCONTENTS:
 		if msg.FileInfo1 == nil || msg.FileInfo1.Path == nil || msg.Data == nil {
 			return invalidRequest{"SETCONT expects fileInfo1 with path and data"}
 		}
@@ -251,8 +270,8 @@ func (s *Server) doReply(w *bufio.Writer, reply replyResponse) error {
 		errString := reply.err.Error()
 		msg.Error = &errString
 	}
-	if msg.Command != nil && *msg.Command == Command_DATA {
-		debugLog("S: send DATA   ", *msg.RequestId)
+	if msg.Command != nil {
+		debugLog("S: send reply  ", *msg.RequestId, Command_name[int32(*msg.Command)])
 	} else {
 		debugLog("S: send reply  ", *msg.RequestId)
 	}
@@ -451,8 +470,32 @@ func (s *Server) replyInfo(requestId uint64, info tree.FileInfo, err error) {
 	}
 }
 
-func (s *Server) scan(requestId uint64) {
-	replica, err := dtdiff.ScanTree(s.fs)
+func (s *Server) scan(requestId uint64, optionsChan chan *ScanOptions) {
+	recvOptions := make(chan tree.ScanOptions)
+	sendOptions := make(chan tree.ScanOptions)
+
+	go func() {
+		options := <-optionsChan
+		recvOptions <- tree.NewScanOptions(options.Ignore)
+	}()
+
+	go func() {
+		options := <-sendOptions
+		optionsMsg := &ScanOptions{
+			Ignore: options.Ignore(),
+		}
+		optionsData, err := proto.Marshal(optionsMsg)
+		if err != nil {
+			panic(err) // programming error?
+		}
+		command := Command_SCANOPTS
+		s.replyChan <- replyResponse{requestId, &Response{
+			Command: &command,
+			Data:    optionsData,
+		}, nil}
+	}()
+
+	replica, err := dtdiff.ScanTree(s.fs, recvOptions, sendOptions)
 	if err != nil {
 		s.replyError(requestId, err)
 		return
@@ -463,18 +506,20 @@ func (s *Server) scan(requestId uint64) {
 	reader, writer2 := io.Pipe()
 	writer := io.MultiWriter(writer1, writer2)
 
-	go func() {
-		err = replica.Serialize(writer)
-		if err != nil {
-			s.replyError(requestId, err)
-		}
-		writer1.Close()
-		writer2.Close()
-	}()
-
 	if err != nil {
 		s.replyError(requestId, err)
+		// TODO: writer1.Revert()
+		writer1.Close()
+		writer2.Close()
 	} else {
+		go func() {
+			err = replica.Serialize(writer)
+			if err != nil {
+				s.replyError(requestId, err)
+			}
+			writer1.Close()
+			writer2.Close()
+		}()
 		s.streamSendData(requestId, reader)
 	}
 }

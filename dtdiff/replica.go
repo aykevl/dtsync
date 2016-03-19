@@ -78,7 +78,7 @@ type Replica struct {
 	ignore             []string // paths to ignore
 }
 
-func ScanTree(fs tree.LocalFileTree) (*Replica, error) {
+func ScanTree(fs tree.LocalFileTree, recvOptionsChan, sendOptionsChan chan tree.ScanOptions) (*Replica, error) {
 	var replica *Replica
 	file, err := fs.GetFile(STATUS_FILE)
 	if err == tree.ErrNotFound {
@@ -91,6 +91,13 @@ func ScanTree(fs tree.LocalFileTree) (*Replica, error) {
 	} else {
 		replica, _ = loadReplica(file)
 	}
+
+	ignored := replica.Header()["Ignore"]
+	replica.AddIgnore(ignored...)
+	sendOptionsChan <- tree.NewScanOptions(ignored)
+
+	recvOptions := <-recvOptionsChan
+	replica.AddIgnore(recvOptions.Ignore()...)
 
 	err = replica.scan(fs)
 	if err != nil {
@@ -272,19 +279,32 @@ func (r *Replica) load(file io.Reader) error {
 		if revReplicaIndex < 0 || revReplicaIndex >= len(peers) {
 			return ErrInvalidReplicaIndex
 		}
+
 		revReplica := peers[revReplicaIndex]
-		revGeneration, err := strconv.Atoi(fields[TSV_GENERATION])
+
+		revGenerationStr := fields[TSV_GENERATION]
+		if len(revGenerationStr) == 0 {
+			return ErrInvalidEntryGeneration
+		}
+		hidden := false
+		if revGenerationStr[0] == '!' {
+			hidden = true
+			revGenerationStr = revGenerationStr[1:]
+		}
+		revGeneration, err := strconv.Atoi(revGenerationStr)
 		if err != nil || revGeneration < 1 {
 			return ErrInvalidEntryGeneration
 		}
+
 		fingerprint := fields[TSV_FINGERPRINT]
 		path := strings.Split(fields[TSV_PATH], "/")
 
 		// now add this entry
-		err = r.rootEntry.add(path, revReplica, revGeneration, fingerprint, hash)
+		child, err := r.rootEntry.add(path, revReplica, revGeneration, fingerprint, hash)
 		if err != nil {
 			return err
 		}
+		child.hidden = hidden
 	}
 
 	// Remove all headers that are written by Serialize() anyway.
@@ -384,7 +404,13 @@ func (e *Entry) serializeChildren(tsvWriter *unitsv.Writer, peerIndex map[string
 			// In Go 1.5+, we can use base64.RawURLEncoding
 			hash = strings.TrimRight(hash, "=")
 		}
-		err := tsvWriter.WriteRow([]string{childpath, child.fingerprint, hash, strconv.Itoa(peerIndex[child.revReplica]), strconv.Itoa(child.revGeneration)})
+		// TODO: join replica and generation in one field.
+		generation := strconv.Itoa(child.revGeneration)
+		if child.hidden {
+			// TODO: put remove date in extra field, instead of this workaround.
+			generation = "!" + generation
+		}
+		err := tsvWriter.WriteRow([]string{childpath, child.fingerprint, hash, strconv.Itoa(peerIndex[child.revReplica]), generation})
 		err = e.children[name].serializeChildren(tsvWriter, peerIndex, childpath)
 		if err != nil {
 			return err
@@ -427,6 +453,9 @@ func (r *Replica) scanDir(dir tree.Entry, statusDir *Entry, cancel chan struct{}
 		if file != nil && r.isIgnored(file) {
 			// Keep status (don't remove) if it exists, in case the file is
 			// un-ignored. It may be desirable to make this configurable.
+			if status != nil {
+				status.hidden = true
+			}
 			continue
 		}
 

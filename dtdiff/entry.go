@@ -49,6 +49,7 @@ type Entry struct {
 	children      map[string]*Entry
 	parent        *Entry
 	replica       *Replica
+	hidden        bool // ignored in .List(), but still saved
 }
 
 // String function, for debugging purposes
@@ -117,21 +118,20 @@ func (e *Entry) Size() int64 {
 }
 
 // Add new entry by recursively finding the parent
-func (e *Entry) add(path []string, revReplica string, revGeneration int, fingerprint string, hash []byte) error {
+func (e *Entry) add(path []string, revReplica string, revGeneration int, fingerprint string, hash []byte) (*Entry, error) {
 	if path[0] == "" {
-		return ErrInvalidPath
+		return nil, ErrInvalidPath
 	}
 	if len(path) > 1 {
 		child, ok := e.children[path[0]]
 		if !ok {
 			// child does not exist
 			// or: the path has a parent that hasn't yet been scanned
-			return ErrInvalidPath
+			return nil, ErrInvalidPath
 		}
 		return child.add(path[1:], revReplica, revGeneration, fingerprint, hash)
 	} else {
-		_, err := e.addChild(path[0], revReplica, revGeneration, fingerprint, hash)
-		return err
+		return e.addChild(path[0], revReplica, revGeneration, fingerprint, hash)
 	}
 }
 
@@ -248,6 +248,19 @@ func (e *Entry) List() []*Entry {
 	for _, entry := range e.children {
 		list = append(list, entry)
 	}
+
+	// Remove hidden children from the list.
+	p := 0
+	for i, child := range list {
+		if i != p {
+			list[p] = list[i]
+		}
+		if !child.hidden {
+			p++
+		}
+	}
+	list = list[:p]
+
 	sortEntries(list)
 	return list
 }

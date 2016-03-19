@@ -134,7 +134,11 @@ type RemoteTree interface {
 	//
 	// Implementations may either scan the whole tree and return once finished,
 	// or start scanning while returning the data as far as they've scanned.
-	RemoteScan() (io.Reader, error)
+	//
+	// The sendOptions are sent to the remote scanner (scan will start once
+	// received), and recvOptions is a channel from which the options sent by
+	// the remote can be read.
+	RemoteScan(sendOptions, recvOptions chan ScanOptions) (io.Reader, error)
 }
 
 type LocalTree interface {
@@ -467,4 +471,22 @@ func Equal(file1, file2 Entry, includeDirModTime bool) (bool, error) {
 type Copier interface {
 	Write([]byte) (n int, err error)
 	Finish() (info FileInfo, parentInfo FileInfo, err error)
+}
+
+// ScanOptions sets some options in a tree.
+type ScanOptions interface {
+	Ignore() []string
+}
+
+// ScanOptionsStruct implements ScanOptions and provides an ignore list to the
+// other replica.
+type scanOptions []string
+
+func NewScanOptions(ignore []string) ScanOptions {
+	return scanOptions(ignore)
+}
+
+// Ignore returns all patterns to ignore, to send to the other replica.
+func (s scanOptions) Ignore() []string {
+	return s
 }

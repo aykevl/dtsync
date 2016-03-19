@@ -73,6 +73,7 @@ type recvBlock struct {
 type Client struct {
 	sendRequest chan roundtripRequest
 	sendBlocks  chan sendBlock
+	scanOptions chan []byte
 	w           io.WriteCloser
 	closeWait   chan struct{}
 }
@@ -83,6 +84,7 @@ func NewClient(r io.ReadCloser, w io.WriteCloser) (*Client, error) {
 	c := &Client{
 		sendRequest: make(chan roundtripRequest),
 		sendBlocks:  make(chan sendBlock),
+		scanOptions: make(chan []byte),
 		w:           w,
 		closeWait:   make(chan struct{}),
 	}
@@ -122,6 +124,7 @@ func (c *Client) run(r *bufio.Reader, w *bufio.Writer) {
 
 	inflight := make(map[uint64]chan roundtripResponse)
 	recvStreams := make(map[uint64]chan recvBlock)
+	scanIsRunning := false
 	var nextId uint64
 	var pipeErr error
 
@@ -130,21 +133,33 @@ func (c *Client) run(r *bufio.Reader, w *bufio.Writer) {
 		case req := <-c.sendRequest:
 			if pipeErr != nil {
 				// Make sure the next request will get the error message.
-				req.replyChan <- roundtripResponse{nil, pipeErr}
+				if req.replyChan != nil {
+					req.replyChan <- roundtripResponse{nil, pipeErr}
+				}
 				continue
 			}
 
 			nextId++
 			id := nextId
 			req.req.RequestId = &id
-			inflight[id] = req.replyChan
+			if req.replyChan != nil {
+				inflight[id] = req.replyChan
+			}
 			req.idChan <- id
 
 			debugLog("C: send command", *req.req.RequestId, Command_name[int32(*req.req.Command)])
 
+			if *req.req.Command == Command_SCAN {
+				if scanIsRunning {
+					req.replyChan <- roundtripResponse{nil, ErrConcurrentScan}
+					continue
+				}
+				scanIsRunning = true
+			}
+
 			buf, err := proto.Marshal(req.req)
 			if err != nil {
-				req.replyChan <- roundtripResponse{nil, err}
+				panic(err) // programming error?
 				continue
 			}
 
@@ -156,7 +171,9 @@ func (c *Client) run(r *bufio.Reader, w *bufio.Writer) {
 			w.Write(buf)
 			err = w.Flush()
 			if err != nil {
-				req.replyChan <- roundtripResponse{nil, err}
+				if req.replyChan != nil {
+					req.replyChan <- roundtripResponse{nil, err}
+				}
 				continue
 			}
 
@@ -217,21 +234,32 @@ func (c *Client) run(r *bufio.Reader, w *bufio.Writer) {
 				continue
 			}
 			if msg.Command != nil {
-				if *msg.Command != Command_DATA {
+				switch *msg.Command {
+				case Command_DATA:
+					debugLog("C: recv        ", *msg.RequestId, "DATA")
+					streamChan, ok := recvStreams[*msg.RequestId]
+					if !ok {
+						pipeErr = ErrInvalidResponse
+						continue
+					}
+					streamChan <- recvBlock{*msg.RequestId, msg.Data, nil}
+				case Command_SCANOPTS:
+					debugLog("C: recv reply  ", *msg.RequestId, "SCANOPTS")
+					if !scanIsRunning {
+						pipeErr = ErrInvalidResponse
+						continue
+					}
+					c.scanOptions <- msg.Data
+					scanIsRunning = false // not entirely true
+				default:
 					pipeErr = ErrInvalidResponse
 					continue
 				}
-				debugLog("C: recv DATA   ", *msg.RequestId)
-				streamChan, ok := recvStreams[*msg.RequestId]
-				if !ok {
-					pipeErr = ErrInvalidResponse
-					continue
-				}
-				streamChan <- recvBlock{*msg.RequestId, msg.Data, nil}
 			} else {
 				debugLog("C: recv reply  ", *msg.RequestId)
 				replyChan, ok := inflight[*msg.RequestId]
 				if !ok {
+					debugLog("C: invalid RequestId", *msg.RequestId)
 					pipeErr = ErrInvalidId
 					continue
 				}
@@ -270,12 +298,43 @@ func (c *Client) Close() error {
 
 // RemoteScan runs a remote scan command and returns an io.Reader with the new
 // status file.
-func (c *Client) RemoteScan() (io.Reader, error) {
+func (c *Client) RemoteScan(sendOptions, recvOptions chan tree.ScanOptions) (io.Reader, error) {
 	debugLog("\nC: RemoteScan")
-	command := Command_SCAN
-	return c.recvFile(&Request{
-		Command: &command,
+	commandScan := Command_SCAN
+	stream, _ := c.recvFile(&Request{
+		Command: &commandScan,
 	})
+
+	go func() {
+		// Send ignored files from the other replica to the remote replica.
+		options := <-sendOptions
+		optionsData, err := proto.Marshal(&ScanOptions{
+			Ignore: options.Ignore(),
+		})
+		if err != nil {
+			panic(err) // programming error?
+		}
+		commandScanOptions := Command_SCANOPTS
+		statusRequest := &Request{
+			Command: &commandScanOptions,
+			Data:    optionsData,
+		}
+		c.sendRequest <- roundtripRequest{statusRequest, make(chan uint64, 1), nil, nil}
+	}()
+
+	go func() {
+		data := <-c.scanOptions
+		options := &ScanOptions{}
+		err := proto.Unmarshal(data, options)
+		if err != nil {
+			stream.setError(err)
+			recvOptions <- nil
+			return
+		}
+		recvOptions <- tree.NewScanOptions(options.Ignore)
+	}()
+
+	return stream, nil
 }
 
 func (c *Client) CreateDir(name string, parent tree.FileInfo) (tree.FileInfo, error) {
@@ -311,7 +370,7 @@ func (c *Client) GetFile(name string) (io.ReadCloser, error) {
 	command := Command_GETFILE
 	return c.recvFile(&Request{
 		Command: &command,
-		Name: &name,
+		Name:    &name,
 	})
 }
 
@@ -320,7 +379,7 @@ func (c *Client) SetFile(name string) (io.WriteCloser, error) {
 	command := Command_SETFILE
 	request := &Request{
 		Command: &command,
-		Name: &name,
+		Name:    &name,
 	}
 	reader, writer := io.Pipe()
 	ch := c.handleReply(request, reader, nil)
@@ -403,6 +462,8 @@ func (c *Client) CopySource(info tree.FileInfo) (io.ReadCloser, error) {
 	})
 }
 
+// recvFile sends a request and returns a stream to receive a file. It never
+// returns an error.
 func (c *Client) recvFile(request *Request) (*streamReader, error) {
 	reader, writer := io.Pipe()
 	stream := &streamReader{reader: reader}
@@ -423,7 +484,7 @@ func (c *Client) AddRegular(path []string, contents []byte) (tree.FileInfo, erro
 
 func (c *Client) SetContents(path []string, contents []byte) (tree.FileInfo, error) {
 	debugLog("\nC: SetContents")
-	return c.sendFile(Command_SETCONT, path, contents)
+	return c.sendFile(Command_SETCONTENTS, path, contents)
 }
 
 func (c *Client) sendFile(command Command, path []string, contents []byte) (tree.FileInfo, error) {
