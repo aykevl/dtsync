@@ -216,7 +216,7 @@ path	fingerprint	hash	replica	generation
 }
 
 func applyTestCase(t *testing.T, fs tree.TestTree, tc testCase) {
-	t.Logf("Action: %s %s", tc.action, tc.file)
+	t.Log("Action:", tc.action, tc.file)
 
 	parts := strings.Split(tc.file, "/")
 	name := parts[len(parts)-1]
@@ -269,7 +269,8 @@ func runTestCase(t *testing.T, fs1, fs2, fsCheck, fsCheckWith tree.TestTree, swa
 	runTestCaseSync(t, &tc, fsCheck, fsCheckWith, -1, scanTwice, true)
 	if t.Failed() {
 		printStatus(t, "before (check)", statusBefore)
-		printStatus(t, "after (check)", readStatuses(t, fs1, fs2))
+		printStatus(t, "after (check)", readStatuses(t, fsCheck, fsCheckWith))
+		t.FailNow()
 	}
 }
 
