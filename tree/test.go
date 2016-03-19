@@ -119,6 +119,20 @@ func TreeTest(t Tester, fs1, fs2 TestTree) {
 		t.Error("root1 is not equal to root2 after Copy")
 	}
 
+	if root1 != nil {
+		// Try overwriting a file.
+		_, err := fs1.CreateFile("file.txt", &FileInfoStruct{}, info2)
+		if err == nil {
+			t.Error("file.txt was overwritten with CreateFile")
+		} else if err != ErrFound {
+			t.Error("failed to try to overwrite file.txt with CreateFile:", err)
+		}
+
+		if root2 != nil && !testEqual(t, root1, root2) {
+			t.Error("root1 is not equal to root2 after CreateFile+Cancel")
+		}
+	}
+
 	quickBrowFox := "The quick brown fox jumps over the lazy dog.\n"
 	info, err := fs1.SetContents(info1.RelativePath(), []byte(quickBrowFox))
 	if err != nil {

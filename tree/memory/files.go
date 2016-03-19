@@ -37,11 +37,11 @@ import (
 // fileCopier implements tree.FileCopier. It uses bytes.Buffer internally.
 type fileCopier struct {
 	bytes.Buffer
-	callback func(*bytes.Buffer) (tree.FileInfo, tree.FileInfo)
+	callback func(*bytes.Buffer) (tree.FileInfo, tree.FileInfo, error)
 }
 
 // newFileCopier returns a new fileCopier with the given callback.
-func newFileCopier(callback func(*bytes.Buffer) (tree.FileInfo, tree.FileInfo)) *fileCopier {
+func newFileCopier(callback func(*bytes.Buffer) (tree.FileInfo, tree.FileInfo, error)) *fileCopier {
 	return &fileCopier{
 		callback: callback,
 	}
@@ -50,8 +50,7 @@ func newFileCopier(callback func(*bytes.Buffer) (tree.FileInfo, tree.FileInfo)) 
 // Close calls the callback. bytes.Buffer doesn't have a .Close() method, so we
 // don't need to call that one.
 func (fc *fileCopier) Finish() (tree.FileInfo, tree.FileInfo, error) {
-	info, parentInfo := fc.callback(&fc.Buffer)
-	return info, parentInfo, nil
+	return fc.callback(&fc.Buffer)
 }
 
 // fileCloser implements an io.WriteCloser with a callback that's called when

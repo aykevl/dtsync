@@ -289,20 +289,25 @@ func (e *Entry) CreateFile(name string, parent, source tree.FileInfo) (tree.Copi
 	if p == nil {
 		return nil, tree.ErrNotFound
 	}
+
+	if _, ok := p.children[name]; ok {
+		return nil, tree.ErrFound
+	}
+
 	child := &Entry{
 		fileType: tree.TYPE_REGULAR,
 		modTime:  source.ModTime(),
 		name:     name,
 		parent:   p,
 	}
-	err := p.addChild(child)
-	if err != nil {
-		return nil, err
-	}
 
-	file := newFileCopier(func(buffer *bytes.Buffer) (tree.FileInfo, tree.FileInfo) {
+	file := newFileCopier(func(buffer *bytes.Buffer) (tree.FileInfo, tree.FileInfo, error) {
+		err := p.addChild(child)
+		if err != nil {
+			return nil, nil, err
+		}
 		child.contents = buffer.Bytes()
-		return child.info(), child.parent.info()
+		return child.info(), child.parent.info(), nil
 	})
 
 	return file, nil
@@ -319,7 +324,7 @@ func (e *Entry) addChild(child *Entry) error {
 		e.children = make(map[string]*Entry)
 	}
 	if _, ok := e.children[child.Name()]; ok {
-		return tree.ErrAlreadyExists
+		return tree.ErrFound
 	}
 	if !validName(child.name) {
 		return tree.ErrInvalidName
@@ -340,10 +345,10 @@ func (e *Entry) UpdateFile(file, source tree.FileInfo) (tree.Copier, error) {
 	if child.fileType != tree.TYPE_REGULAR {
 		return nil, tree.ErrNoRegular
 	}
-	return newFileCopier(func(buffer *bytes.Buffer) (tree.FileInfo, tree.FileInfo) {
+	return newFileCopier(func(buffer *bytes.Buffer) (tree.FileInfo, tree.FileInfo, error) {
 		child.modTime = source.ModTime()
 		child.contents = buffer.Bytes()
-		return child.info(), child.parent.info()
+		return child.info(), child.parent.info(), nil
 	}), nil
 }
 

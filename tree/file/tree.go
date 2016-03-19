@@ -271,7 +271,7 @@ func (r *Tree) CreateFile(name string, parent, source tree.FileInfo) (tree.Copie
 
 	_, err := os.Lstat(child.fullPath())
 	if err == nil {
-		return nil, tree.ErrAlreadyExists
+		return nil, tree.ErrFound
 	} else if !os.IsNotExist(err) {
 		return nil, err
 	}
