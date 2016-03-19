@@ -562,7 +562,7 @@ func (c *Client) handleReply(request *Request, sendStream *io.PipeReader, recvSt
 					}
 				}
 
-				if respData.resp.Error != nil {
+				if respData.resp != nil && respData.resp.Error != nil {
 					returnChan <- roundtripResponse{nil, RemoteError{*respData.resp.Error}}
 				}
 				returnChan <- respData
