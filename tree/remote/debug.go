@@ -30,6 +30,7 @@ package remote
 
 import (
 	"fmt"
+	"os"
 )
 
 const _DEBUG = false
@@ -38,6 +39,6 @@ func debugLog(args ...interface{}) {
 	// I assume the Go compiler is smart enough to recognize this is often not
 	// executed.
 	if _DEBUG {
-		fmt.Println(args...)
+		fmt.Fprintln(os.Stderr, args...)
 	}
 }
