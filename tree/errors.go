@@ -35,7 +35,6 @@ import (
 
 // Error codes that can be used by any filesystem implementation.
 var (
-	ErrNotImplemented     = errors.New("tree: not implemented")
 	ErrNoDirectory        = errors.New("tree: this is not a directory")
 	ErrNoRegular          = errors.New("tree: this is not a regular file")
 	ErrNotFound           = errors.New("tree: file not found")
@@ -45,6 +44,14 @@ var (
 	ErrCancelled          = errors.New("tree: write cancelled")
 	ErrParsingFingerprint = errors.New("tree: invalid fingerprint")
 )
+
+// NotImplemented is returned when a method is not implemented or a parameter is
+// not of a required type.
+type NotImplemented string
+
+func (feature NotImplemented) Error() string {
+	return "tree: not implemented: " + string(feature)
+}
 
 func IsNotExist(err error) bool {
 	if err == nil {

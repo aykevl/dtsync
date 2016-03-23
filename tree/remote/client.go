@@ -450,7 +450,7 @@ func (c *Client) handleFileSend(request *Request) (tree.Copier, error) {
 }
 
 func (c *Client) GetContents(path []string) (io.ReadCloser, error) {
-	return nil, tree.ErrNotImplemented
+	return nil, tree.NotImplemented("GetContents from remote")
 }
 
 func (c *Client) CopySource(info tree.FileInfo) (io.ReadCloser, error) {
