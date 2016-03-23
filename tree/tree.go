@@ -177,11 +177,11 @@ type Entry interface {
 func Copy(this, other Tree, source, targetParent FileInfo) (info FileInfo, parentInfo FileInfo, err error) {
 	thisFileTree, ok := this.(FileTree)
 	if !ok {
-		return nil, nil, NotImplemented("source in Copy not a FileTree")
+		return nil, nil, ErrNotImplemented("source in Copy not a FileTree")
 	}
 	otherFileTree, ok := other.(FileTree)
 	if !ok {
-		return nil, nil, NotImplemented("target in Copy not a FileTree")
+		return nil, nil, ErrNotImplemented("target in Copy not a FileTree")
 	}
 
 	switch source.Type() {
@@ -205,7 +205,7 @@ func Copy(this, other Tree, source, targetParent FileInfo) (info FileInfo, paren
 		return outf.Finish()
 
 	default:
-		return nil, nil, NotImplemented("copying a non-regular file")
+		return nil, nil, ErrNotImplemented("copying a non-regular file")
 	}
 }
 
@@ -214,11 +214,11 @@ func Copy(this, other Tree, source, targetParent FileInfo) (info FileInfo, paren
 func Update(this, other Tree, source, target FileInfo) (FileInfo, FileInfo, error) {
 	thisFileTree, ok := this.(FileTree)
 	if !ok {
-		return nil, nil, NotImplemented("source in Update not a FileTree")
+		return nil, nil, ErrNotImplemented("source in Update not a FileTree")
 	}
 	otherFileTree, ok := other.(FileTree)
 	if !ok {
-		return nil, nil, NotImplemented("target in Update not a FileTree")
+		return nil, nil, ErrNotImplemented("target in Update not a FileTree")
 	}
 
 	switch source.Type() {
@@ -242,7 +242,7 @@ func Update(this, other Tree, source, target FileInfo) (FileInfo, FileInfo, erro
 		return outf.Finish()
 
 	default:
-		return nil, nil, NotImplemented("updating a non-regular file")
+		return nil, nil, ErrNotImplemented("updating a non-regular file")
 	}
 }
 
@@ -414,7 +414,7 @@ func Equal(file1, file2 Entry, includeDirModTime bool) (bool, error) {
 		for i, file := range []Entry{file1, file2} {
 			fileTree, ok := file.Tree().(FileTree)
 			if !ok {
-				return false, NotImplemented("Equal: comparing non-FileTree Entries")
+				return false, ErrNotImplemented("Equal: comparing non-FileTree Entries")
 			}
 			reader, err := fileTree.GetContents(file.RelativePath())
 			if err != nil {

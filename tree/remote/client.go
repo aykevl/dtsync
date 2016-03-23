@@ -267,10 +267,10 @@ func (c *Client) run(r *bufio.Reader, w *bufio.Writer) {
 
 				if msg.Error != nil {
 					if stream, ok := recvStreams[*msg.RequestId]; ok {
-						stream <- recvBlock{*msg.RequestId, nil, remoteError(*msg.Error)}
+						stream <- recvBlock{*msg.RequestId, nil, decodeRemoteError(msg.Error)}
 					}
 
-					replyChan <- roundtripResponse{nil, remoteError(*msg.Error)}
+					replyChan <- roundtripResponse{nil, decodeRemoteError(msg.Error)}
 				} else {
 					replyChan <- roundtripResponse{msg, nil}
 				}
@@ -450,7 +450,7 @@ func (c *Client) handleFileSend(request *Request) (tree.Copier, error) {
 }
 
 func (c *Client) GetContents(path []string) (io.ReadCloser, error) {
-	return nil, tree.NotImplemented("GetContents from remote")
+	return nil, tree.ErrNotImplemented("GetContents from remote")
 }
 
 func (c *Client) CopySource(info tree.FileInfo) (io.ReadCloser, error) {

@@ -34,6 +34,7 @@ import (
 	"bufio"
 	"errors"
 	"io"
+	"strings"
 	"time"
 
 	"github.com/aykevl/dtsync/dtdiff"
@@ -48,6 +49,7 @@ var (
 	ErrInvalidId       = errors.New("remote: invalid request ID")
 	ErrInvalidPath     = errors.New("remote: invalid path")
 	ErrInvalidResponse = errors.New("remote: invalid response")
+	ErrInvalidError    = errors.New("remote: remote sent an invalid error message")
 	ErrNoTests         = errors.New("remote: this is not a test tree")
 	ErrConcurrentScan  = errors.New("remote: Scan() during scan")
 )
@@ -68,14 +70,48 @@ func (e invalidRequest) Error() string {
 	return "invalid request: " + e.message
 }
 
-func remoteError(message string) error {
-	switch message {
-	case tree.ErrNotFound.Error():
-		return tree.ErrNotFound
-	case tree.ErrFound.Error():
-		return tree.ErrFound
+func decodeRemoteError(err *Error) error {
+	if err.Type == nil || err.Message == nil {
+		return ErrInvalidError
+	}
+
+	switch *err.Type {
+	case ErrorType_ERR_NOTFOUND:
+		return tree.ErrNotFound(strings.Split(*err.Message, "/"))
+	case ErrorType_ERR_FOUND:
+		return tree.ErrFound(strings.Split(*err.Message, "/"))
+	case ErrorType_ERR_OTHER:
+		return RemoteError{*err.Message}
 	default:
-		return RemoteError{message}
+		// It's an unknown message, but for extensability, we won't err on this
+		// unknown error.
+		return RemoteError{*err.Message}
+	}
+}
+
+func encodeRemoteError(err error) *Error {
+	switch {
+	case tree.IsNotExist(err):
+		code := ErrorType_ERR_NOTFOUND
+		path := err.(tree.PathError).Path()
+		return &Error{
+			Type:    &code,
+			Message: &path,
+		}
+	case tree.IsExist(err):
+		code := ErrorType_ERR_FOUND
+		path := err.(tree.PathError).Path()
+		return &Error{
+			Type:    &code,
+			Message: &path,
+		}
+	default:
+		code := ErrorType_ERR_OTHER
+		message := err.Error()
+		return &Error{
+			Type:    &code,
+			Message: &message,
+		}
 	}
 }
 

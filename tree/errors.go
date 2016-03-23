@@ -29,6 +29,7 @@
 package tree
 
 import (
+	"strings"
 	"errors"
 	"os"
 )
@@ -37,27 +38,64 @@ import (
 var (
 	ErrNoDirectory        = errors.New("tree: this is not a directory")
 	ErrNoRegular          = errors.New("tree: this is not a regular file")
-	ErrNotFound           = errors.New("tree: file not found")
-	ErrFound              = errors.New("tree: file already exists")
 	ErrInvalidName        = errors.New("tree: invalid file name")
 	ErrChanged            = errors.New("tree: updated file between scan and sync")
 	ErrCancelled          = errors.New("tree: write cancelled")
 	ErrParsingFingerprint = errors.New("tree: invalid fingerprint")
 )
 
-// NotImplemented is returned when a method is not implemented or a parameter is
-// not of a required type.
-type NotImplemented string
+type PathError interface {
+	error
+	Path() string
+}
 
-func (feature NotImplemented) Error() string {
+// ErrNotImplemented is returned when a method is not implemented or a parameter
+// is not of a required type.
+type ErrNotImplemented string
+
+func (feature ErrNotImplemented) Error() string {
 	return "tree: not implemented: " + string(feature)
 }
 
+type errNotFound string
+
+// ErrNotFound is returned when a file is not found (e.g. when trying to read
+// it).
+func ErrNotFound(pathParts []string) error {
+	return errNotFound(strings.Join(pathParts, "/"))
+}
+
+func (path errNotFound) Error() string {
+	return "tree: not found: " + string(path)
+}
+
+func (path errNotFound) Path() string {
+	return string(path)
+}
+
+type errFound string
+
+// ErrFound is returned when a file is found when none was expected (e.g. on
+// copy or when creating a directory).
+func ErrFound(pathParts []string) error {
+	return errFound(strings.Join(pathParts, "/"))
+}
+
+func (path errFound) Error() string {
+	return "tree: found: " + string(path)
+}
+
+func (path errFound) Path() string {
+	return string(path)
+}
+
+// IsNotExist returns true if (and only if) this is a 'not found' error. Very
+// similar to os.IsNotExist.
 func IsNotExist(err error) bool {
 	if err == nil {
 		return false
 	}
-	if err == ErrNotFound {
+	if _, ok := err.(errNotFound); ok {
 		return true
 	}
 	if os.IsNotExist(err) {
@@ -66,11 +104,16 @@ func IsNotExist(err error) bool {
 	return false
 }
 
+// IsExist returns true if (and only if) this is a 'found' error (e.g. on
+// directory creation). Very similar to os.IsExist.
 func IsExist(err error) bool {
 	if err == nil {
 		return false
 	}
-	if err == ErrFound {
+	if _, ok := err.(errFound); ok {
+		return true
+	}
+	if os.IsExist(err) {
 		return true
 	}
 	return false

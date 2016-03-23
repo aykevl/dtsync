@@ -482,7 +482,7 @@ func readStatuses(t *testing.T, roots ...tree.TestTree) [][]byte {
 		}
 		statusFile, err := fs.GetFile(dtdiff.STATUS_FILE)
 		if err != nil {
-			if err == tree.ErrNotFound {
+			if tree.IsNotExist(err) {
 				continue
 			}
 			t.Fatal("could not get status file:", err)

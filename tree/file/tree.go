@@ -263,7 +263,7 @@ func (r *Tree) CreateFile(name string, parent, source tree.FileInfo) (tree.Copie
 
 	_, err := os.Lstat(child.fullPath())
 	if err == nil {
-		return nil, tree.ErrFound
+		return nil, tree.ErrFound(child.RelativePath())
 	} else if !os.IsNotExist(err) {
 		return nil, err
 	}
@@ -324,7 +324,7 @@ func (e *Entry) replaceFile(source tree.FileInfo, hash hash.Hash, update bool) (
 			}
 			if !update {
 				if err == nil {
-					return nil, nil, tree.ErrFound
+					return nil, nil, tree.ErrFound(e.RelativePath())
 				} else if !os.IsNotExist(err) {
 					return nil, nil, err
 				}

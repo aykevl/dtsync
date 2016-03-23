@@ -112,6 +112,10 @@ func (e *Entry) RelativePath() []string {
 	return e.pathElements()
 }
 
+func (e *Entry) childRelativePath(name string) []string {
+	return append(e.pathElements(), name)
+}
+
 // Size returns the filesize for files, or the number of direct children for
 // directories.
 func (e *Entry) Size() int64 {
@@ -162,12 +166,12 @@ func (e *Entry) Info() (tree.FileInfo, error) {
 	return e.info(), nil
 }
 
-// ReadInfo returns the FileInfo for the specified file, or tree.ErrNotFound if
-// the file doesn't exist.
+// ReadInfo returns the FileInfo for the specified file, or a 'not found' error
+// if the file doesn't exist.
 func (e *Entry) ReadInfo(path []string) (tree.FileInfo, error) {
 	f := e.get(path)
 	if f == nil {
-		return nil, tree.ErrNotFound
+		return nil, tree.ErrNotFound(path)
 	}
 	return f.info(), nil
 }
@@ -203,7 +207,7 @@ func (e *Entry) get(path []string) *Entry {
 func (e *Entry) CopySource(source tree.FileInfo) (io.ReadCloser, error) {
 	s := e.get(source.RelativePath())
 	if s == nil {
-		return nil, tree.ErrNotFound
+		return nil, tree.ErrNotFound(source.RelativePath())
 	}
 	if tree.Fingerprint(s.info()) != tree.Fingerprint(source) {
 		return nil, tree.ErrChanged
@@ -218,11 +222,11 @@ func (e *Entry) CopySource(source tree.FileInfo) (io.ReadCloser, error) {
 func (e *Entry) Remove(info tree.FileInfo) (tree.FileInfo, error) {
 	child := e.get(info.RelativePath())
 	if child == nil {
-		return nil, tree.ErrNotFound
+		return nil, tree.ErrNotFound(info.RelativePath())
 	}
 	if child.parent.children[child.name] != child {
 		// already removed?
-		return nil, tree.ErrNotFound
+		return nil, tree.ErrNotFound(info.RelativePath())
 	}
 	if child.Type() == tree.TYPE_DIRECTORY {
 		if child.Type() != info.Type() {
@@ -244,7 +248,7 @@ func (e *Entry) GetFile(name string) (io.ReadCloser, error) {
 	if entry, ok := e.children[name]; ok {
 		return newReadCloseBuffer(entry.contents), nil
 	} else {
-		return nil, tree.ErrNotFound
+		return nil, tree.ErrNotFound([]string{name})
 	}
 }
 
@@ -266,7 +270,7 @@ func (e *Entry) SetFile(name string) (io.WriteCloser, error) {
 func (e *Entry) CreateDir(name string, parentInfo tree.FileInfo) (tree.FileInfo, error) {
 	parent := e.get(parentInfo.RelativePath())
 	if parent == nil {
-		return nil, tree.ErrNotFound
+		return nil, tree.ErrNotFound([]string{name})
 	}
 	child := &Entry{
 		fileType: tree.TYPE_DIRECTORY,
@@ -287,11 +291,11 @@ func (e *Entry) CreateDir(name string, parentInfo tree.FileInfo) (tree.FileInfo,
 func (e *Entry) CreateFile(name string, parent, source tree.FileInfo) (tree.Copier, error) {
 	p := e.get(parent.RelativePath())
 	if p == nil {
-		return nil, tree.ErrNotFound
+		return nil, tree.ErrNotFound(parent.RelativePath())
 	}
 
 	if _, ok := p.children[name]; ok {
-		return nil, tree.ErrFound
+		return nil, tree.ErrFound(p.childRelativePath(name))
 	}
 
 	child := &Entry{
@@ -324,7 +328,7 @@ func (e *Entry) addChild(child *Entry) error {
 		e.children = make(map[string]*Entry)
 	}
 	if _, ok := e.children[child.Name()]; ok {
-		return tree.ErrFound
+		return tree.ErrFound(e.childRelativePath(child.Name()))
 	}
 	if !validName(child.name) {
 		return tree.ErrInvalidName
@@ -340,7 +344,7 @@ func (e *Entry) addChild(child *Entry) error {
 func (e *Entry) UpdateFile(file, source tree.FileInfo) (tree.Copier, error) {
 	child := e.get(file.RelativePath())
 	if child == nil {
-		return nil, tree.ErrNotFound
+		return nil, tree.ErrNotFound(file.RelativePath())
 	}
 	if child.fileType != tree.TYPE_REGULAR {
 		return nil, tree.ErrNoRegular
@@ -357,7 +361,7 @@ func (e *Entry) UpdateFile(file, source tree.FileInfo) (tree.Copier, error) {
 func (e *Entry) AddRegular(path []string, contents []byte) (tree.FileInfo, error) {
 	parent := e.get(path[:len(path)-1])
 	if parent == nil {
-		return nil, tree.ErrNotFound
+		return nil, tree.ErrNotFound(path[:len(path)-1])
 	}
 
 	child := &Entry{
@@ -382,7 +386,7 @@ func (e *Entry) GetContents(path []string) (io.ReadCloser, error) {
 	}
 	child := e.get(path)
 	if child == nil {
-		return nil, tree.ErrNotFound
+		return nil, tree.ErrNotFound(path)
 	}
 	return newReadCloseBuffer(child.contents), nil
 }
@@ -391,7 +395,7 @@ func (e *Entry) GetContents(path []string) (io.ReadCloser, error) {
 func (e *Entry) SetContents(path []string, contents []byte) (tree.FileInfo, error) {
 	child := e.get(path)
 	if child == nil {
-		return nil, tree.ErrNotFound
+		return nil, tree.ErrNotFound(path)
 	}
 	child.modTime = time.Now()
 	child.contents = contents

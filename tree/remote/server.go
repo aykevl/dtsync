@@ -267,8 +267,7 @@ func (s *Server) doReply(w *bufio.Writer, reply replyResponse) error {
 	}
 	msg.RequestId = &requestId
 	if reply.err != nil {
-		errString := reply.err.Error()
-		msg.Error = &errString
+		msg.Error = encodeRemoteError(reply.err)
 	}
 	if msg.Command != nil {
 		debugLog("S: send reply  ", *msg.RequestId, Command_name[int32(*msg.Command)])

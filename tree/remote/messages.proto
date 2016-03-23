@@ -36,6 +36,12 @@ enum DataStatus {
 	CANCEL = 2; // there is an error
 }
 
+enum ErrorType {
+	ERR_OTHER    = 0;
+	ERR_NOTFOUND = 1;
+	ERR_FOUND    = 2;
+}
+
 message FileInfo {
 	repeated string   path      = 1;
 	optional FileType type      = 2;
@@ -46,6 +52,11 @@ message FileInfo {
 
 message ScanOptions {
 	repeated string ignore = 1;
+}
+
+message Error {
+	optional ErrorType type    = 1;
+	optional string    message = 2;
 }
 
 message Request {
@@ -61,7 +72,7 @@ message Request {
 message Response {
 	optional Command  command    = 1; // optional, DATA if set
 	optional uint64   requestId  = 2; // required
-	optional string   error      = 3; // set on errors
+	optional Error    error      = 3; // set on errors
 	optional FileInfo fileInfo   = 4;
 	optional FileInfo parentInfo = 5;
 	optional bytes    data       = 6;
