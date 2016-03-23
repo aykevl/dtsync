@@ -28,9 +28,6 @@
 
 //go:generate protoc --go_out=. messages.proto
 
-// Package remote implements the client and server side of a scan over a networ.
-// Any connection can be used, as long as it is a stream of bytes (e.g. TCP,
-// SSH).
 package remote
 
 import (
