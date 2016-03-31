@@ -99,9 +99,7 @@ func (r *Tree) entryFromPath(path []string) *Entry {
 	}
 }
 
-// CreateDir adds a single child directory.
-func (r *Tree) CreateDir(name string, parent tree.FileInfo) (tree.FileInfo, error) {
-	parentPath := parent.RelativePath()
+func (r Tree) entryFromPathName(parentPath []string, name string) (*Entry, error) {
 	path := make([]string, 0, len(parentPath)+1)
 	path = append(path, parentPath...)
 	path = append(path, name)
@@ -109,12 +107,17 @@ func (r *Tree) CreateDir(name string, parent tree.FileInfo) (tree.FileInfo, erro
 		return nil, tree.ErrInvalidName
 	}
 
-	child := Entry{
-		path: path,
-		root: r,
+	return r.entryFromPath(path), nil
+}
+
+// CreateDir adds a single child directory.
+func (r *Tree) CreateDir(name string, parent tree.FileInfo) (tree.FileInfo, error) {
+	child, err := r.entryFromPathName(parent.RelativePath(), name)
+	if err != nil {
+		return nil, err
 	}
 
-	err := os.Mkdir(child.fullPath(), 0777)
+	err = os.Mkdir(child.fullPath(), 0777)
 	if err != nil {
 		return nil, err
 	}
@@ -145,7 +148,7 @@ func (r *Tree) CopySource(source tree.FileInfo) (io.ReadCloser, error) {
 
 	if e.Fingerprint() != tree.Fingerprint(source) {
 		in.Close()
-		return nil, tree.ErrChanged
+		return nil, tree.ErrChanged(e.RelativePath())
 	}
 
 	return in, nil
@@ -167,16 +170,15 @@ func (r *Tree) Remove(file tree.FileInfo) (tree.FileInfo, error) {
 		// move to temporary location to provide atomicity in removing a
 		// directory tree
 		oldPath := e.fullPath()
-		tmpName := TEMPPREFIX + e.Name() + TEMPSUFFIX
-		tmpPath := filepath.Join(e.parentPath(), tmpName)
+		tmpPath := e.tempPath()
 		err := os.Rename(oldPath, tmpPath)
 		if err != nil {
 			return nil, err
 		}
-		e.path[len(e.path)-1] = tmpName
+		e.path[len(e.path)-1] = e.tempName()
 	} else {
 		if e.Fingerprint() != tree.Fingerprint(file) {
-			return nil, tree.ErrChanged
+			return nil, tree.ErrChanged(e.RelativePath())
 		}
 	}
 
@@ -236,7 +238,7 @@ func (r *Tree) SetFile(name string) (io.WriteCloser, error) {
 		path: []string{name},
 		root: r,
 	}
-	tempPath := filepath.Join(e.parentPath(), TEMPPREFIX+name+TEMPSUFFIX)
+	tempPath := e.tempPath()
 	destPath := e.fullPath()
 	fp, err := os.Create(tempPath)
 	if err != nil {
@@ -252,16 +254,12 @@ func (r *Tree) SetFile(name string) (io.WriteCloser, error) {
 
 // CreateFile creates the child, implementing tree.FileEntry. This function is useful for Copy.
 func (r *Tree) CreateFile(name string, parent, source tree.FileInfo) (tree.Copier, error) {
-	parentPath := parent.RelativePath()
-	path := make([]string, 0, len(parentPath))
-	path = append(path, parentPath...)
-	path = append(path, name)
-	child := Entry{
-		path: path,
-		root: r,
+	child, err := r.entryFromPathName(parent.RelativePath(), name)
+	if err != nil {
+		return nil, err
 	}
 
-	_, err := os.Lstat(child.fullPath())
+	_, err = os.Lstat(child.fullPath())
 	if err == nil {
 		return nil, tree.ErrFound(child.RelativePath())
 	} else if !os.IsNotExist(err) {
@@ -286,7 +284,7 @@ func (r *Tree) UpdateFile(file, source tree.FileInfo) (tree.Copier, error) {
 	}
 	e.st = st
 	if e.Fingerprint() != tree.Fingerprint(file) {
-		return nil, tree.ErrChanged
+		return nil, tree.ErrChanged(e.RelativePath())
 	}
 
 	return e.replaceFile(source, tree.NewHash(), true)
@@ -355,6 +353,111 @@ func (e *Entry) replaceFile(source tree.FileInfo, hash hash.Hash, update bool) (
 			return os.Remove(tempPath)
 		},
 	}, nil
+}
+
+func (r *Tree) CreateSymlink(name string, parentInfo, sourceInfo tree.FileInfo, contents string) (tree.FileInfo, tree.FileInfo, error) {
+	child, err := r.entryFromPathName(parentInfo.RelativePath(), name)
+	if err != nil {
+		return nil, nil, err
+	}
+	fullPath := child.fullPath()
+
+	// There will always be an error (EEXIST) when the target path exists, so
+	// we don't have to check whether it exists first.
+	err = os.Symlink(contents, fullPath)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	if !sourceInfo.ModTime().IsZero() {
+		err := Lchtimes(fullPath, sourceInfo.ModTime(), sourceInfo.ModTime())
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+
+	child.st, err = os.Lstat(fullPath)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	parentSt, err := os.Lstat(child.parentPath())
+	if err != nil {
+		return nil, nil, err
+	}
+	parent := Entry{
+		st: parentSt,
+	}
+	return child.makeInfo(nil), parent.makeInfo(nil), nil
+}
+
+func (r *Tree) UpdateSymlink(file, source tree.FileInfo, contents string) (tree.FileInfo, tree.FileInfo, error) {
+	e := r.entryFromPath(source.RelativePath())
+	fullPath := e.fullPath()
+	tempPath := e.tempPath()
+
+	// TODO: this is not necessary with the renameat2 system call and
+	// RENAME_NOREPLACE.
+	st, err := os.Lstat(fullPath)
+	if err != nil {
+		return nil, nil, err
+	} else if st.ModTime() != file.ModTime() {
+		return nil, nil, tree.ErrChanged(e.RelativePath())
+	}
+
+	err = os.Symlink(contents, tempPath)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	if !source.ModTime().IsZero() {
+		err := Lchtimes(tempPath, source.ModTime(), source.ModTime())
+		if err != nil {
+			return nil, nil, err
+		}
+	} else {
+		// At least Linux does not always use the current time on very short
+		// intervals. This is here to keep the test happy.
+		now := time.Now()
+		err := Lchtimes(tempPath, now, now)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+
+	err = os.Rename(tempPath, fullPath)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	e.st, err = os.Lstat(fullPath)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	parentSt, err := os.Lstat(e.parentPath())
+	if err != nil {
+		return nil, nil, err
+	}
+	parent := Entry{
+		st: parentSt,
+	}
+
+	return e.makeInfo(nil), parent.makeInfo(nil), nil
+}
+
+func (r *Tree) ReadSymlink(file tree.FileInfo) (string, error) {
+	e := r.entryFromPath(file.RelativePath())
+	fullPath := e.fullPath()
+
+	st, err := os.Lstat(fullPath)
+	if err != nil {
+		return "", err
+	} else if st.ModTime() != file.ModTime() {
+		return "", tree.ErrChanged(e.RelativePath())
+	}
+
+	return os.Readlink(fullPath)
 }
 
 // GetContents returns an io.ReadCloser (that must be closed) with the contents

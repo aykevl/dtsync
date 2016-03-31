@@ -120,7 +120,7 @@ func (e *Entry) childRelativePath(name string) []string {
 // directories.
 func (e *Entry) Size() int64 {
 	switch e.fileType {
-	case tree.TYPE_REGULAR:
+	case tree.TYPE_REGULAR, tree.TYPE_SYMLINK:
 		return int64(len(e.contents))
 	case tree.TYPE_DIRECTORY:
 		return int64(len(e.children))
@@ -210,7 +210,7 @@ func (e *Entry) CopySource(source tree.FileInfo) (io.ReadCloser, error) {
 		return nil, tree.ErrNotFound(source.RelativePath())
 	}
 	if tree.Fingerprint(s.info()) != tree.Fingerprint(source) {
-		return nil, tree.ErrChanged
+		return nil, tree.ErrChanged(s.RelativePath())
 	}
 	return &fileCloser{
 		bytes.NewBuffer(s.contents),
@@ -230,11 +230,11 @@ func (e *Entry) Remove(info tree.FileInfo) (tree.FileInfo, error) {
 	}
 	if child.Type() == tree.TYPE_DIRECTORY {
 		if child.Type() != info.Type() {
-			return nil, tree.ErrChanged
+			return nil, tree.ErrChanged(child.RelativePath())
 		}
 	} else {
 		if child.Fingerprint() != tree.Fingerprint(info) {
-			return nil, tree.ErrChanged
+			return nil, tree.ErrChanged(child.RelativePath())
 		}
 	}
 	delete(child.parent.children, child.name)
@@ -354,6 +354,61 @@ func (e *Entry) UpdateFile(file, source tree.FileInfo) (tree.Copier, error) {
 		child.contents = buffer.Bytes()
 		return child.info(), child.parent.info(), nil
 	}), nil
+}
+
+// CreateSymlink creates an Entry with type link and the contents.
+func (e *Entry) CreateSymlink(name string, parentInfo, sourceInfo tree.FileInfo, contents string) (tree.FileInfo, tree.FileInfo, error) {
+	parent := e.get(parentInfo.RelativePath())
+	if parent == nil {
+		return nil, nil, tree.ErrNotFound(parentInfo.RelativePath())
+	}
+
+	child := &Entry{
+		fileType: tree.TYPE_SYMLINK,
+		name:     name,
+		contents: []byte(contents),
+		parent:   parent,
+	}
+	if !sourceInfo.ModTime().IsZero() {
+		child.modTime = sourceInfo.ModTime()
+	}
+	err := parent.addChild(child)
+	if err != nil {
+		return nil, nil, err
+	}
+	return child.info(), child.parent.info(), nil
+}
+
+// UpdateSymlink sets the contents of this entry if it is a symlink.
+func (e *Entry) UpdateSymlink(file, source tree.FileInfo, contents string) (tree.FileInfo, tree.FileInfo, error) {
+	child := e.get(file.RelativePath())
+	if child == nil {
+		return nil, nil, tree.ErrNotFound(file.RelativePath())
+	}
+
+	if tree.Fingerprint(child.info()) != tree.Fingerprint(file) {
+		return nil, nil, tree.ErrChanged(child.RelativePath())
+	}
+
+	if source.ModTime().IsZero() {
+		child.modTime = time.Now()
+	} else {
+		child.modTime = source.ModTime()
+	}
+	child.contents = []byte(contents)
+	return child.info(), child.parent.info(), nil
+}
+
+// ReadSymlink returns the contents of this entry if it is a symlink.
+func (e *Entry) ReadSymlink(file tree.FileInfo) (string, error) {
+	child := e.get(file.RelativePath())
+	if child == nil {
+		return "", tree.ErrNotFound(file.RelativePath())
+	}
+	if tree.Fingerprint(child.info()) != tree.Fingerprint(file) {
+		return "", tree.ErrChanged(child.RelativePath())
+	}
+	return string(child.contents), nil
 }
 
 // AddRegular creates a new regular file.

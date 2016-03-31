@@ -39,7 +39,6 @@ var (
 	ErrNoDirectory        = errors.New("tree: this is not a directory")
 	ErrNoRegular          = errors.New("tree: this is not a regular file")
 	ErrInvalidName        = errors.New("tree: invalid file name")
-	ErrChanged            = errors.New("tree: updated file between scan and sync")
 	ErrCancelled          = errors.New("tree: write cancelled")
 	ErrParsingFingerprint = errors.New("tree: invalid fingerprint")
 )
@@ -89,6 +88,21 @@ func (path errFound) Path() string {
 	return string(path)
 }
 
+type errChanged string
+
+// ErrChanged is returned when a file's fingerprint changed between scan and sync.
+func ErrChanged(pathParts []string) error {
+	return errChanged(strings.Join(pathParts, "/"))
+}
+
+func (path errChanged) Error() string {
+	return "tree: changed: " + string(path)
+}
+
+func (path errChanged) Path() string {
+	return string(path)
+}
+
 // IsNotExist returns true if (and only if) this is a 'not found' error. Very
 // similar to os.IsNotExist.
 func IsNotExist(err error) bool {
@@ -117,4 +131,14 @@ func IsExist(err error) bool {
 		return true
 	}
 	return false
+}
+
+// IsChanged returns true if (and only if) this is an error caused by a
+// fingerprint that was different from the expected fingerprint.
+func IsChanged(err error) bool {
+	if err == nil {
+		return false
+	}
+	_, ok := err.(errChanged)
+	return ok
 }

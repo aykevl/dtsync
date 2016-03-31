@@ -93,6 +93,8 @@ func TreeTest(t Tester, fs1, fs2 TestTree) {
 		root2 = fs2.(LocalTree).Root()
 	}
 
+	/*** Test regular files ***/
+
 	info1, err := fs1.AddRegular(pathSplit("file.txt"), nil)
 	if err != nil {
 		t.Fatal("could not add file:", err)
@@ -228,6 +230,102 @@ func TreeTest(t Tester, fs1, fs2 TestTree) {
 		t.Error("root1 is not equal to root2 after Update")
 	}
 
+	/*** Test symlinks ***/
+
+	// create symlink
+	linkTarget := "file.txt"
+	link1, _, err := fs1.CreateSymlink("link", &FileInfoStruct{}, info1, linkTarget)
+	if err != nil {
+		t.Fatal("could not create symlink:", err)
+	}
+	if !link1.ModTime().Equal(info1.ModTime()) {
+		t.Error("CreateSymlink did not set ModTime")
+	}
+
+	// read symlink
+	link, err := fs1.ReadSymlink(link1)
+	if err != nil {
+		t.Error("could not read symlink after create:", err)
+	} else if link != linkTarget {
+		t.Errorf("ReadSymlink: expected %#v, got %#v", linkTarget, link)
+	}
+
+	// try to update symlink (must fail)
+	link2 := NewFileInfo(link1.RelativePath(), TYPE_SYMLINK, time.Time{}, 0, nil)
+	_, _, err = Update(fs1, fs2, link1, link2)
+	if !IsNotExist(err) {
+		t.Error("Update link was not 'not found':", err)
+	}
+
+	// try to copy 'modified' symlink
+	link1Wrong := NewFileInfo(link1.RelativePath(), TYPE_SYMLINK, time.Time{}, 0, nil)
+	_, _, err = Copy(fs1, fs2, link1Wrong, &FileInfoStruct{})
+	if !IsChanged(err) {
+		t.Errorf("No ErrChanged while copying %s: %s", link2.Name(), err)
+	}
+
+	// copy symlink
+	link2, _, err = Copy(fs1, fs2, link1, &FileInfoStruct{})
+	if err != nil {
+		t.Fatal("cannot copy link:", err)
+	}
+
+	// try copying symlink again
+	_, _, err = Copy(fs1, fs2, link1, &FileInfoStruct{})
+	if !IsExist(err) {
+		t.Fatal("overwrite with Copy, error:", err)
+	}
+
+	// update symlink
+	linkTarget = "file-does-not-exist"
+	link1Source := &FileInfoStruct{[]string{"link"}, TYPE_SYMLINK, time.Now(), 0, nil}
+	link1, _, err = fs1.UpdateSymlink(link1, link1Source, linkTarget)
+	if err != nil {
+		t.Fatal("could not update symlink (with mtime):", err)
+	} else if !link1.ModTime().Equal(link1Source.ModTime()) {
+		t.Errorf("UpdateSymlink with time did not set ModTime (expected %s, got %s)", link1Source.ModTime(), link1.ModTime())
+	}
+
+	// update symlink without time
+	oldModTime := link1.ModTime()
+	link1Source.modTime = time.Time{}
+	linkTarget = "file-does-not-exist-2"
+	link1, _, err = fs1.UpdateSymlink(link1, link1Source, linkTarget)
+	if err != nil {
+		t.Fatal("could not update symlink (without mtime):", err)
+	} else if !link1.ModTime().After(oldModTime) {
+		t.Errorf("UpdateSymlink without time did not set ModTime (expected after %s, got %s)", oldModTime, link1.ModTime())
+		t.Fatal()
+	}
+
+	// try updating with 'changed' source symlink
+	_, _, err = Update(fs1, fs2, link1Wrong, link2)
+	if !IsChanged(err) {
+		t.Error("no ErrChanged in Update (source changed), err:", err)
+	}
+
+	// try updating with 'changed' target symlink
+	_, _, err = Update(fs1, fs2, link1, link1Wrong) // link1Wrong can be re-used here
+	if !IsChanged(err) {
+		t.Error("no ErrChanged in Update (source changed), err:", err)
+	}
+
+	// read symlink again
+	link, err = fs1.ReadSymlink(link1)
+	if err != nil {
+		t.Error("could not read symlink after update:", err)
+	} else if link != linkTarget {
+		t.Errorf("ReadSymlink: expected %#v, got %#v", linkTarget, link)
+	}
+
+	// update symlink
+	link2, _, err = Update(fs1, fs2, link1, link2)
+	if err != nil {
+		t.Error("cannot update link:", err)
+	}
+
+	/*** Test directories ***/
+
 	infoDir1, err := fs1.CreateDir("dir", &FileInfoStruct{})
 	if err != nil {
 		t.Error("could not create directory 1:", err)
@@ -237,7 +335,7 @@ func TreeTest(t Tester, fs1, fs2 TestTree) {
 		if !sameInfo(t, infoDir1, dir1) {
 			t.Errorf("FileInfo of %s does not match the return value of CreateDir", dir1)
 		}
-		checkFile(t, root1, dir1, 0, 2, "dir")
+		checkFile(t, root1, dir1, 0, 3, "dir")
 	}
 
 	infoDir2, err := fs2.CreateDir("dir", &FileInfoStruct{})
@@ -249,7 +347,7 @@ func TreeTest(t Tester, fs1, fs2 TestTree) {
 		if !sameInfo(t, infoDir2, dir2) {
 			t.Errorf("FileInfo of %s does not match the return value of CreateDir", dir2)
 		}
-		checkFile(t, root2, dir2, 0, 2, "dir")
+		checkFile(t, root2, dir2, 0, 3, "dir")
 	}
 
 	if root1 != nil && root2 != nil && !testEqual(t, root1, root2) {
@@ -274,11 +372,15 @@ func TreeTest(t Tester, fs1, fs2 TestTree) {
 		t.Error("root1 is not equal to root2 after adding files to a subdirectory")
 	}
 
+	/*** Test remove ***/
+
 	removeTests := []struct {
 		fs         Tree
 		child      FileInfo
 		sizeBefore int
 	}{
+		{fs1, link1, 3},
+		{fs2, link2, 3},
 		{fs1, info1, 2},
 		{fs2, info2, 2},
 		{fs1, infoDir1, 1},

@@ -9,9 +9,12 @@ enum Command {
 
 	MKDIR       = 10;
 	REMOVE      = 11;
-	CREATE      = 14;
-	UPDATE      = 15;
-	COPYSRC     = 16;
+	CREATE      = 12;
+	UPDATE      = 13;
+	COPYSRC     = 14;
+	CREATELINK  = 15; // create symlink
+	UPDATELINK  = 16; // update symlink
+	READLINK    = 17; // remove symlink
 
 	GETFILE     = 20;
 	SETFILE     = 21;
@@ -40,6 +43,7 @@ enum ErrorType {
 	ERR_OTHER    = 0;
 	ERR_NOTFOUND = 1;
 	ERR_FOUND    = 2;
+	ERR_CHANGED  = 3;
 }
 
 message FileInfo {

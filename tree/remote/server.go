@@ -228,6 +228,25 @@ func (s *Server) handleRequest(msg *Request, recvStreams map[uint64]chan []byte)
 		} else {
 			go s.update(*msg.RequestId, parseFileInfo(msg.FileInfo1), parseFileInfo(msg.FileInfo2), dataChan)
 		}
+	case Command_CREATELINK, Command_UPDATELINK:
+		// Client wants to create a file.
+		if msg.FileInfo1 == nil || msg.FileInfo2 == nil || msg.Data == nil {
+			return invalidRequest{"CREATELINK/UPDATELINK expects fileInfo1, fileInfo2 and data"}
+		}
+		if *msg.Command == Command_CREATELINK {
+			if msg.Name == nil {
+				return invalidRequest{"CREATELINK expects name to be set"}
+			}
+			go s.createSymlink(*msg.RequestId, *msg.Name, parseFileInfo(msg.FileInfo1), parseFileInfo(msg.FileInfo2), string(msg.Data))
+		} else {
+			go s.updateSymlink(*msg.RequestId, parseFileInfo(msg.FileInfo1), parseFileInfo(msg.FileInfo2), string(msg.Data))
+		}
+	case Command_READLINK:
+		// Client wants to read the link target of a link (readlink).
+		if msg.FileInfo1 == nil {
+			return invalidRequest{"READLINK expects fileInfo1 to be set"}
+		}
+		go s.readSymlink(*msg.RequestId, parseFileInfo(msg.FileInfo1))
 	case Command_COPYSRC:
 		// Client requests a file.
 		if msg.FileInfo1 == nil || msg.FileInfo1.Type == nil || msg.FileInfo1.Path == nil ||
@@ -443,6 +462,31 @@ func (s *Server) handleCopier(requestId uint64, dataChan chan []byte, cp tree.Co
 	}
 }
 
+func (s *Server) createSymlink(requestId uint64, name string, parent, source tree.FileInfo, contents string) {
+	info, parentInfo, err := s.fs.CreateSymlink(name, parent, source, contents)
+	s.replyInfo2(requestId, info, parentInfo, err)
+}
+
+func (s *Server) updateSymlink(requestId uint64, file, source tree.FileInfo, contents string) {
+	info, parentInfo, err := s.fs.UpdateSymlink(file, source, contents)
+	s.replyInfo2(requestId, info, parentInfo, err)
+}
+
+func (s *Server) readSymlink(requestId uint64, file tree.FileInfo) {
+	contents, err := s.fs.ReadSymlink(file)
+	if err != nil {
+		s.replyError(requestId, err)
+	} else {
+		s.replyChan <- replyResponse{
+			requestId,
+			&Response{
+				Data: []byte(contents),
+			},
+			nil,
+		}
+	}
+}
+
 func (s *Server) mkdir(requestId uint64, name string, parent tree.FileInfo) {
 	info, err := s.fs.CreateDir(name, parent)
 	s.replyInfo(requestId, info, err)
@@ -461,6 +505,21 @@ func (s *Server) replyInfo(requestId uint64, info tree.FileInfo, err error) {
 			requestId,
 			&Response{
 				FileInfo: serializeFileInfo(info),
+			},
+			nil,
+		}
+	}
+}
+
+func (s *Server) replyInfo2(requestId uint64, file, parent tree.FileInfo, err error) {
+	if err != nil {
+		s.replyError(requestId, err)
+	} else {
+		s.replyChan <- replyResponse{
+			requestId,
+			&Response{
+				FileInfo:   serializeFileInfo(file),
+				ParentInfo: serializeFileInfo(parent),
 			},
 			nil,
 		}

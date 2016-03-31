@@ -52,6 +52,7 @@ const (
 	TYPE_UNKNOWN   Type = 0
 	TYPE_REGULAR   Type = 1
 	TYPE_DIRECTORY Type = 2
+	TYPE_SYMLINK   Type = 3
 )
 
 func (t Type) Char() string {
@@ -103,6 +104,15 @@ type FileTree interface {
 
 	// Update this file. May do about the same as CreateFile.
 	UpdateFile(file, source FileInfo) (Copier, error)
+
+	// Create a symbolic link.
+	CreateSymlink(name string, parent, source FileInfo, contents string) (FileInfo, FileInfo, error)
+
+	// Update a symbolic link.
+	UpdateSymlink(file, source FileInfo, contents string) (FileInfo, FileInfo, error)
+
+	// Read the contents (target path) of a symbolic link.
+	ReadSymlink(file FileInfo) (string, error)
 
 	// GetContents returns a io.ReadCloser with the contents of this file.
 	// Useful for Equals().
@@ -204,6 +214,14 @@ func Copy(this, other Tree, source, targetParent FileInfo) (info FileInfo, paren
 		// outf.Finish() usually does an fsync and rename (and closes the file)
 		return outf.Finish()
 
+	case TYPE_SYMLINK:
+		link, err := thisFileTree.ReadSymlink(source)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		return otherFileTree.CreateSymlink(source.Name(), targetParent, source, link)
+
 	default:
 		return nil, nil, ErrNotImplemented("copying a non-regular file")
 	}
@@ -241,8 +259,19 @@ func Update(this, other Tree, source, target FileInfo) (FileInfo, FileInfo, erro
 
 		return outf.Finish()
 
+	case TYPE_SYMLINK:
+		link, err := thisFileTree.ReadSymlink(source)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		return otherFileTree.UpdateSymlink(target, source, link)
+
+	case TYPE_UNKNOWN:
+		return nil, nil, ErrNotImplemented("Update: file type is TYPE_UNKNOWN")
+
 	default:
-		return nil, nil, ErrNotImplemented("updating a non-regular file")
+		return nil, nil, ErrNotImplemented("Update: unknown file type")
 	}
 }
 
@@ -427,6 +456,7 @@ func Equal(file1, file2 Entry, includeDirModTime bool) (bool, error) {
 			}
 		}
 		return bytes.Equal(contents[0], contents[1]), nil
+
 	case TYPE_DIRECTORY:
 		list1, err := file1.List()
 		if err != nil {
@@ -446,8 +476,24 @@ func Equal(file1, file2 Entry, includeDirModTime bool) (bool, error) {
 			}
 		}
 		return true, nil
+
+	case TYPE_SYMLINK:
+		// Both are symlinks, so calling Info() is fast.
+		var links [2]string
+		for i, file := range []Entry{file1, file2} {
+			info, err := file.Info()
+			if err != nil {
+				return false, err
+			}
+			links[i], err = file.Tree().(FileTree).ReadSymlink(info)
+			if err != nil {
+				return false, err
+			}
+		}
+		return links[0] == links[1], nil
+
 	default:
-		panic("unknown fileType")
+		return false, ErrNotImplemented("Equal: unknown filetype")
 	}
 }
 

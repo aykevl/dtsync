@@ -69,11 +69,26 @@ func (e *Entry) Name() string {
 	return e.path[len(e.path)-1]
 }
 
-// path returns the full path for this entry.
+// tempName returns the filename, but with a temporary prefix and suffix.
+func (e *Entry) tempName() string {
+	return TEMPPREFIX + e.Name() + TEMPSUFFIX
+}
+
+// fullPath returns the full path for this entry.
 func (e *Entry) fullPath() string {
 	parts := make([]string, 1, len(e.path)+1)
 	parts[0] = e.root.path
 	parts = append(parts, e.path...)
+	return filepath.Join(parts...)
+}
+
+// tempPath returns a full path to a temporary location for this file (in the
+// same parent directory).
+func (e *Entry) tempPath() string {
+	parts := make([]string, 1, len(e.path)+1)
+	parts[0] = e.root.path
+	parts = append(parts, e.path[:len(e.path)-1]...)
+	parts = append(parts, e.tempName())
 	return filepath.Join(parts...)
 }
 
@@ -107,6 +122,8 @@ func (e *Entry) Type() tree.Type {
 		return tree.TYPE_REGULAR
 	case os.ModeDir:
 		return tree.TYPE_DIRECTORY
+	case os.ModeSymlink:
+		return tree.TYPE_SYMLINK
 	default:
 		return tree.TYPE_UNKNOWN
 	}

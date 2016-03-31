@@ -80,6 +80,8 @@ func decodeRemoteError(err *Error) error {
 		return tree.ErrNotFound(strings.Split(*err.Message, "/"))
 	case ErrorType_ERR_FOUND:
 		return tree.ErrFound(strings.Split(*err.Message, "/"))
+	case ErrorType_ERR_CHANGED:
+		return tree.ErrChanged(strings.Split(*err.Message, "/"))
 	case ErrorType_ERR_OTHER:
 		return RemoteError{*err.Message}
 	default:
@@ -100,6 +102,13 @@ func encodeRemoteError(err error) *Error {
 		}
 	case tree.IsExist(err):
 		code := ErrorType_ERR_FOUND
+		path := err.(tree.PathError).Path()
+		return &Error{
+			Type:    &code,
+			Message: &path,
+		}
+	case tree.IsChanged(err):
+		code := ErrorType_ERR_CHANGED
 		path := err.(tree.PathError).Path()
 		return &Error{
 			Type:    &code,
@@ -146,16 +155,19 @@ func serializeFileInfo(info tree.FileInfo) *FileInfo {
 		}
 	}
 
-	modTime := info.ModTime().UnixNano()
 	size := info.Size()
 	fileType := FileType(info.Type())
-	return &FileInfo{
+	fileInfo := &FileInfo{
 		Path:    path,
 		Type:    &fileType,
-		ModTime: &modTime,
 		Size:    &size,
 		Hash:    info.Hash(),
 	}
+	if !info.ModTime().IsZero() {
+		modTime := info.ModTime().UnixNano()
+		fileInfo.ModTime = &modTime
+	}
+	return fileInfo
 }
 
 // parseFileInfo does the reverse of serializeFileInfo: convert a *FileInfo to a

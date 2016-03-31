@@ -449,6 +449,65 @@ func (c *Client) handleFileSend(request *Request) (tree.Copier, error) {
 	return cp, nil
 }
 
+// CreateSymlink creates a new symbolic link on the remote tree.
+func (c *Client) CreateSymlink(name string, parentInfo, sourceInfo tree.FileInfo, contents string) (tree.FileInfo, tree.FileInfo, error) {
+	debugLog("\nC: CreateSymlink")
+	command := Command_CREATELINK
+	request := &Request{
+		Command:   &command,
+		Name:      &name,
+		FileInfo1: serializeFileInfo(parentInfo),
+		FileInfo2: serializeFileInfo(sourceInfo),
+		Data:      []byte(contents),
+	}
+	ch := c.handleReply(request, nil, nil)
+	respData := <-ch
+	resp, err := respData.resp, respData.err
+	if err != nil {
+		return nil, nil, err
+	}
+	return parseFileInfo(resp.FileInfo), parseFileInfo(resp.ParentInfo), nil
+}
+
+// UpdateSymlink updates a symbolic link on the remote tree to the new path (contents).
+func (c *Client) UpdateSymlink(file, source tree.FileInfo, contents string) (tree.FileInfo, tree.FileInfo, error) {
+	debugLog("\nC: UpdateSymlink")
+	command := Command_UPDATELINK
+	request := &Request{
+		Command:   &command,
+		FileInfo1: serializeFileInfo(file),
+		FileInfo2: serializeFileInfo(source),
+		Data:      []byte(contents),
+	}
+	ch := c.handleReply(request, nil, nil)
+	respData := <-ch
+	resp, err := respData.resp, respData.err
+	if err != nil {
+		return nil, nil, err
+	}
+	return parseFileInfo(resp.FileInfo), parseFileInfo(resp.ParentInfo), nil
+}
+
+// ReadSymlink reads the symlink from the remote tree.
+func (c *Client) ReadSymlink(file tree.FileInfo) (string, error) {
+	debugLog("\nC: ReadSymlink")
+	command := Command_READLINK
+	request := &Request{
+		Command:   &command,
+		FileInfo1: serializeFileInfo(file),
+	}
+	ch := c.handleReply(request, nil, nil)
+	respData := <-ch
+	resp, err := respData.resp, respData.err
+	if err != nil {
+		return "", err
+	}
+	if resp.Data == nil {
+		return "", ErrInvalidResponse
+	}
+	return string(respData.resp.Data), nil
+}
+
 func (c *Client) GetContents(path []string) (io.ReadCloser, error) {
 	return nil, tree.ErrNotImplemented("GetContents from remote")
 }
