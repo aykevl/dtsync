@@ -194,13 +194,13 @@ func (s *Server) handleRequest(msg *Request, recvStreams map[uint64]chan []byte)
 		if msg.FileInfo1 == nil || msg.Name == nil {
 			return invalidRequest{"MKDIR expects fileInfo1 and name fields"}
 		}
-		go s.mkdir(*msg.RequestId, *msg.Name, msg.FileInfo1)
+		go s.mkdir(*msg.RequestId, *msg.Name, parseFileInfo(msg.FileInfo1))
 	case Command_REMOVE:
 		// Client wants to create a directory.
 		if msg.FileInfo1 == nil || msg.FileInfo1.Path == nil || msg.FileInfo1.Type == nil {
 			return invalidRequest{"REMOVE expects fileInfo1 with path and type"}
 		}
-		go s.remove(*msg.RequestId, msg.FileInfo1)
+		go s.remove(*msg.RequestId, parseFileInfo(msg.FileInfo1))
 	case Command_GETFILE:
 		if msg.Name == nil {
 			return invalidRequest{"GETFILE expects name field"}
@@ -224,9 +224,9 @@ func (s *Server) handleRequest(msg *Request, recvStreams map[uint64]chan []byte)
 		dataChan := make(chan []byte, 1)
 		recvStreams[*msg.RequestId] = dataChan
 		if *msg.Command == Command_CREATE {
-			go s.create(*msg.RequestId, *msg.Name, msg.FileInfo1, msg.FileInfo2, dataChan)
+			go s.create(*msg.RequestId, *msg.Name, parseFileInfo(msg.FileInfo1), parseFileInfo(msg.FileInfo2), dataChan)
 		} else {
-			go s.update(*msg.RequestId, msg.FileInfo1, msg.FileInfo2, dataChan)
+			go s.update(*msg.RequestId, parseFileInfo(msg.FileInfo1), parseFileInfo(msg.FileInfo2), dataChan)
 		}
 	case Command_COPYSRC:
 		// Client requests a file.
@@ -234,7 +234,7 @@ func (s *Server) handleRequest(msg *Request, recvStreams map[uint64]chan []byte)
 			msg.FileInfo1.ModTime == nil || msg.FileInfo1.Size == nil {
 			return invalidRequest{"COPYSRC expects fileInfo1 with type, path, modTime and size fields"}
 		}
-		go s.copySource(*msg.RequestId, msg.FileInfo1)
+		go s.copySource(*msg.RequestId, parseFileInfo(msg.FileInfo1))
 	case Command_ADDFILE:
 		if msg.FileInfo1 == nil || msg.FileInfo1.Path == nil || msg.Data == nil {
 			return invalidRequest{"ADDFILE expects fileInfo1 with path and data"}
@@ -369,9 +369,7 @@ func (s *Server) readInfo(requestId uint64, path []string) {
 
 // copySource streams the file back to the client, but checks the FileInfo
 // first.
-func (s *Server) copySource(requestId uint64, fileInfo *FileInfo) {
-	info := parseFileInfo(fileInfo)
-
+func (s *Server) copySource(requestId uint64, info tree.FileInfo) {
 	switch info.Type() {
 	case tree.TYPE_REGULAR:
 		reader, err := s.fs.CopySource(info)
@@ -394,16 +392,12 @@ func (s *Server) getFile(requestId uint64, name string) {
 	}
 }
 
-func (s *Server) create(requestId uint64, name string, parentInfo, sourceInfo *FileInfo, dataChan chan []byte) {
-	parent := parseFileInfo(parentInfo)
-	source := parseFileInfo(sourceInfo)
+func (s *Server) create(requestId uint64, name string, parent, source tree.FileInfo, dataChan chan []byte) {
 	cp, err := s.fs.CreateFile(name, parent, source)
 	s.handleCopier(requestId, dataChan, cp, err)
 }
 
-func (s *Server) update(requestId uint64, fileInfo, sourceInfo *FileInfo, dataChan chan []byte) {
-	file := parseFileInfo(fileInfo)
-	source := parseFileInfo(sourceInfo)
+func (s *Server) update(requestId uint64, file, source tree.FileInfo, dataChan chan []byte) {
 	cp, err := s.fs.UpdateFile(file, source)
 	s.handleCopier(requestId, dataChan, cp, err)
 }
@@ -449,14 +443,12 @@ func (s *Server) handleCopier(requestId uint64, dataChan chan []byte, cp tree.Co
 	}
 }
 
-func (s *Server) mkdir(requestId uint64, name string, parentInfo *FileInfo) {
-	parent := parseFileInfo(parentInfo)
+func (s *Server) mkdir(requestId uint64, name string, parent tree.FileInfo) {
 	info, err := s.fs.CreateDir(name, parent)
 	s.replyInfo(requestId, info, err)
 }
 
-func (s *Server) remove(requestId uint64, fileInfo *FileInfo) {
-	file := parseFileInfo(fileInfo)
+func (s *Server) remove(requestId uint64, file tree.FileInfo) {
 	parentInfo, err := s.fs.Remove(file)
 	s.replyInfo(requestId, parentInfo, err)
 }
