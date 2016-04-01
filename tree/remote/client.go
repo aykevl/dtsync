@@ -508,10 +508,6 @@ func (c *Client) ReadSymlink(file tree.FileInfo) (string, error) {
 	return string(respData.resp.Data), nil
 }
 
-func (c *Client) GetContents(path []string) (io.ReadCloser, error) {
-	return nil, tree.ErrNotImplemented("GetContents from remote")
-}
-
 func (c *Client) CopySource(info tree.FileInfo) (io.ReadCloser, error) {
 	debugLog("\nC: CopySource")
 	command := Command_COPYSRC

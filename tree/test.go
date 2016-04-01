@@ -520,3 +520,71 @@ func testEqual(t Tester, file1, file2 Entry) bool {
 	}
 	return equal
 }
+
+// Equal compares two entries, only returning true when this file and possible
+// children (for directories) are exactly equal.
+func Equal(file1, file2 Entry, includeDirModTime bool) (bool, error) {
+	if file1.Name() != file2.Name() || file1.Type() != file2.Type() {
+		return false, nil
+	}
+	if !file1.ModTime().Equal(file2.ModTime()) {
+		if file1.Type() == TYPE_DIRECTORY {
+			if includeDirModTime {
+				return false, nil
+			}
+		} else {
+			return false, nil
+		}
+	}
+	switch file1.Type() {
+	case TYPE_REGULAR:
+		hashes := make([][]byte, 2)
+		for i, file := range []Entry{file1, file2} {
+			testTree, ok := file.Tree().(TestTree)
+			if !ok {
+				return false, ErrNotImplemented("Equal: comparing non-TestTree entries")
+			}
+			info, err := testTree.ReadInfo(file.RelativePath())
+			if err != nil {
+				return false, err
+			}
+			hashes[i] = info.Hash()
+		}
+		return hashes[0] != nil && bytes.Equal(hashes[0], hashes[1]), nil
+
+	case TYPE_DIRECTORY:
+		list1, err := file1.List()
+		if err != nil {
+			return false, err
+		}
+		list2, err := file2.List()
+		if err != nil {
+			return false, err
+		}
+
+		if len(list1) != len(list2) {
+			return false, nil
+		}
+		for i := 0; i < len(list1); i++ {
+			if equal, err := Equal(list1[i], list2[i], includeDirModTime); !equal || err != nil {
+				return equal, err
+			}
+		}
+		return true, nil
+
+	case TYPE_SYMLINK:
+		// Both are symlinks, so calling Info() is fast.
+		var links [2]string
+		for i, file := range []Entry{file1, file2} {
+			var err error
+			links[i], err = file.Tree().(FileTree).ReadSymlink(file.Info())
+			if err != nil {
+				return false, err
+			}
+		}
+		return links[0] == links[1], nil
+
+	default:
+		return false, ErrNotImplemented("Equal: unknown filetype")
+	}
+}

@@ -33,9 +33,7 @@
 package tree
 
 import (
-	"bytes"
 	"io"
-	"io/ioutil"
 	"sort"
 	"strconv"
 	"strings"
@@ -113,10 +111,6 @@ type FileTree interface {
 
 	// Read the contents (target path) of a symbolic link.
 	ReadSymlink(file FileInfo) (string, error)
-
-	// GetContents returns a io.ReadCloser with the contents of this file.
-	// Useful for Equals().
-	GetContents(path []string) (io.ReadCloser, error)
 
 	// CopySource returns a io.ReadCloser, but checks first whether the FileInfo
 	// matches.
@@ -432,80 +426,6 @@ func (es EntrySlice) Swap(i, j int) {
 func SortEntries(slice []Entry) {
 	es := EntrySlice(slice)
 	sort.Sort(es)
-}
-
-// Equal compares two entries, only returning true when this file and possible
-// children (for directories) are exactly equal.
-func Equal(file1, file2 Entry, includeDirModTime bool) (bool, error) {
-	if file1.Name() != file2.Name() || file1.Type() != file2.Type() {
-		return false, nil
-	}
-	if !file1.ModTime().Equal(file2.ModTime()) {
-		if file1.Type() == TYPE_DIRECTORY {
-			if includeDirModTime {
-				return false, nil
-			}
-		} else {
-			return false, nil
-		}
-	}
-	switch file1.Type() {
-	case TYPE_REGULAR:
-		contents := make([][]byte, 2)
-		// TODO compare the contents block-for-block, not by loading the two
-		// files in memory.
-		for i, file := range []Entry{file1, file2} {
-			fileTree, ok := file.Tree().(FileTree)
-			if !ok {
-				return false, ErrNotImplemented("Equal: comparing non-FileTree Entries")
-			}
-			reader, err := fileTree.GetContents(file.RelativePath())
-			if err != nil {
-				return false, err
-			}
-			defer reader.Close()
-			contents[i], err = ioutil.ReadAll(reader)
-			if err != nil {
-				return false, err
-			}
-		}
-		return bytes.Equal(contents[0], contents[1]), nil
-
-	case TYPE_DIRECTORY:
-		list1, err := file1.List()
-		if err != nil {
-			return false, err
-		}
-		list2, err := file2.List()
-		if err != nil {
-			return false, err
-		}
-
-		if len(list1) != len(list2) {
-			return false, nil
-		}
-		for i := 0; i < len(list1); i++ {
-			if equal, err := Equal(list1[i], list2[i], includeDirModTime); !equal || err != nil {
-				return equal, err
-			}
-		}
-		return true, nil
-
-	case TYPE_SYMLINK:
-		// Both are symlinks, so calling Info() is fast.
-		var links [2]string
-		for i, file := range []Entry{file1, file2} {
-			var err error
-			links[i], err = file.Tree().(FileTree).ReadSymlink(file.Info())
-			if err != nil {
-				return false, err
-			}
-		}
-		return links[0] == links[1], nil
-
-	default:
-		return false, ErrNotImplemented("Equal: unknown filetype")
-	}
 }
 
 // Copier is returned by the Copy and Update methods. Calling Finish() closes

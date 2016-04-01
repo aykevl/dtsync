@@ -437,19 +437,6 @@ func (e *Entry) AddRegular(path []string, contents []byte) (tree.FileInfo, error
 	return child.fullInfo(), nil
 }
 
-// GetContents returns a reader to read the contents of the file. Must be closed
-// after use.
-func (e *Entry) GetContents(path []string) (io.ReadCloser, error) {
-	if !e.isRoot() {
-		panic("not a root")
-	}
-	child := e.get(path)
-	if child == nil {
-		return nil, tree.ErrNotFound(path)
-	}
-	return newReadCloseBuffer(child.contents), nil
-}
-
 // SetContents sets the internal contents of the file, for debugging.
 func (e *Entry) SetContents(path []string, contents []byte) (tree.FileInfo, error) {
 	child := e.get(path)

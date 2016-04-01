@@ -460,12 +460,6 @@ func (r *Tree) ReadSymlink(file tree.FileInfo) (string, error) {
 	return os.Readlink(fullPath)
 }
 
-// GetContents returns an io.ReadCloser (that must be closed) with the contents
-// of this entry.
-func (r *Tree) GetContents(path []string) (io.ReadCloser, error) {
-	return os.Open(filepath.Join(r.path, filepath.Join(path...)))
-}
-
 // AddRegular implements tree.TestTree by adding a single file with the given
 // name and contents.
 func (r *Tree) AddRegular(path []string, contents []byte) (tree.FileInfo, error) {

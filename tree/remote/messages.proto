@@ -20,7 +20,6 @@ enum Command {
 	SETFILE     = 21;
 
 	// testing commands
-	GETCONTENTS = 30;
 	ADDFILE     = 31;
 	SETCONTENTS = 32;
 	INFO        = 33;
