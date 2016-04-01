@@ -134,11 +134,6 @@ func (e *Entry) ModTime() time.Time {
 	return e.modTime
 }
 
-// Fingerprint returns a fingerprint calculated from the file's metadata.
-func (e *Entry) Fingerprint() string {
-	return tree.Fingerprint(e.info())
-}
-
 // Hash returns the blake2b hash of this file.
 func (e *Entry) Hash() ([]byte, error) {
 	return e.hash(), nil
@@ -156,24 +151,33 @@ func (e *Entry) hash() []byte {
 	return hash.Sum(nil)
 }
 
-func (e *Entry) info() tree.FileInfo {
-	return tree.NewFileInfo(e.RelativePath(), e.fileType, e.modTime, e.Size(), e.hash())
+func (e *Entry) makeInfo(hash []byte) tree.FileInfo {
+	return tree.NewFileInfo(e.RelativePath(), e.fileType, e.modTime, e.Size(), hash)
 }
 
-// Info returns a FileInfo object. It won't return an error (there are no IO
-// errors in an in-memory filesystem).
-func (e *Entry) Info() (tree.FileInfo, error) {
-	return e.info(), nil
+// Info returns a FileInfo object without a hash.
+func (e *Entry) Info() tree.FileInfo {
+	return e.makeInfo(nil)
 }
 
-// ReadInfo returns the FileInfo for the specified file, or a 'not found' error
-// if the file doesn't exist.
+// FullInfo returns a FileInfo object with hash. It won't return an error
+// (there are no IO errors in an in-memory filesystem).
+func (e *Entry) FullInfo() (tree.FileInfo, error) {
+	return e.fullInfo(), nil
+}
+
+func (e *Entry) fullInfo() tree.FileInfo {
+	return e.makeInfo(e.hash())
+}
+
+// ReadInfo returns the FileInfo for the specified file, with a hash, or a 'not
+// found' error if the file doesn't exist.
 func (e *Entry) ReadInfo(path []string) (tree.FileInfo, error) {
 	f := e.get(path)
 	if f == nil {
 		return nil, tree.ErrNotFound(path)
 	}
-	return f.info(), nil
+	return f.fullInfo(), nil
 }
 
 // List returns a list of directory entries for directories. It returns an error
@@ -209,7 +213,7 @@ func (e *Entry) CopySource(source tree.FileInfo) (io.ReadCloser, error) {
 	if s == nil {
 		return nil, tree.ErrNotFound(source.RelativePath())
 	}
-	if tree.Fingerprint(s.info()) != tree.Fingerprint(source) {
+	if !tree.MatchFingerprint(s.Info(), source) {
 		return nil, tree.ErrChanged(s.RelativePath())
 	}
 	return &fileCloser{
@@ -233,13 +237,13 @@ func (e *Entry) Remove(info tree.FileInfo) (tree.FileInfo, error) {
 			return nil, tree.ErrChanged(child.RelativePath())
 		}
 	} else {
-		if child.Fingerprint() != tree.Fingerprint(info) {
+		if !tree.MatchFingerprint(child.Info(), info) {
 			return nil, tree.ErrChanged(child.RelativePath())
 		}
 	}
 	delete(child.parent.children, child.name)
 	child.parent.modTime = time.Now()
-	return child.parent.info(), nil
+	return child.parent.Info(), nil
 }
 
 // GetFile returns a file handle (io.ReadCloser) that can be used to read a
@@ -282,7 +286,7 @@ func (e *Entry) CreateDir(name string, parentInfo tree.FileInfo) (tree.FileInfo,
 	if err != nil {
 		return nil, err
 	}
-	return child.info(), nil
+	return child.fullInfo(), nil
 }
 
 // CreateFile is part of tree.FileEntry. It returns the created entry, a
@@ -311,7 +315,7 @@ func (e *Entry) CreateFile(name string, parent, source tree.FileInfo) (tree.Copi
 			return nil, nil, err
 		}
 		child.contents = buffer.Bytes()
-		return child.info(), child.parent.info(), nil
+		return child.fullInfo(), child.parent.Info(), nil
 	})
 
 	return file, nil
@@ -352,7 +356,7 @@ func (e *Entry) UpdateFile(file, source tree.FileInfo) (tree.Copier, error) {
 	return newFileCopier(func(buffer *bytes.Buffer) (tree.FileInfo, tree.FileInfo, error) {
 		child.modTime = source.ModTime()
 		child.contents = buffer.Bytes()
-		return child.info(), child.parent.info(), nil
+		return child.fullInfo(), child.parent.Info(), nil
 	}), nil
 }
 
@@ -376,7 +380,7 @@ func (e *Entry) CreateSymlink(name string, parentInfo, sourceInfo tree.FileInfo,
 	if err != nil {
 		return nil, nil, err
 	}
-	return child.info(), child.parent.info(), nil
+	return child.fullInfo(), child.parent.Info(), nil
 }
 
 // UpdateSymlink sets the contents of this entry if it is a symlink.
@@ -386,7 +390,7 @@ func (e *Entry) UpdateSymlink(file, source tree.FileInfo, contents string) (tree
 		return nil, nil, tree.ErrNotFound(file.RelativePath())
 	}
 
-	if tree.Fingerprint(child.info()) != tree.Fingerprint(file) {
+	if !tree.MatchFingerprint(child.Info(), file) {
 		return nil, nil, tree.ErrChanged(child.RelativePath())
 	}
 
@@ -396,7 +400,7 @@ func (e *Entry) UpdateSymlink(file, source tree.FileInfo, contents string) (tree
 		child.modTime = source.ModTime()
 	}
 	child.contents = []byte(contents)
-	return child.info(), child.parent.info(), nil
+	return child.fullInfo(), child.parent.Info(), nil
 }
 
 // ReadSymlink returns the contents of this entry if it is a symlink.
@@ -405,7 +409,7 @@ func (e *Entry) ReadSymlink(file tree.FileInfo) (string, error) {
 	if child == nil {
 		return "", tree.ErrNotFound(file.RelativePath())
 	}
-	if tree.Fingerprint(child.info()) != tree.Fingerprint(file) {
+	if !tree.MatchFingerprint(child.Info(), file) {
 		return "", tree.ErrChanged(child.RelativePath())
 	}
 	return string(child.contents), nil
@@ -430,7 +434,7 @@ func (e *Entry) AddRegular(path []string, contents []byte) (tree.FileInfo, error
 	if err != nil {
 		return nil, err
 	}
-	return child.info(), nil
+	return child.fullInfo(), nil
 }
 
 // GetContents returns a reader to read the contents of the file. Must be closed
@@ -454,5 +458,5 @@ func (e *Entry) SetContents(path []string, contents []byte) (tree.FileInfo, erro
 	}
 	child.modTime = time.Now()
 	child.contents = contents
-	return child.info(), nil
+	return child.fullInfo(), nil
 }

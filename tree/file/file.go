@@ -140,11 +140,6 @@ func (e *Entry) Size() int64 {
 	return e.st.Size()
 }
 
-// Fingerprint returns a fingerprint calculated from the file's metadata.
-func (e *Entry) Fingerprint() string {
-	return tree.Fingerprint(e.makeInfo(nil))
-}
-
 // Hash returns the blake2b hash of this file.
 func (e *Entry) Hash() ([]byte, error) {
 	if e.Type() != tree.TYPE_REGULAR {
@@ -169,13 +164,20 @@ func (e *Entry) makeInfo(hash []byte) tree.FileInfo {
 	return tree.NewFileInfo(e.RelativePath(), e.Type(), e.ModTime(), e.Size(), hash)
 }
 
-// Info returns a tree.FileInfo, or an error if the hash couldn't be calculated.
-func (e *Entry) Info() (tree.FileInfo, error) {
+// FullInfo returns a tree.FileInfo with hash, or an error if the hash couldn't
+// be calculated.
+func (e *Entry) FullInfo() (tree.FileInfo, error) {
 	hash, err := e.Hash()
 	if err != nil {
 		return nil, err
 	}
 	return e.makeInfo(hash), nil
+}
+
+// Info returns a tree.FileInfo of the stat() result in this Entry (thus,
+// without a hash).
+func (e *Entry) Info() tree.FileInfo {
+	return e.makeInfo(nil)
 }
 
 // Tree returns the tree.Tree interface this Entry belongs to.

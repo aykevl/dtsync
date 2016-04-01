@@ -44,7 +44,7 @@ type TestTree interface {
 	AddRegular(path []string, contents []byte) (FileInfo, error)
 	SetContents(path []string, contents []byte) (FileInfo, error)
 
-	// Info returns the FileInfo for a particular path.
+	// Info returns the FileInfo (with hash) for a particular path.
 	ReadInfo(path []string) (FileInfo, error)
 }
 
@@ -491,12 +491,7 @@ func checkInfo(t Tester, dir Entry, info FileInfo, index, length int, relpath st
 		t.Fatalf("len(List()): expected length=%d, got %d, for directory %s and file %s (list %s)", length, len(l), dir, info, l)
 		return
 	}
-	file := l[index]
-	info2, err := file.Info()
-	if err != nil {
-		t.Fatalf("could not get info from %s: %s", info, err)
-	}
-	if Fingerprint(info) != Fingerprint(info2) {
+	if !MatchFingerprint(info, l[index].Info()) {
 		t.Errorf("root1.List()[%d] (%s) is not the same as the file added (%s)", index, l[index], info)
 	}
 	if pathJoin(info.RelativePath()) != relpath {
@@ -524,12 +519,4 @@ func testEqual(t Tester, file1, file2 Entry) bool {
 		t.Fatalf("could not compare files %s and %s: %s", file1, file2, err)
 	}
 	return equal
-}
-
-func infoFromEntry(t Tester, e Entry) FileInfo {
-	info, err := e.Info()
-	if err != nil {
-		t.Fatal("Info() returned error:", err)
-	}
-	return info
 }

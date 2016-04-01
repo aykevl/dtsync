@@ -473,7 +473,7 @@ func (r *Replica) scanDir(dir tree.Entry, statusDir *Entry, cancel chan struct{}
 
 		if status == nil {
 			// add status
-			info, err := file.Info()
+			info, err := file.FullInfo()
 			if err != nil {
 				return err
 			}
@@ -485,7 +485,7 @@ func (r *Replica) scanDir(dir tree.Entry, statusDir *Entry, cancel chan struct{}
 			// update status (if needed)
 			oldHash := status.Hash()
 			oldFingerprint := status.Fingerprint()
-			newFingerprint := file.Fingerprint()
+			newFingerprint := tree.Fingerprint(file.Info())
 			var newHash []byte
 			var err error
 			if oldFingerprint == newFingerprint && oldHash != nil {

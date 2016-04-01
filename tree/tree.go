@@ -162,14 +162,15 @@ type Entry interface {
 	// Size returns the filesize for regular files. For others, it's
 	// implementation-dependent.
 	Size() int64
-	// Fingerprint returns a (weak) fingerprint of this file, including it's
-	// type and modification time, and possibly including it's size or
-	// permission bits.
-	Fingerprint() string
 	// Hash calculates the blake2b hash of the file and returns it.
 	Hash() ([]byte, error)
-	// Info returns a FileInfo from this Entry.
-	Info() (FileInfo, error)
+	// Info returns a FileInfo without a hash from this Entry.
+	// It must be fast (it shouldn't do any I/O).
+	Info() FileInfo
+	// FullInfo returns a FileInfo with hash from this Entry.
+	// The FileInfo comes from Info(), but it has the hash set for regular
+	// files.
+	FullInfo() (FileInfo, error)
 	// Tree returns the tree this entry belongs to.
 	Tree() Tree
 	// Return a list of children, in alphabetic order.
@@ -355,6 +356,19 @@ func Fingerprint(e FileInfo) string {
 	return strings.Join(parts, "/")
 }
 
+// MatchFingerprint returns whether two FileInfos would have the same
+// fingerprint without actually creating the fingerprint.
+func MatchFingerprint(info1, info2 FileInfo) bool {
+	if info1.Type() != info2.Type() {
+		return false
+	}
+	if info1.Type() == TYPE_REGULAR && info1.Size() != info2.Size() {
+		return false
+	}
+	// Equal() only looks at the time instant, not the timezone.
+	return info1.ModTime().Equal(info2.ModTime())
+}
+
 type FingerprintInfo struct {
 	Type    Type
 	ModTime time.Time
@@ -481,11 +495,8 @@ func Equal(file1, file2 Entry, includeDirModTime bool) (bool, error) {
 		// Both are symlinks, so calling Info() is fast.
 		var links [2]string
 		for i, file := range []Entry{file1, file2} {
-			info, err := file.Info()
-			if err != nil {
-				return false, err
-			}
-			links[i], err = file.Tree().(FileTree).ReadSymlink(info)
+			var err error
+			links[i], err = file.Tree().(FileTree).ReadSymlink(file.Info())
 			if err != nil {
 				return false, err
 			}

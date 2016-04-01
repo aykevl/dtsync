@@ -146,7 +146,7 @@ func (r *Tree) CopySource(source tree.FileInfo) (io.ReadCloser, error) {
 	}
 	e.st = st
 
-	if e.Fingerprint() != tree.Fingerprint(source) {
+	if !tree.MatchFingerprint(e.Info(), source) {
 		in.Close()
 		return nil, tree.ErrChanged(e.RelativePath())
 	}
@@ -177,7 +177,7 @@ func (r *Tree) Remove(file tree.FileInfo) (tree.FileInfo, error) {
 		}
 		e.path[len(e.path)-1] = e.tempName()
 	} else {
-		if e.Fingerprint() != tree.Fingerprint(file) {
+		if !tree.MatchFingerprint(e.Info(), file) {
 			return nil, tree.ErrChanged(e.RelativePath())
 		}
 	}
@@ -283,7 +283,7 @@ func (r *Tree) UpdateFile(file, source tree.FileInfo) (tree.Copier, error) {
 		return nil, err
 	}
 	e.st = st
-	if e.Fingerprint() != tree.Fingerprint(file) {
+	if !tree.MatchFingerprint(e.Info(), file) {
 		return nil, tree.ErrChanged(e.RelativePath())
 	}
 
@@ -534,7 +534,7 @@ func (r *Tree) SetContents(path []string, contents []byte) (tree.FileInfo, error
 	return file.makeInfo(nil), fp.Sync()
 }
 
-// ReadInfo returns the FileInfo for the specified file.
+// ReadInfo returns the FileInfo for the specified file with a hash.
 func (r *Tree) ReadInfo(path []string) (tree.FileInfo, error) {
 	file := &Entry{
 		root: r,
@@ -545,7 +545,7 @@ func (r *Tree) ReadInfo(path []string) (tree.FileInfo, error) {
 		return nil, err
 	}
 	file.st = st
-	return file.makeInfo(nil), nil
+	return file.FullInfo()
 }
 
 // validPath returns true if such a path is allowed as a file path (e.g. no null
