@@ -532,20 +532,12 @@ func (c *Client) recvFile(request *Request) (*streamReader, error) {
 	return stream, nil
 }
 
-func (c *Client) AddRegular(path []string, contents []byte) (tree.FileInfo, error) {
-	debugLog("\nC: AddRegular")
-	return c.sendFile(Command_ADDFILE, path, contents)
-}
-
-func (c *Client) SetContents(path []string, contents []byte) (tree.FileInfo, error) {
-	debugLog("\nC: SetContents")
-	return c.sendFile(Command_SETCONTENTS, path, contents)
-}
-
-func (c *Client) sendFile(command Command, path []string, contents []byte) (tree.FileInfo, error) {
+func (c *Client) PutFile(path []string, contents []byte) (tree.FileInfo, error) {
+	debugLog("\nC: PutFile")
 	if contents == nil {
 		contents = []byte{}
 	}
+	command := Command_PUTFILE
 	request := &Request{
 		Command: &command,
 		FileInfo1: &FileInfo{

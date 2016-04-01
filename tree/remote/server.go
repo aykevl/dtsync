@@ -254,16 +254,11 @@ func (s *Server) handleRequest(msg *Request, recvStreams map[uint64]chan []byte)
 			return invalidRequest{"COPYSRC expects fileInfo1 with type, path, modTime and size fields"}
 		}
 		go s.copySource(*msg.RequestId, parseFileInfo(msg.FileInfo1))
-	case Command_ADDFILE:
+	case Command_PUTFILE:
 		if msg.FileInfo1 == nil || msg.FileInfo1.Path == nil || msg.Data == nil {
-			return invalidRequest{"ADDFILE expects fileInfo1 with path and data"}
+			return invalidRequest{"PUTFILE expects fileInfo1 with path and data"}
 		}
-		go s.addFile(*msg.RequestId, msg.FileInfo1.Path, msg.Data)
-	case Command_SETCONTENTS:
-		if msg.FileInfo1 == nil || msg.FileInfo1.Path == nil || msg.Data == nil {
-			return invalidRequest{"SETCONT expects fileInfo1 with path and data"}
-		}
-		go s.setContents(*msg.RequestId, msg.FileInfo1.Path, msg.Data)
+		go s.putFile(*msg.RequestId, msg.FileInfo1.Path, msg.Data)
 	case Command_INFO:
 		if msg.FileInfo1 == nil || msg.FileInfo1.Path == nil {
 			return invalidRequest{"INFO expects fileInfo1 with path"}
@@ -338,7 +333,7 @@ func (s *Server) setFile(requestId uint64, name string, dataChan chan []byte) {
 	s.replyChan <- replyResponse{requestId, nil, nil}
 }
 
-func (s *Server) addFile(requestId uint64, path []string, data []byte) {
+func (s *Server) putFile(requestId uint64, path []string, data []byte) {
 	if len(path) == 0 {
 		s.replyError(requestId, ErrInvalidPath)
 		return
@@ -350,23 +345,7 @@ func (s *Server) addFile(requestId uint64, path []string, data []byte) {
 		return
 	}
 
-	info, err := fs.AddRegular(path, data)
-	s.replyInfo(requestId, info, err)
-}
-
-func (s *Server) setContents(requestId uint64, path []string, data []byte) {
-	if len(path) == 0 {
-		s.replyError(requestId, ErrInvalidPath)
-		return
-	}
-
-	fs, ok := s.fs.(tree.TestTree)
-	if !ok {
-		s.replyError(requestId, ErrNoTests)
-		return
-	}
-
-	info, err := fs.SetContents(path, data)
+	info, err := fs.PutFile(path, data)
 	s.replyInfo(requestId, info, err)
 }
 

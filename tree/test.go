@@ -39,10 +39,9 @@ import (
 type TestTree interface {
 	FileTree
 
-	// AddRegular sets the file at the path to the specified contents. The
+	// PutFile sets the file at the path to the specified contents. The
 	// FileInfo returned does not have to contain the hash.
-	AddRegular(path []string, contents []byte) (FileInfo, error)
-	SetContents(path []string, contents []byte) (FileInfo, error)
+	PutFile(path []string, contents []byte) (FileInfo, error)
 
 	// Info returns the FileInfo (with hash) for a particular path.
 	ReadInfo(path []string) (FileInfo, error)
@@ -95,7 +94,7 @@ func TreeTest(t Tester, fs1, fs2 TestTree) {
 
 	/*** Test regular files ***/
 
-	info1, err := fs1.AddRegular(pathSplit("file.txt"), nil)
+	info1, err := fs1.PutFile(pathSplit("file.txt"), nil)
 	if err != nil {
 		t.Fatal("could not add file:", err)
 	}
@@ -186,7 +185,7 @@ func TreeTest(t Tester, fs1, fs2 TestTree) {
 	}
 
 	quickBrowFox := "The quick brown fox jumps over the lazy dog.\n"
-	info, err = fs1.SetContents(info1.RelativePath(), []byte(quickBrowFox))
+	info, err = fs1.PutFile(info1.RelativePath(), []byte(quickBrowFox))
 	if err != nil {
 		t.Fatalf("could not set contents to file %s: %s", info1, err)
 	}
@@ -354,7 +353,7 @@ func TreeTest(t Tester, fs1, fs2 TestTree) {
 		t.Error("root1 is not equal to root2 after CreateDir")
 	}
 
-	childinfo1, err := fs1.AddRegular(pathSplit("dir/file2.txt"), []byte("My ship is full of eels."))
+	childinfo1, err := fs1.PutFile(pathSplit("dir/file2.txt"), []byte("My ship is full of eels."))
 	if err != nil {
 		t.Fatalf("could not create child in directory %s: %s", infoDir1, err)
 	}

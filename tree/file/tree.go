@@ -460,15 +460,22 @@ func (r *Tree) ReadSymlink(file tree.FileInfo) (string, error) {
 	return os.Readlink(fullPath)
 }
 
-// AddRegular implements tree.TestTree by adding a single file with the given
+// PutFile implements tree.TestTree by writing a single file with the given
 // name and contents.
-func (r *Tree) AddRegular(path []string, contents []byte) (tree.FileInfo, error) {
+func (r *Tree) PutFile(path []string, contents []byte) (tree.FileInfo, error) {
 	if len(path) == 0 || !validPath(path) {
 		return nil, tree.ErrInvalidName
 	}
 
 	child := r.entryFromPath(path)
-	file, err := os.Create(child.fullPath())
+	if child == nil {
+		child = &Entry{
+			root: r,
+			path: path,
+		}
+	}
+	fullPath := child.fullPath()
+	file, err := os.Create(fullPath)
 	if err != nil {
 		return nil, err
 	}
@@ -476,6 +483,13 @@ func (r *Tree) AddRegular(path []string, contents []byte) (tree.FileInfo, error)
 	_, err = file.Write(contents)
 	if err != nil {
 		// "Write must return a non-nil error if it returns n < len(p)."
+		return nil, err
+	}
+	// Sometimes, the OS doesn't save the exact time when overwriting a file.
+	now := time.Now()
+	err = os.Chtimes(fullPath, now, now)
+	if err != nil {
+		// could not update
 		return nil, err
 	}
 	err = file.Sync()
@@ -487,45 +501,6 @@ func (r *Tree) AddRegular(path []string, contents []byte) (tree.FileInfo, error)
 		return nil, err
 	}
 	return child.makeInfo(nil), nil
-}
-
-// SetContents writes contents to this file, for testing.
-func (r *Tree) SetContents(path []string, contents []byte) (tree.FileInfo, error) {
-	if !validPath(path) {
-		return nil, tree.ErrInvalidName
-	}
-
-	file := &Entry{
-		root: r,
-		path: path,
-	}
-	fullPath := file.fullPath()
-
-	fp, err := os.Create(fullPath)
-	if err != nil {
-		return nil, err
-	}
-	defer fp.Close()
-
-	_, err = fp.Write(contents)
-	if err != nil {
-		return nil, err
-	}
-
-	// Sometimes, the OS doesn't save the exact time when overwriting a file.
-	now := time.Now()
-	err = os.Chtimes(fullPath, now, now)
-	if err != nil {
-		// could not update
-		return nil, err
-	}
-
-	file.st, err = fp.Stat()
-	if err != nil {
-		return nil, err
-	}
-
-	return file.makeInfo(nil), fp.Sync()
 }
 
 // ReadInfo returns the FileInfo for the specified file with a hash.

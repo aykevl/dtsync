@@ -161,7 +161,7 @@ func syncRoots(t *testing.T, scheme1, scheme2 string) {
 			if err != nil {
 				return err
 			}
-			_, err = fs.AddRegular([]string{"dir", "file.txt"}, []byte("abc"))
+			_, err = fs.PutFile([]string{"dir", "file.txt"}, []byte("abc"))
 			return err
 		}},
 		{"dir", ACTION_REMOVE, 1, func(fs tree.TestTree) error {
@@ -187,7 +187,7 @@ func syncRoots(t *testing.T, scheme1, scheme2 string) {
 		{"fsCheck", fsCheck},
 	}
 	for _, fs := range fsNames {
-		fs.fs.AddRegular([]string{dtdiff.STATUS_FILE}, []byte(`Content-Type: text/tab-separated-values; charset=utf-8
+		fs.fs.PutFile([]string{dtdiff.STATUS_FILE}, []byte(`Content-Type: text/tab-separated-values; charset=utf-8
 Identity: `+fs.name+`
 Generation: 1
 
@@ -225,12 +225,12 @@ func applyTestCase(t *testing.T, fs tree.TestTree, tc testCase) {
 	switch tc.action {
 	case ACTION_COPY: // add
 		if tc.contents != nil {
-			_, err = fs.AddRegular(parts, tc.contents)
+			_, err = fs.PutFile(parts, tc.contents)
 		} else {
 			_, err = fs.CreateDir(name, tree.NewFileInfo(parts[:len(parts)-1], tree.TYPE_DIRECTORY, time.Time{}, 0, nil))
 		}
 	case ACTION_UPDATE:
-		_, err = fs.SetContents(parts, tc.contents)
+		_, err = fs.PutFile(parts, tc.contents)
 		if err != nil {
 			t.Fatalf("could not set file contents to file %s: %s", tc.file, err)
 		}

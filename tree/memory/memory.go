@@ -265,7 +265,18 @@ func (e *Entry) SetFile(name string) (io.WriteCloser, error) {
 		}), nil
 	} else {
 		return newFileCloser(func(buf *bytes.Buffer) {
-			e.AddRegular([]string{name}, buf.Bytes())
+			child := &Entry{
+				fileType: tree.TYPE_REGULAR,
+				modTime:  time.Now(),
+				name:     name,
+				contents: buf.Bytes(),
+				parent:   e,
+			}
+			err := e.addChild(child)
+			if err != nil {
+				// We can't return an error here.
+				panic("memory: SetFile failed: " + err.Error())
+			}
 		}), nil
 	}
 }
@@ -409,41 +420,43 @@ func (e *Entry) ReadSymlink(file tree.FileInfo) (string, error) {
 	if child == nil {
 		return "", tree.ErrNotFound(file.RelativePath())
 	}
+	if child.fileType != tree.TYPE_SYMLINK {
+		return "", tree.ErrNoSymlink
+	}
 	if !tree.MatchFingerprint(child.Info(), file) {
 		return "", tree.ErrChanged(child.RelativePath())
 	}
 	return string(child.contents), nil
 }
 
-// AddRegular creates a new regular file.
+// PutFile writes the contents to a new or existing file.
 // This function only exists for testing purposes.
-func (e *Entry) AddRegular(path []string, contents []byte) (tree.FileInfo, error) {
+func (e *Entry) PutFile(path []string, contents []byte) (tree.FileInfo, error) {
 	parent := e.get(path[:len(path)-1])
 	if parent == nil {
 		return nil, tree.ErrNotFound(path[:len(path)-1])
 	}
 
-	child := &Entry{
-		fileType: tree.TYPE_REGULAR,
-		modTime:  time.Now(),
-		name:     path[len(path)-1],
-		contents: contents,
-		parent:   parent,
+	name := path[len(path)-1]
+	child := parent.children[name]
+	if child != nil {
+		if child.fileType != tree.TYPE_REGULAR {
+			return nil, tree.ErrNoRegular
+		}
+		child.modTime = time.Now()
+		child.contents = contents
+	} else {
+		child = &Entry{
+			fileType: tree.TYPE_REGULAR,
+			modTime:  time.Now(),
+			name:     path[len(path)-1],
+			contents: contents,
+			parent:   parent,
+		}
+		err := parent.addChild(child)
+		if err != nil {
+			return nil, err
+		}
 	}
-	err := parent.addChild(child)
-	if err != nil {
-		return nil, err
-	}
-	return child.fullInfo(), nil
-}
-
-// SetContents sets the internal contents of the file, for debugging.
-func (e *Entry) SetContents(path []string, contents []byte) (tree.FileInfo, error) {
-	child := e.get(path)
-	if child == nil {
-		return nil, tree.ErrNotFound(path)
-	}
-	child.modTime = time.Now()
-	child.contents = contents
 	return child.fullInfo(), nil
 }

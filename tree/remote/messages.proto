@@ -20,9 +20,8 @@ enum Command {
 	SETFILE     = 21;
 
 	// testing commands
-	ADDFILE     = 31;
-	SETCONTENTS = 32;
-	INFO        = 33;
+	PUTFILE     = 30;
+	INFO        = 31;
 }
 
 // See TYPE_* constants in tree/tree.go
