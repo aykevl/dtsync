@@ -102,6 +102,19 @@ func TreeTest(t Tester, fs1, fs2 TestTree) {
 		checkInfo(t, root1, info1, 0, 1, "file.txt")
 	}
 
+	// try copy with invalid source info
+	infoWrong := NewFileInfo(info1.RelativePath(), info1.Type(), time.Now(), info1.Size(), info1.Hash())
+	reader, err := fs1.CopySource(infoWrong)
+	if err == nil {
+		buf := make([]byte, 1024)
+		_, err = reader.Read(buf)
+	}
+	if err == nil {
+		t.Fatal("file.txt was copied but expected ErrChanged")
+	} else if !IsChanged(err) {
+		t.Error("error while trying to copy (invalid) file1.txt:", err)
+	}
+
 	info2, _, err := Copy(fs1, fs2, info1, &FileInfoStruct{})
 	if err != nil {
 		t.Fatalf("failed to copy file %s to %s: %s", info1, fs2, err)
@@ -154,6 +167,21 @@ func TreeTest(t Tester, fs1, fs2 TestTree) {
 
 	if root1 != nil && root2 != nil && !testEqual(t, root1, root2) {
 		t.Error("root1 is not equal to root2 after UpdateFile (try to create)")
+	}
+
+	// Try updating with invalid FileInfo.
+	copier, err = fs1.UpdateFile(infoWrong, info1)
+	if err == nil {
+		_, _, err = copier.Finish()
+	}
+	if err == nil {
+		t.Error("file.txt was updated but expected ErrChanged (invalid dest info)")
+	} else if !IsChanged(err) {
+		t.Error("error while trying to update file1.txt (invalid dest info):", err)
+	}
+
+	if root1 != nil && root2 != nil && !testEqual(t, root1, root2) {
+		t.Error("root1 is not equal to root2 after UpdateFile (invalid source or dest)")
 	}
 
 	// Try Copier.Cancel()

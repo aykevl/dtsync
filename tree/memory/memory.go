@@ -364,6 +364,9 @@ func (e *Entry) UpdateFile(file, source tree.FileInfo) (tree.Copier, error) {
 	if child.fileType != tree.TYPE_REGULAR {
 		return nil, tree.ErrNoRegular
 	}
+	if !tree.MatchFingerprint(file, child.Info()) {
+		return nil, tree.ErrChanged(child.RelativePath())
+	}
 	return newFileCopier(func(buffer *bytes.Buffer) (tree.FileInfo, tree.FileInfo, error) {
 		child.modTime = source.ModTime()
 		child.contents = buffer.Bytes()
