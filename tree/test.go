@@ -121,33 +121,39 @@ func TreeTest(t Tester, fs1, fs2 TestTree) {
 		t.Error("root1 is not equal to root2 after Copy")
 	}
 
-	if root1 != nil {
-		// Try overwriting a file.
-		_, err := fs1.CreateFile("file.txt", &FileInfoStruct{}, info2)
-		if err == nil {
-			t.Error("file.txt was overwritten with CreateFile")
-		} else if !IsExist(err) {
-			t.Error("failed to try to overwrite file.txt with CreateFile:", err)
-		}
+	// Try overwriting a file.
+	copier, err := fs1.CreateFile("file.txt", &FileInfoStruct{}, info2)
+	if err == nil {
+		// Remote only returns an error during write or on close.
+		_, _, err = copier.Finish()
+	}
+	if err == nil {
+		t.Error("file.txt was overwritten with CreateFile")
+	} else if !IsExist(err) {
+		t.Error("failed to try to overwrite file.txt with CreateFile:", err)
+	}
 
-		if root2 != nil && !testEqual(t, root1, root2) {
-			t.Error("root1 is not equal to root2 after CreateFile (try to overwrite)")
-		}
+	if root1 != nil && root2 != nil && !testEqual(t, root1, root2) {
+		t.Error("root1 is not equal to root2 after CreateFile (try to overwrite)")
+	}
 
-		// Try updating a file that doesn't exist.
-		info := &FileInfoStruct{
-			path: []string{"file-notexists.txt"},
-		}
-		_, err = fs1.UpdateFile(info, info2)
-		if err == nil {
-			t.Error("file-notexists.txt was created with UpdateFile")
-		} else if !IsNotExist(err) {
-			t.Error("failed to try to create file.txt with UpdateFile:", err)
-		}
+	// Try updating a file that doesn't exist.
+	info := FileInfo(&FileInfoStruct{
+		path: []string{"file-notexists.txt"},
+	})
+	copier, err = fs1.UpdateFile(info, info2)
+	if err == nil {
+		// Remote only returns an error during write or on close.
+		_, _, err = copier.Finish()
+	}
+	if err == nil {
+		t.Error("file-notexists.txt was created with UpdateFile")
+	} else if !IsNotExist(err) {
+		t.Error("failed to try to create file.txt with UpdateFile:", err)
+	}
 
-		if root2 != nil && !testEqual(t, root1, root2) {
-			t.Error("root1 is not equal to root2 after UpdateFile (try to create)")
-		}
+	if root1 != nil && root2 != nil && !testEqual(t, root1, root2) {
+		t.Error("root1 is not equal to root2 after UpdateFile (try to create)")
 	}
 
 	// Try Copier.Cancel()
@@ -177,7 +183,7 @@ func TreeTest(t Tester, fs1, fs2 TestTree) {
 		t.Error("could not cancel updating file.txt:", err)
 	}
 
-	info, err := fs1.ReadInfo([]string{"file.txt"})
+	info, err = fs1.ReadInfo([]string{"file.txt"})
 	if err != nil {
 		t.Error("cannot ReadInfo file.txt:", err)
 	} else if Fingerprint(info) != Fingerprint(info1) {
