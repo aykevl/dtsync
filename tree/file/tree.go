@@ -55,7 +55,7 @@ func NewRoot(rootPath string) (*Tree, error) {
 		return nil, err
 	}
 	if !st.IsDir() {
-		return nil, tree.ErrNoDirectory
+		return nil, tree.ErrNoDirectory([]string{rootPath})
 	}
 
 	r := &Tree{
@@ -273,7 +273,7 @@ func (r *Tree) CreateFile(name string, parent, source tree.FileInfo) (tree.Copie
 // useful for Update.
 func (r *Tree) UpdateFile(file, source tree.FileInfo) (tree.Copier, error) {
 	if source.Type() != tree.TYPE_REGULAR {
-		return nil, tree.ErrNoRegular
+		return nil, tree.ErrNoRegular(source.RelativePath())
 	}
 
 	e := r.entryFromPath(file.RelativePath())

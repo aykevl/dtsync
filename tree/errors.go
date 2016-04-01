@@ -36,8 +36,6 @@ import (
 
 // Error codes that can be used by any filesystem implementation.
 var (
-	ErrNoDirectory        = errors.New("tree: this is not a directory")
-	ErrNoRegular          = errors.New("tree: this is not a regular file")
 	ErrInvalidName        = errors.New("tree: invalid file name")
 	ErrCancelled          = errors.New("tree: write cancelled")
 	ErrParsingFingerprint = errors.New("tree: invalid fingerprint")
@@ -76,6 +74,21 @@ func ErrFound(path []string) *pathError {
 // ErrChanged is returned when a file's fingerprint changed between scan and sync.
 func ErrChanged(path []string) *pathError {
 	return &pathError{"changed", path}
+}
+
+// ErrNoDirectory is returned when a directory was expected.
+func ErrNoDirectory(path []string) *pathError {
+	return &pathError{"no directory", path}
+}
+
+// ErrNoRegular is returned when a regular file was expected.
+func ErrNoRegular(path []string) *pathError {
+	return &pathError{"no regular", path}
+}
+
+// ErrNoSymlink is returned when a symbolic link was expected.
+func ErrNoSymlink(path []string) *pathError {
+	return &pathError{"no symlink", path}
 }
 
 // ErrNotImplemented is returned when a method is not implemented or a parameter

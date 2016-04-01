@@ -184,7 +184,7 @@ func (e *Entry) ReadInfo(path []string) (tree.FileInfo, error) {
 // when attempting to list something other than a directory.
 func (e *Entry) List() ([]tree.Entry, error) {
 	if e.fileType != tree.TYPE_DIRECTORY {
-		return nil, tree.ErrNoDirectory
+		return nil, tree.ErrNoDirectory(e.RelativePath())
 	}
 
 	ret := make([]tree.Entry, 0, len(e.children))
@@ -334,7 +334,7 @@ func (e *Entry) CreateFile(name string, parent, source tree.FileInfo) (tree.Copi
 
 func (e *Entry) addChild(child *Entry) error {
 	if e.fileType != tree.TYPE_DIRECTORY {
-		return tree.ErrNoDirectory
+		return tree.ErrNoDirectory(e.RelativePath())
 	}
 	if child.parent != e {
 		panic("addChild to wrong parent")
@@ -362,7 +362,7 @@ func (e *Entry) UpdateFile(file, source tree.FileInfo) (tree.Copier, error) {
 		return nil, tree.ErrNotFound(file.RelativePath())
 	}
 	if child.fileType != tree.TYPE_REGULAR {
-		return nil, tree.ErrNoRegular
+		return nil, tree.ErrNoRegular(child.RelativePath())
 	}
 	if !tree.MatchFingerprint(file, child.Info()) {
 		return nil, tree.ErrChanged(child.RelativePath())
@@ -424,7 +424,7 @@ func (e *Entry) ReadSymlink(file tree.FileInfo) (string, error) {
 		return "", tree.ErrNotFound(file.RelativePath())
 	}
 	if child.fileType != tree.TYPE_SYMLINK {
-		return "", tree.ErrNoSymlink
+		return "", tree.ErrNoSymlink(child.RelativePath())
 	}
 	if !tree.MatchFingerprint(child.Info(), file) {
 		return "", tree.ErrChanged(child.RelativePath())
@@ -444,7 +444,7 @@ func (e *Entry) PutFile(path []string, contents []byte) (tree.FileInfo, error) {
 	child := parent.children[name]
 	if child != nil {
 		if child.fileType != tree.TYPE_REGULAR {
-			return nil, tree.ErrNoRegular
+			return nil, tree.ErrNoRegular(child.RelativePath())
 		}
 		child.modTime = time.Now()
 		child.contents = contents

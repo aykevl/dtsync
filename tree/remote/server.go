@@ -377,7 +377,7 @@ func (s *Server) copySource(requestId uint64, info tree.FileInfo) {
 		}
 		s.streamSendData(requestId, reader)
 	default:
-		s.replyError(requestId, tree.ErrNoRegular)
+		s.replyError(requestId, tree.ErrNoRegular(info.RelativePath()))
 	}
 }
 
