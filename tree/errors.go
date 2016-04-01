@@ -48,6 +48,36 @@ type PathError interface {
 	Path() string
 }
 
+type pathError struct {
+	message string
+	path    []string
+}
+
+func (e *pathError) Error() string {
+	return "tree: " + e.message + ": " + e.Path()
+}
+
+func (e *pathError) Path() string {
+	return strings.Join(e.path, "/")
+}
+
+// ErrNotFound is returned when a file is not found (e.g. when trying to read
+// it).
+func ErrNotFound(path []string) *pathError {
+	return &pathError{"not found", path}
+}
+
+// ErrFound is returned when a file is found when none was expected (e.g. on
+// copy or when creating a directory).
+func ErrFound(path []string) *pathError {
+	return &pathError{"found", path}
+}
+
+// ErrChanged is returned when a file's fingerprint changed between scan and sync.
+func ErrChanged(path []string) *pathError {
+	return &pathError{"changed", path}
+}
+
 // ErrNotImplemented is returned when a method is not implemented or a parameter
 // is not of a required type.
 type ErrNotImplemented string
@@ -56,60 +86,13 @@ func (feature ErrNotImplemented) Error() string {
 	return "tree: not implemented: " + string(feature)
 }
 
-type errNotFound string
-
-// ErrNotFound is returned when a file is not found (e.g. when trying to read
-// it).
-func ErrNotFound(pathParts []string) error {
-	return errNotFound(strings.Join(pathParts, "/"))
-}
-
-func (path errNotFound) Error() string {
-	return "tree: not found: " + string(path)
-}
-
-func (path errNotFound) Path() string {
-	return string(path)
-}
-
-type errFound string
-
-// ErrFound is returned when a file is found when none was expected (e.g. on
-// copy or when creating a directory).
-func ErrFound(pathParts []string) error {
-	return errFound(strings.Join(pathParts, "/"))
-}
-
-func (path errFound) Error() string {
-	return "tree: found: " + string(path)
-}
-
-func (path errFound) Path() string {
-	return string(path)
-}
-
-type errChanged string
-
-// ErrChanged is returned when a file's fingerprint changed between scan and sync.
-func ErrChanged(pathParts []string) error {
-	return errChanged(strings.Join(pathParts, "/"))
-}
-
-func (path errChanged) Error() string {
-	return "tree: changed: " + string(path)
-}
-
-func (path errChanged) Path() string {
-	return string(path)
-}
-
 // IsNotExist returns true if (and only if) this is a 'not found' error. Very
 // similar to os.IsNotExist.
 func IsNotExist(err error) bool {
 	if err == nil {
 		return false
 	}
-	if _, ok := err.(errNotFound); ok {
+	if pe, ok := err.(*pathError); ok && pe.message == "not found" {
 		return true
 	}
 	if os.IsNotExist(err) {
@@ -124,7 +107,7 @@ func IsExist(err error) bool {
 	if err == nil {
 		return false
 	}
-	if _, ok := err.(errFound); ok {
+	if pe, ok := err.(*pathError); ok && pe.message == "found" {
 		return true
 	}
 	if os.IsExist(err) {
@@ -139,6 +122,6 @@ func IsChanged(err error) bool {
 	if err == nil {
 		return false
 	}
-	_, ok := err.(errChanged)
-	return ok
+	pe, ok := err.(*pathError)
+	return ok && pe.message == "changed"
 }
