@@ -113,7 +113,7 @@ func editJobs(result *sync.Result, root1, root2 string) bool {
 	}
 	err = writer.Flush()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to write file to edit:", err)
+		fmt.Fprintln(os.Stderr, "Failed to write file to edit:", err)
 		return false
 	}
 

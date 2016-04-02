@@ -321,7 +321,7 @@ func runTestCaseSync(t *testing.T, tc *testCase, fs1, fs2 tree.TestTree, jobDire
 				t.Errorf("replica 1 %s was changed while test case was applied to the right side", replica1a)
 			}
 			if replica2a.Changed() == secondSync {
-				t.Errorf("replica 2 %s was changed? (=%s) while test case was applied to the right side", replica2a, replica2a.Changed())
+				t.Errorf("replica 2 %s was changed? (=%v) while test case was applied to the right side", replica2a, replica2a.Changed())
 				panic("abc")
 			}
 		}

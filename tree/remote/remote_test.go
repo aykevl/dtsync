@@ -43,7 +43,7 @@ func TestRemote(t *testing.T) {
 		if err != nil {
 			t.Fatal("could not make test client:", err)
 		}
-		defer func() {
+		defer func(i int) {
 			fs := fsList[i]
 			if fs == nil {
 				// already closed
@@ -55,7 +55,7 @@ func TestRemote(t *testing.T) {
 			} else {
 				t.Log("closed server")
 			}
-		}()
+		}(i)
 	}
 	fs1 := fsList[0]
 	fs2 := fsList[1]

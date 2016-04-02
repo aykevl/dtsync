@@ -380,7 +380,6 @@ func ParseFingerprint(fingerprint string) (*FingerprintInfo, error) {
 
 	parts := strings.Split(fingerprint, "/")
 	if len(parts) < 2 {
-		panic(fingerprint)
 		return info, ErrParsingFingerprint
 	}
 

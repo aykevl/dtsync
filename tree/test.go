@@ -77,6 +77,7 @@ type Tester interface {
 	Errorf(string, ...interface{})
 	Fatal(...interface{})
 	Fatalf(string, ...interface{})
+	FailNow()
 }
 
 // TreeTest is not a test in itself, it is called by trees wanting themselves to
@@ -328,7 +329,7 @@ func TreeTest(t Tester, fs1, fs2 TestTree) {
 		t.Fatal("could not update symlink (without mtime):", err)
 	} else if !link1.ModTime().After(oldModTime) {
 		t.Errorf("UpdateSymlink without time did not set ModTime (expected after %s, got %s)", oldModTime, link1.ModTime())
-		t.Fatal()
+		t.FailNow()
 	}
 
 	// try updating a file with UpdateSymlink

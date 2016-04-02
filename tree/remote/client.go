@@ -160,7 +160,6 @@ func (c *Client) run(r *bufio.Reader, w *bufio.Writer) {
 			buf, err := proto.Marshal(req.req)
 			if err != nil {
 				panic(err) // programming error?
-				continue
 			}
 
 			if req.recvBlocks != nil {
