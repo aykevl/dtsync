@@ -187,11 +187,7 @@ func (e *Entry) Equal(e2 *Entry) bool {
 
 // After returns true if this entry was modified after the other.
 func (e *Entry) After(e2 *Entry) bool {
-	otherGeneration, ok := e2.replica.knowledge[e.revReplica]
-	if !ok {
-		return true
-	}
-	return e.revGeneration > otherGeneration
+	return e.revGeneration > e2.replica.knowledge[e.revReplica]
 }
 
 // Before returns true if this entry is modified before the other.
@@ -271,12 +267,6 @@ func (e *Entry) List() []*Entry {
 func (e *Entry) Add(info tree.FileInfo) (*Entry, error) {
 	e.replica.markChanged()
 	return e.addChild(info.Name(), e.replica.identity, e.replica.generation, tree.Fingerprint(info), info.Hash())
-}
-
-// AddCopy copies the status entry to here, keeping the revision.
-func (e *Entry) AddCopy(other *Entry) (*Entry, error) {
-	e.replica.markChanged()
-	return e.addChild(other.name, other.revReplica, other.revGeneration, other.fingerprint, other.hash)
 }
 
 // Update updates the revision if the file was changed. The file is not changed

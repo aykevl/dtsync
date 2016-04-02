@@ -148,13 +148,6 @@ func (rs *ReplicaSet) Get(index int) *Replica {
 	return rs.set[index]
 }
 
-// notifyReplica adds the replica to the list of known replicas
-func notifyReplica(replica, other *Replica) {
-	if _, ok := replica.knowledge[other.identity]; !ok {
-		replica.knowledge[other.identity] = 0
-	}
-}
-
 // MarkSynced sets the generation as including each other. This is done after
 // they have been cleanly synchronized.
 func (rs *ReplicaSet) MarkSynced() {
