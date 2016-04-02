@@ -163,10 +163,10 @@ func serializeFileInfo(info tree.FileInfo) *FileInfo {
 	size := info.Size()
 	fileType := FileType(info.Type())
 	fileInfo := &FileInfo{
-		Path:    path,
-		Type:    &fileType,
-		Size:    &size,
-		Hash:    info.Hash(),
+		Path: path,
+		Type: &fileType,
+		Size: &size,
+		Hash: info.Hash(),
 	}
 	if !info.ModTime().IsZero() {
 		modTime := info.ModTime().UnixNano()
