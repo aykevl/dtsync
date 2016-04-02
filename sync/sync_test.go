@@ -148,6 +148,14 @@ func syncRoots(t *testing.T, scheme1, scheme2 string) {
 		{"dir/file.txt", ACTION_UPDATE, []byte("def"), 2},
 		{"dir/file.txt", ACTION_REMOVE, nil, 2},
 		{"dir", ACTION_REMOVE, nil, 1},
+		// symbolic links
+		{"link1", ACTION_COPY, []byte("→dir"), 2},
+		{"link2", ACTION_COPY, []byte("→file1.txt"), 3},
+		{"link3", ACTION_COPY, []byte("→file-404"), 4},
+		{"link1", ACTION_UPDATE, []byte("→file2.txt"), 4},
+		{"link1", ACTION_REMOVE, nil, 3},
+		{"link2", ACTION_REMOVE, nil, 2},
+		{"link3", ACTION_REMOVE, nil, 1},
 	}
 
 	complexTestCases := []struct {
@@ -224,15 +232,24 @@ func applyTestCase(t *testing.T, fs tree.TestTree, tc testCase) {
 	var err error
 	switch tc.action {
 	case ACTION_COPY: // add
-		if tc.contents != nil {
-			_, err = fs.PutFile(parts, tc.contents)
-		} else {
+		if tc.contents == nil {
 			_, err = fs.CreateDir(name, tree.NewFileInfo(parts[:len(parts)-1], tree.TYPE_DIRECTORY, time.Time{}, 0, nil))
+		} else if string(tc.contents[:3]) == "→" {
+			parent := tree.NewFileInfo(parts[:len(parts)-1], tree.TYPE_DIRECTORY, time.Time{}, 0, nil)
+			source := tree.NewFileInfo(parts, tree.TYPE_SYMLINK, time.Now(), 0, nil)
+			_, _, err = fs.CreateSymlink(name, parent, source, string(tc.contents[3:]))
+		} else {
+			_, err = fs.PutFile(parts, tc.contents)
 		}
 	case ACTION_UPDATE:
-		_, err = fs.PutFile(parts, tc.contents)
-		if err != nil {
-			t.Fatalf("could not set file contents to file %s: %s", tc.file, err)
+		if string(tc.contents[:3]) == "→" {
+			var file tree.FileInfo
+			file, err = fs.ReadInfo(strings.Split(tc.file, "/"))
+			assert(err)
+			source := tree.NewFileInfo(parts, tree.TYPE_SYMLINK, time.Now(), 0, nil)
+			_, _, err = fs.UpdateSymlink(file, source, string(tc.contents[3:]))
+		} else {
+			_, err = fs.PutFile(parts, tc.contents)
 		}
 	case ACTION_REMOVE:
 		info, err := fs.ReadInfo(strings.Split(tc.file, "/"))

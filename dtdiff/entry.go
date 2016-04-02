@@ -277,9 +277,18 @@ func (e *Entry) Update(fingerprint string, hash []byte) {
 		panic("invalid fingerprint")
 	}
 	if fingerprint != e.fingerprint {
-		e.replica.markMetaChanged()
 		e.fingerprint = fingerprint
 		e.fileInfo = nil
+		if e.Type() == tree.TYPE_SYMLINK {
+			// Changes in fingerprints of symbolic links must be tracked. For
+			// regular files we look at the hash and for directories fingerprint
+			// changes do not cause updates at all (but are still tracked).
+			e.replica.markChanged()
+			e.revReplica = e.replica.identity
+			e.revGeneration = e.replica.generation
+		} else {
+			e.replica.markMetaChanged()
+		}
 	}
 	e.UpdateHash(hash)
 }
