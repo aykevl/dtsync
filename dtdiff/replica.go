@@ -52,8 +52,7 @@ var (
 	ErrNoIdentity             = errors.New("dtdiff: no Identity header")
 	ErrInvalidGeneration      = errors.New("dtdiff: invalid or missing Generation header")
 	ErrInvalidKnowledgeHeader = errors.New("dtdiff: invalid Knowledge header")
-	ErrInvalidReplicaIndex    = errors.New("dtdiff: invalid or missing replica index in entry row")
-	ErrInvalidEntryGeneration = errors.New("dtdiff: invalid generation number in entry row")
+	ErrInvalidEntryRevision   = errors.New("dtdiff: invalid revision in entry row")
 	ErrInvalidPath            = errors.New("dtdiff: invalid or missing path in entry row")
 	ErrInvalidFingerprint     = errors.New("dtdiff: invalid or missing fingerprint in entry row")
 	ErrExists                 = errors.New("dtdiff: already exists")
@@ -244,13 +243,12 @@ func (r *Replica) load(file io.Reader) error {
 	const (
 		TSV_PATH = iota
 		TSV_FINGERPRINT
-		TSV_REPLICA
-		TSV_GENERATION
+		TSV_REVISION
 		TSV_HASH
 	)
 
 	tsvReader, err := unitsv.NewReader(reader, unitsv.Config{
-		Required: []string{"path", "fingerprint", "replica", "generation"},
+		Required: []string{"path", "fingerprint", "revision"},
 		Optional: []string{"hash"},
 	})
 	if err != nil {
@@ -275,19 +273,25 @@ func (r *Replica) load(file io.Reader) error {
 		if err != nil {
 			return err
 		}
-		revReplicaIndex, err := strconv.Atoi(fields[TSV_REPLICA])
+
+		revContent := strings.Split(fields[TSV_REVISION], ":")
+		if len(revContent) != 2 {
+			return ErrInvalidEntryRevision
+		}
+
+		revReplicaIndex, err := strconv.Atoi(revContent[0])
 		if err != nil {
-			return ErrInvalidReplicaIndex
+			return ErrInvalidEntryRevision
 		}
 		if revReplicaIndex < 0 || revReplicaIndex >= len(peers) {
-			return ErrInvalidReplicaIndex
+			return ErrInvalidEntryRevision
 		}
 
 		revReplica := peers[revReplicaIndex]
 
-		revGenerationStr := fields[TSV_GENERATION]
+		revGenerationStr := revContent[1]
 		if len(revGenerationStr) == 0 {
-			return ErrInvalidEntryGeneration
+			return ErrInvalidEntryRevision
 		}
 		hidden := false
 		if revGenerationStr[0] == '!' {
@@ -296,7 +300,7 @@ func (r *Replica) load(file io.Reader) error {
 		}
 		revGeneration, err := strconv.Atoi(revGenerationStr)
 		if err != nil || revGeneration < 1 {
-			return ErrInvalidEntryGeneration
+			return ErrInvalidEntryRevision
 		}
 
 		fingerprint := fields[TSV_FINGERPRINT]
@@ -359,7 +363,7 @@ func (r *Replica) Serialize(out io.Writer) error {
 	}
 	writer.WriteByte('\n')
 
-	tsvWriter, err := unitsv.NewWriter(writer, []string{"path", "fingerprint", "hash", "replica", "generation"})
+	tsvWriter, err := unitsv.NewWriter(writer, []string{"path", "fingerprint", "hash", "revision"})
 	if err != nil {
 		return err
 	}
@@ -407,13 +411,13 @@ func (e *Entry) serializeChildren(tsvWriter *unitsv.Writer, peerIndex map[string
 			// In Go 1.5+, we can use base64.RawURLEncoding
 			hash = strings.TrimRight(hash, "=")
 		}
-		// TODO: join replica and generation in one field.
 		generation := strconv.Itoa(child.revContent.generation)
 		if child.hidden {
 			// TODO: put remove date in extra field, instead of this workaround.
 			generation = "!" + generation
 		}
-		err := tsvWriter.WriteRow([]string{childpath, child.fingerprint, hash, strconv.Itoa(peerIndex[child.revContent.identity]), generation})
+		revContent := strconv.Itoa(peerIndex[child.revContent.identity]) + ":" + generation
+		err := tsvWriter.WriteRow([]string{childpath, child.fingerprint, hash, revContent})
 		err = e.children[name].serializeChildren(tsvWriter, peerIndex, childpath)
 		if err != nil {
 			return err

@@ -199,7 +199,7 @@ func syncRoots(t *testing.T, scheme1, scheme2 string) {
 Identity: `+fs.name+`
 Generation: 1
 
-path	fingerprint	hash	replica	generation
+path	fingerprint	hash	revision
 `))
 	}
 

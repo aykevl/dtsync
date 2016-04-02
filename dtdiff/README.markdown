@@ -28,10 +28,10 @@ Example file:
     Generation: 2
     Knowledge: second:1,other:12
     
-    path	fingerprint	replica	generation
-    dir	d/2016-02-15T19:17:51.35414374Z/0	0	1
-    dir/file.txt	f/2016-02-15T19:18:18.290458876Z/105	0	1
-    file2.html	f/2012-12-18T20:25:21.119862001Z/2046	0	2
+    path	fingerprint	revision
+    dir	d/2016-02-15T19:17:51.35414374Z/0	0:1
+    dir/file.txt	f/2016-02-15T19:18:18.290458876Z/105	0:1
+    file2.html	f/2012-12-18T20:25:21.119862001Z/2046	0:2
 
 The whole file is in MIME format, and must be parsed with an appropriate
 library.
@@ -66,6 +66,6 @@ for regular files, and `type/modtime` for other filetypes. In the future, a
 permissions field may be added, making it `type/modtime/permissions/size` and
 `type/modtime/permissions`. The `type` field is an `f` for regular files or `d`
 for directores. Other types are added as appropriate. `modtime` is encoded in
-the RFC3339 format with nanoseconds and no timezone. Then follows the `replica`
-and `generation` where this file was last changed (where the fingerprint last
-changed).
+the RFC3339 format with nanoseconds and no timezone. Then follows the `revision`
+with an index in the knowledge list (0 means this replica) and a generation
+where this file was last changed (where the fingerprint last changed).
