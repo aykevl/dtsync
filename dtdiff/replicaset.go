@@ -89,6 +89,7 @@ func Scan(fs1, fs2 tree.Tree) (*ReplicaSet, error) {
 				if !ok {
 					// Something went wrong with the other replica.
 					// Cancel now.
+					scanErrors[i] <- nil
 					return
 				}
 				replica.AddIgnore(options.Ignore()...)
