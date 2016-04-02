@@ -249,7 +249,9 @@ func (r *Replica) load(file io.Reader) error {
 		TSV_GENERATION
 	)
 
-	tsvReader, err := unitsv.NewReader(reader, []string{"path", "fingerprint", "hash", "replica", "generation"})
+	tsvReader, err := unitsv.NewReader(reader, unitsv.Config{
+		Required: []string{"path", "fingerprint", "hash", "replica", "generation"},
+	})
 	if err != nil {
 		return err
 	}
