@@ -219,8 +219,11 @@ func Copy(this, other Tree, source, targetParent FileInfo) (info FileInfo, paren
 
 		return otherFileTree.CreateSymlink(source.Name(), targetParent, source, link)
 
+	case TYPE_UNKNOWN:
+		return nil, nil, ErrNotImplemented("Copy: file type is TYPE_UNKNOWN")
+
 	default:
-		return nil, nil, ErrNotImplemented("copying a non-regular file")
+		return nil, nil, ErrNotImplemented("Copy: unknown file type")
 	}
 }
 
