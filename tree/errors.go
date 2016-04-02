@@ -138,3 +138,30 @@ func IsChanged(err error) bool {
 	pe, ok := err.(*pathError)
 	return ok && pe.message == "changed"
 }
+
+// IsNoDirectory returns true if this is an error like ErrNoDirectory.
+func IsNoDirectory(err error) bool {
+	if err == nil {
+		return false
+	}
+	pe, ok := err.(*pathError)
+	return ok && pe.message == "no directory"
+}
+
+// IsNoRegular returns true if this is an error like ErrNoRegular.
+func IsNoRegular(err error) bool {
+	if err == nil {
+		return false
+	}
+	pe, ok := err.(*pathError)
+	return ok && pe.message == "no regular"
+}
+
+// IsNoSymlink returns true if this is an error like ErrNoSymlink.
+func IsNoSymlink(err error) bool {
+	if err == nil {
+		return false
+	}
+	pe, ok := err.(*pathError)
+	return ok && pe.message == "no symlink"
+}

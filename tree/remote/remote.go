@@ -82,6 +82,12 @@ func decodeRemoteError(err *Error) error {
 		return tree.ErrFound(strings.Split(*err.Message, "/"))
 	case ErrorType_ERR_CHANGED:
 		return tree.ErrChanged(strings.Split(*err.Message, "/"))
+	case ErrorType_ERR_NO_DIR:
+		return tree.ErrNoDirectory(strings.Split(*err.Message, "/"))
+	case ErrorType_ERR_NO_REGULAR:
+		return tree.ErrNoRegular(strings.Split(*err.Message, "/"))
+	case ErrorType_ERR_NO_SYMLINK:
+		return tree.ErrNoSymlink(strings.Split(*err.Message, "/"))
 	case ErrorType_ERR_OTHER:
 		return RemoteError{*err.Message}
 	default:
@@ -94,26 +100,17 @@ func decodeRemoteError(err *Error) error {
 func encodeRemoteError(err error) *Error {
 	switch {
 	case tree.IsNotExist(err):
-		code := ErrorType_ERR_NOTFOUND
-		path := err.(tree.PathError).Path()
-		return &Error{
-			Type:    &code,
-			Message: &path,
-		}
+		return encodeRemotePathError(ErrorType_ERR_NOTFOUND, err)
 	case tree.IsExist(err):
-		code := ErrorType_ERR_FOUND
-		path := err.(tree.PathError).Path()
-		return &Error{
-			Type:    &code,
-			Message: &path,
-		}
+		return encodeRemotePathError(ErrorType_ERR_FOUND, err)
 	case tree.IsChanged(err):
-		code := ErrorType_ERR_CHANGED
-		path := err.(tree.PathError).Path()
-		return &Error{
-			Type:    &code,
-			Message: &path,
-		}
+		return encodeRemotePathError(ErrorType_ERR_CHANGED, err)
+	case tree.IsNoDirectory(err):
+		return encodeRemotePathError(ErrorType_ERR_NO_DIR, err)
+	case tree.IsNoRegular(err):
+		return encodeRemotePathError(ErrorType_ERR_NO_REGULAR, err)
+	case tree.IsNoSymlink(err):
+		return encodeRemotePathError(ErrorType_ERR_NO_SYMLINK, err)
 	default:
 		code := ErrorType_ERR_OTHER
 		message := err.Error()
@@ -121,6 +118,14 @@ func encodeRemoteError(err error) *Error {
 			Type:    &code,
 			Message: &message,
 		}
+	}
+}
+
+func encodeRemotePathError(code ErrorType, err error) *Error {
+	path := err.(tree.PathError).Path()
+	return &Error{
+		Type:    &code,
+		Message: &path,
 	}
 }
 

@@ -38,10 +38,13 @@ enum DataStatus {
 }
 
 enum ErrorType {
-	ERR_OTHER    = 0;
-	ERR_NOTFOUND = 1;
-	ERR_FOUND    = 2;
-	ERR_CHANGED  = 3;
+	ERR_OTHER      = 0;
+	ERR_NOTFOUND   = 1;
+	ERR_FOUND      = 2;
+	ERR_CHANGED    = 3;
+	ERR_NO_DIR     = 10;
+	ERR_NO_REGULAR = 11;
+	ERR_NO_SYMLINK = 12;
 }
 
 message FileInfo {
