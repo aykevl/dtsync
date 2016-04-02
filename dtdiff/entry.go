@@ -44,8 +44,8 @@ type revision struct {
 
 // An Entry is one object (row) in a Replica. It belongs to one Replica.
 type Entry struct {
-	name       string
-	revContent revision // last content (hash) change
+	name        string
+	revContent  revision // last content (hash) change
 	fingerprint string
 	fileInfo    *tree.FingerprintInfo // parsed fingerprint
 	hash        []byte
