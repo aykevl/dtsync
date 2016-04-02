@@ -307,6 +307,12 @@ func runTestCaseSync(t *testing.T, tc *testCase, fs1, fs2 tree.TestTree, jobDire
 		}
 	}
 
+	if jobDirection == 1 {
+		//t.Logf("sync %s → %s", replica1a, replica2a)
+	} else {
+		//t.Logf("sync %s ← %s", replica1a, replica2a)
+	}
+
 	// Changed() works a bit different over a network connection.
 	if localSync {
 		if jobDirection == 1 {
