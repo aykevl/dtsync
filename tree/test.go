@@ -490,7 +490,7 @@ func sameInfo(t Tester, info FileInfo, entry Entry) bool {
 	}
 	if info.Name() != entry.Name() ||
 		info.Type() != entry.Type() ||
-		info.ModTime() != entry.ModTime() ||
+		!info.ModTime().Equal(entry.ModTime()) ||
 		info.Size() != entry.Size() ||
 		!bytes.Equal(info.Hash(), entryHash) {
 		return false

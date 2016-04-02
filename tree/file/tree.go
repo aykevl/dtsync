@@ -456,7 +456,7 @@ func (r *Tree) ReadSymlink(file tree.FileInfo) (string, error) {
 	st, err := os.Lstat(fullPath)
 	if err != nil {
 		return "", err
-	} else if st.ModTime() != file.ModTime() {
+	} else if !st.ModTime().Equal(file.ModTime()) {
 		return "", tree.ErrChanged(e.RelativePath())
 	}
 
