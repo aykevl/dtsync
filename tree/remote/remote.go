@@ -75,6 +75,8 @@ func decodeRemoteError(err *Error) error {
 		return ErrInvalidError
 	}
 
+	// TODO: prepend remote address, e.g. host:path
+
 	switch *err.Type {
 	case ErrorType_ERR_NOTFOUND:
 		return tree.ErrNotFound(strings.Split(*err.Message, "/"))

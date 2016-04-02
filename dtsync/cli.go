@@ -343,6 +343,7 @@ func main() {
 		}
 		err := job.Apply()
 		if err != nil {
+			// TODO: print in red: https://github.com/andrew-d/go-termutil
 			fmt.Printf("%*s%s\n", digits*2+10, "", err)
 		}
 	}

@@ -259,6 +259,8 @@ func (r *Result) serializeStatus(replica *dtdiff.Replica, fs tree.Tree) error {
 	}
 	err = replica.Serialize(outstatus)
 	if err != nil {
+		// TODO: cancel?
+		outstatus.Close()
 		return err
 	}
 	return outstatus.Close()
