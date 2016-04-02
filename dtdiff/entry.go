@@ -89,6 +89,8 @@ func (e *Entry) Type() tree.Type {
 		return tree.TYPE_REGULAR
 	case 'd':
 		return tree.TYPE_DIRECTORY
+	case 'l':
+		return tree.TYPE_SYMLINK
 	default:
 		return tree.TYPE_UNKNOWN
 	}

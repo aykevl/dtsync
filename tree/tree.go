@@ -59,6 +59,8 @@ func (t Type) Char() string {
 		return "f"
 	case TYPE_DIRECTORY:
 		return "d"
+	case TYPE_SYMLINK:
+		return "l"
 	default:
 		return "?"
 	}
@@ -384,6 +386,8 @@ func ParseFingerprint(fingerprint string) (*FingerprintInfo, error) {
 		info.Type = TYPE_REGULAR
 	case "d":
 		info.Type = TYPE_DIRECTORY
+	case "l":
+		info.Type = TYPE_SYMLINK
 	default:
 		info.Type = TYPE_UNKNOWN
 	}
