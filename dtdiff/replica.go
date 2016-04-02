@@ -66,12 +66,10 @@ var (
 const STATUS_FILE = ".dtsync"
 
 type Replica struct {
-	// generation starts at 1, 0 means 'no generation'
-	generation         int
+	revision
 	isChanged          bool // true if there was a change in generation (any file added/deleted/updated)
 	isMetaChanged      bool // true if the metadata of any files changed
 	isKnowledgeChanged bool // true if the Knowledge header was updated
-	identity           string
 	knowledge          map[string]int
 	rootEntry          *Entry
 	header             textproto.MIMEHeader
@@ -117,8 +115,10 @@ func loadReplica(file io.Reader) (*Replica, error) {
 	if file == nil {
 		// This is a blank replica, create initial data
 		r.isChanged = true
-		r.generation = 1
-		r.identity = makeRandomString(24)
+		r.revision = revision{
+			generation: 1,
+			identity:   makeRandomString(24),
+		}
 		r.knowledge = make(map[string]int, 1)
 		r.knowledge[r.identity] = r.generation
 		return r, nil
@@ -300,7 +300,7 @@ func (r *Replica) load(file io.Reader) error {
 		path := strings.Split(fields[TSV_PATH], "/")
 
 		// now add this entry
-		child, err := r.rootEntry.add(path, revReplica, revGeneration, fingerprint, hash)
+		child, err := r.rootEntry.add(path, revision{revReplica, revGeneration}, fingerprint, hash)
 		if err != nil {
 			return err
 		}
@@ -405,12 +405,12 @@ func (e *Entry) serializeChildren(tsvWriter *unitsv.Writer, peerIndex map[string
 			hash = strings.TrimRight(hash, "=")
 		}
 		// TODO: join replica and generation in one field.
-		generation := strconv.Itoa(child.revGeneration)
+		generation := strconv.Itoa(child.revContent.generation)
 		if child.hidden {
 			// TODO: put remove date in extra field, instead of this workaround.
 			generation = "!" + generation
 		}
-		err := tsvWriter.WriteRow([]string{childpath, child.fingerprint, hash, strconv.Itoa(peerIndex[child.revReplica]), generation})
+		err := tsvWriter.WriteRow([]string{childpath, child.fingerprint, hash, strconv.Itoa(peerIndex[child.revContent.identity]), generation})
 		err = e.children[name].serializeChildren(tsvWriter, peerIndex, childpath)
 		if err != nil {
 			return err
