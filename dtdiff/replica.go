@@ -271,9 +271,12 @@ func (r *Replica) load(file io.Reader) error {
 			// In Go 1.5+, we can use base64.RawURLEncoding
 			hashStr += "="
 		}
-		hash, err := base64.URLEncoding.DecodeString(hashStr)
-		if err != nil {
-			return err
+		var hash []byte
+		if len(hashStr) > 0 {
+			hash, err = base64.URLEncoding.DecodeString(hashStr)
+			if err != nil {
+				return err
+			}
 		}
 
 		revContent := strings.Split(fields[TSV_REVISION], ":")
