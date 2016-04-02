@@ -398,10 +398,13 @@ func (r *Tree) UpdateSymlink(file, source tree.FileInfo, contents string) (tree.
 
 	// TODO: this is not necessary with the renameat2 system call and
 	// RENAME_NOREPLACE.
-	st, err := os.Lstat(fullPath)
+	var err error
+	e.st, err = os.Lstat(fullPath)
 	if err != nil {
 		return nil, nil, err
-	} else if st.ModTime() != file.ModTime() {
+	} else if e.Type() != file.Type() {
+		return nil, nil, tree.ErrNoSymlink(e.RelativePath())
+	} else if !tree.MatchFingerprint(e.Info(), file) {
 		return nil, nil, tree.ErrChanged(e.RelativePath())
 	}
 
@@ -468,13 +471,19 @@ func (r *Tree) PutFile(path []string, contents []byte) (tree.FileInfo, error) {
 	}
 
 	child := r.entryFromPath(path)
-	if child == nil {
-		child = &Entry{
-			root: r,
-			path: path,
+	fullPath := child.fullPath()
+
+	var err error
+	child.st, err = os.Lstat(fullPath)
+	if err != nil && !os.IsNotExist(err) {
+		return nil, err
+	}
+	if err == nil {
+		if child.Type() != tree.TYPE_REGULAR {
+			return nil, tree.ErrNoRegular(path)
 		}
 	}
-	fullPath := child.fullPath()
+
 	file, err := os.Create(fullPath)
 	if err != nil {
 		return nil, err

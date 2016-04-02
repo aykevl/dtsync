@@ -403,6 +403,9 @@ func (e *Entry) UpdateSymlink(file, source tree.FileInfo, contents string) (tree
 	if child == nil {
 		return nil, nil, tree.ErrNotFound(file.RelativePath())
 	}
+	if child.fileType != tree.TYPE_SYMLINK {
+		return nil, nil, tree.ErrNoSymlink(child.RelativePath())
+	}
 
 	if !tree.MatchFingerprint(child.Info(), file) {
 		return nil, nil, tree.ErrChanged(child.RelativePath())

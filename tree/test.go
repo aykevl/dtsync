@@ -331,6 +331,14 @@ func TreeTest(t Tester, fs1, fs2 TestTree) {
 		t.Fatal()
 	}
 
+	// try updating a file with UpdateSymlink
+	_, _, err = fs1.UpdateSymlink(info1, link1Source, linkTarget)
+	if err == nil {
+		t.Error("no ErrNoSymlink when trying to update file1.txt with UpdateSymlink")
+	} else if !IsNoSymlink(err) {
+		t.Error("error while trying to update file.txt", err)
+	}
+
 	// try updating with 'changed' source symlink
 	_, _, err = Update(fs1, fs2, link1Wrong, link2)
 	if !IsChanged(err) {
@@ -355,6 +363,14 @@ func TreeTest(t Tester, fs1, fs2 TestTree) {
 	link2, _, err = Update(fs1, fs2, link1, link2)
 	if err != nil {
 		t.Error("cannot update link:", err)
+	}
+
+	// try writing to symlink
+	_, err = fs1.PutFile(pathSplit("link"), []byte("impossible"))
+	if err == nil {
+		t.Error("PutFile overwrites link")
+	} else if !IsNoRegular(err) {
+		t.Error("PutFile error while overwriting link:", err)
 	}
 
 	/*** Test directories ***/
