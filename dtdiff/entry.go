@@ -52,7 +52,7 @@ type Entry struct {
 	children    map[string]*Entry
 	parent      *Entry
 	replica     *Replica
-	hidden      bool // ignored in .List(), but still saved
+	removed     time.Time
 }
 
 // String function, for debugging purposes
@@ -249,13 +249,14 @@ func (e *Entry) List() []*Entry {
 		list = append(list, entry)
 	}
 
-	// Remove hidden children from the list.
+	// Remove removed children from the list.
 	p := 0
 	for i, child := range list {
 		if i != p {
 			list[p] = list[i]
 		}
-		if !child.hidden {
+		if child.removed.IsZero() {
+			// go to next if not removed
 			p++
 		}
 	}

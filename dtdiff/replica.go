@@ -39,6 +39,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/aykevl/dtsync/tree"
 	"github.com/aykevl/dtsync/version"
@@ -245,11 +246,12 @@ func (r *Replica) load(file io.Reader) error {
 		TSV_FINGERPRINT
 		TSV_REVISION
 		TSV_HASH
+		TSV_OPTIONS
 	)
 
 	tsvReader, err := unitsv.NewReader(reader, unitsv.Config{
 		Required: []string{"path", "fingerprint", "revision"},
-		Optional: []string{"hash"},
+		Optional: []string{"hash", "options"},
 	})
 	if err != nil {
 		return err
@@ -288,17 +290,7 @@ func (r *Replica) load(file io.Reader) error {
 		}
 
 		revReplica := peers[revReplicaIndex]
-
-		revGenerationStr := revContent[1]
-		if len(revGenerationStr) == 0 {
-			return ErrInvalidEntryRevision
-		}
-		hidden := false
-		if revGenerationStr[0] == '!' {
-			hidden = true
-			revGenerationStr = revGenerationStr[1:]
-		}
-		revGeneration, err := strconv.Atoi(revGenerationStr)
+		revGeneration, err := strconv.Atoi(revContent[1])
 		if err != nil || revGeneration < 1 {
 			return ErrInvalidEntryRevision
 		}
@@ -311,7 +303,27 @@ func (r *Replica) load(file io.Reader) error {
 		if err != nil {
 			return err
 		}
-		child.hidden = hidden
+
+		if len(fields[TSV_OPTIONS]) > 0 {
+			// split the options field in this simple key-value format:
+			//    key1=value1,r=3
+			options := make(map[string]string)
+			for _, field := range strings.Split(fields[TSV_OPTIONS], ",") {
+				kv := strings.SplitN(field, "=", 2)
+				if len(kv) == 2 {
+					options[kv[0]] = kv[1]
+				} else {
+					options[kv[0]] = ""
+				}
+			}
+
+			if removed, ok := options["removed"]; ok {
+				child.removed, err = time.Parse(time.RFC3339, removed)
+				if err != nil {
+					return err
+				}
+			}
+		}
 	}
 
 	// Remove all headers that are written by Serialize() anyway.
@@ -363,7 +375,7 @@ func (r *Replica) Serialize(out io.Writer) error {
 	}
 	writer.WriteByte('\n')
 
-	tsvWriter, err := unitsv.NewWriter(writer, []string{"path", "fingerprint", "hash", "revision"})
+	tsvWriter, err := unitsv.NewWriter(writer, []string{"path", "fingerprint", "hash", "revision", "options"})
 	if err != nil {
 		return err
 	}
@@ -399,25 +411,31 @@ func (e *Entry) serializeChildren(tsvWriter *unitsv.Writer, peerIndex map[string
 	sort.Strings(names)
 	for _, name := range names {
 		child := e.children[name]
+
 		var childpath string
 		if path == "" {
 			childpath = name
 		} else {
 			childpath = path + "/" + name
 		}
+
 		hash := ""
 		if child.hash != nil {
 			hash = base64.URLEncoding.EncodeToString(child.hash)
 			// In Go 1.5+, we can use base64.RawURLEncoding
 			hash = strings.TrimRight(hash, "=")
 		}
+
+		identity := strconv.Itoa(peerIndex[child.revContent.identity])
 		generation := strconv.Itoa(child.revContent.generation)
-		if child.hidden {
-			// TODO: put remove date in extra field, instead of this workaround.
-			generation = "!" + generation
+		revContent := identity + ":" + generation
+
+		var options string
+		if !child.removed.IsZero() {
+			options = "removed=" + child.removed.UTC().Format(time.RFC3339)
 		}
-		revContent := strconv.Itoa(peerIndex[child.revContent.identity]) + ":" + generation
-		err := tsvWriter.WriteRow([]string{childpath, child.fingerprint, hash, revContent})
+
+		err := tsvWriter.WriteRow([]string{childpath, child.fingerprint, hash, revContent, options})
 		err = e.children[name].serializeChildren(tsvWriter, peerIndex, childpath)
 		if err != nil {
 			return err
@@ -461,7 +479,8 @@ func (r *Replica) scanDir(dir tree.Entry, statusDir *Entry, cancel chan struct{}
 			// Keep status (don't remove) if it exists, in case the file is
 			// un-ignored. It may be desirable to make this configurable.
 			if status != nil {
-				status.hidden = true
+				r.markMetaChanged()
+				status.removed = time.Now()
 			}
 			continue
 		}
