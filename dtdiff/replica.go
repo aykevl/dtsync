@@ -439,6 +439,9 @@ func (e *Entry) serializeChildren(tsvWriter *unitsv.Writer, peerIndex map[string
 		}
 
 		err := tsvWriter.WriteRow([]string{childpath, child.fingerprint, hash, revContent, options})
+		if err != nil {
+			return err
+		}
 		err = e.children[name].serializeChildren(tsvWriter, peerIndex, childpath)
 		if err != nil {
 			return err
