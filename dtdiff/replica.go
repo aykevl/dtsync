@@ -244,13 +244,14 @@ func (r *Replica) load(file io.Reader) error {
 	const (
 		TSV_PATH = iota
 		TSV_FINGERPRINT
-		TSV_HASH
 		TSV_REPLICA
 		TSV_GENERATION
+		TSV_HASH
 	)
 
 	tsvReader, err := unitsv.NewReader(reader, unitsv.Config{
-		Required: []string{"path", "fingerprint", "hash", "replica", "generation"},
+		Required: []string{"path", "fingerprint", "replica", "generation"},
+		Optional: []string{"hash"},
 	})
 	if err != nil {
 		return err
