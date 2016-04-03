@@ -58,6 +58,10 @@ escape characters as described in [UniTSV](https://github.com/aykevl/unitsv). In
 short, the escape characters are literal `\\`, `\n` and `\t` to encode `\`,
 newline, and tab.
 
+The body has a few possible columns. More can be added in the future, but
+unknown columns should be removed by an implementation. The columns are `path`,
+`fingerprint`, `revision`, `hash`, and `options`.
+
 The path elements are separated by forward slashes, even on Windows, for
 consistency.
 
@@ -66,6 +70,18 @@ for regular files, and `type/modtime` for other filetypes. In the future, a
 permissions field may be added, making it `type/modtime/permissions/size` and
 `type/modtime/permissions`. The `type` field is an `f` for regular files or `d`
 for directores. Other types are added as appropriate. `modtime` is encoded in
-the RFC3339 format with nanoseconds and no timezone. Then follows the `revision`
-with an index in the knowledge list (0 means this replica) and a generation
-where this file was last changed (where the fingerprint last changed).
+the RFC3339 format with nanoseconds and no timezone
+
+The `revision` column has two values: the replica index (1-indexed in the
+Knowledge header, 0 means this replica) and the generation number. With each
+change, the revision and generation number are set to that of the current
+replica.
+
+The `hash` column contains the [`blake2b`](https://blake2.net/) hash of the
+file. The hash may be left out, and is not shown here.
+
+The `options` column (which is not shown here either) contains key-value pairs
+in the format `key=value,key2=value2`. An example of an option is indicating a
+file is removed (`removed` key with RFC3339 timestamp when it disappeared) but
+still keeping the status around in case it appears again (e.g. when a volume is
+re-mounted or a file moved back).
