@@ -136,7 +136,7 @@ func TreeTest(t Tester, fs1, fs2 TestTree) {
 		checkFile(t, root2, file2, 0, 1, "file.txt")
 	}
 	if !sameInfo(info1, info2) {
-		t.Errorf("files do not match after Copy: %s %s", info1, info2)
+		t.Errorf("files do not match after Copy:\n%s\n%s", info1, info2)
 	}
 	if !bytes.Equal(info2.Hash(), hashes[""]) {
 		t.Errorf("Hash mismatch for file %s during Copy: expected %x, got %x", info2, hashes[""], info2.Hash())
@@ -268,7 +268,7 @@ func TreeTest(t Tester, fs1, fs2 TestTree) {
 		t.Errorf("Hash mismatch during Update for file %s: expected %x, got %x", info2, hashes["qbf"], info2.Hash())
 	}
 	if !sameInfo(info1, info2) {
-		t.Errorf("files do not match after Update: %s %s", info1, info2)
+		t.Errorf("files do not match after Update:\n%s\n%s", info1, info2)
 	}
 	if root1 != nil && root2 != nil && !testEqual(t, root1, root2) {
 		t.Error("root1 is not equal to root2 after Update")
