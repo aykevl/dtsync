@@ -106,6 +106,9 @@ func loadReplica(file io.Reader) (*Replica, error) {
 	r := &Replica{
 		rootEntry: &Entry{
 			children: make(map[string]*Entry),
+			fileInfo: &tree.FingerprintInfo{
+				Type: tree.TYPE_DIRECTORY,
+			},
 		},
 	}
 	r.rootEntry.replica = r
@@ -432,7 +435,7 @@ func (e *Entry) serializeChildren(tsvWriter *unitsv.Writer, peerIndex map[string
 			options = "removed=" + child.removed.UTC().Format(time.RFC3339)
 		}
 
-		err := tsvWriter.WriteRow([]string{childpath, child.fingerprint, hash, revString, options})
+		err := tsvWriter.WriteRow([]string{childpath, tree.Fingerprint(child), hash, revString, options})
 		if err != nil {
 			return err
 		}
@@ -510,23 +513,22 @@ func (r *Replica) scanDir(dir tree.Entry, statusDir *Entry, cancel chan struct{}
 		} else {
 			// update status (if needed)
 			oldHash := status.Hash()
-			oldFingerprint := status.Fingerprint()
-			newFingerprint := tree.Fingerprint(file.Info())
 			var newHash []byte
-			var err error
-			if oldFingerprint == newFingerprint && oldHash != nil {
+			info := file.Info()
+			if tree.MatchFingerprint(info, status) && oldHash != nil {
 				// Assume the hash stayed the same when the fingerprint is the
 				// same. But calculate a new hash if there is no hash.
 				newHash = oldHash
 			} else {
 				if file.Type() == tree.TYPE_REGULAR {
+					var err error
 					newHash, err = file.Hash()
 					if err != nil {
 						return err
 					}
 				}
 			}
-			status.Update(newFingerprint, newHash)
+			status.Update(info, newHash)
 		}
 
 		if file.Type() == tree.TYPE_DIRECTORY {

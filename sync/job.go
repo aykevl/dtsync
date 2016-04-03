@@ -151,14 +151,6 @@ func (j *Job) Apply() error {
 			return err
 		}
 	case ACTION_UPDATE:
-		err := status1.ParseFingerprint()
-		if err != nil {
-			return err
-		}
-		err = status2.ParseFingerprint()
-		if err != nil {
-			return err
-		}
 		info, parentInfo, err := tree.Update(fs1, fs2, status1, status2)
 		if err != nil {
 			return err
@@ -168,20 +160,15 @@ func (j *Job) Apply() error {
 			// TODO Should we report this as an error?
 			status1.UpdateHash(info.Hash())
 		}
-		status2.Update(tree.Fingerprint(info), info.Hash())
-		statusParent2.Update(tree.Fingerprint(parentInfo), nil)
+		status2.Update(info, info.Hash())
+		statusParent2.Update(parentInfo, nil)
 	case ACTION_REMOVE:
-		err := status2.ParseFingerprint()
-		if err != nil {
-			return err
-		}
-
 		parentInfo, err := fs2.Remove(status2)
 		if err != nil {
 			return err
 		}
 		status2.Remove()
-		statusParent2.Update(tree.Fingerprint(parentInfo), nil)
+		statusParent2.Update(parentInfo, nil)
 	default:
 		panic("unknown action (must not happen)")
 	}
@@ -195,16 +182,6 @@ func (j *Job) Apply() error {
 }
 
 func copyFile(fs1, fs2 tree.Tree, status1, statusParent2 *dtdiff.Entry) error {
-	err := status1.ParseFingerprint()
-	if err != nil {
-		return err
-	}
-	if len(statusParent2.RelativePath()) > 0 {
-		err := statusParent2.ParseFingerprint()
-		if err != nil {
-			return err
-		}
-	}
 	if status1.Type() == tree.TYPE_DIRECTORY {
 		info, err := fs2.CreateDir(status1.Name(), statusParent2, status1)
 		if err != nil {
@@ -227,7 +204,7 @@ func copyFile(fs1, fs2 tree.Tree, status1, statusParent2 *dtdiff.Entry) error {
 		if err != nil {
 			return err
 		}
-		statusParent2.Update(tree.Fingerprint(parentInfo), nil)
+		statusParent2.Update(parentInfo, nil)
 		_, err = statusParent2.Add(info)
 		if err != nil {
 			return err

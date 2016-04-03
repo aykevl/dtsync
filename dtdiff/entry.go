@@ -46,7 +46,6 @@ type revision struct {
 type Entry struct {
 	name        string
 	revision    // last content (hash) change
-	fingerprint string
 	fileInfo    *tree.FingerprintInfo // parsed fingerprint
 	mode        tree.Mode
 	hasMode     tree.Mode
@@ -76,29 +75,14 @@ func (e *Entry) RelativePath() []string {
 	}
 }
 
-// Fingerprint returns the current fingerprint of this entry.
-func (e *Entry) Fingerprint() string {
-	return e.fingerprint
-}
-
 // Hash returns the hash of the status entry, if one is known.
 func (e *Entry) Hash() []byte {
 	return e.hash
 }
 
-// Type returns the tree.Type filetype
+// Type returns the tree.Type filetype.
 func (e *Entry) Type() tree.Type {
-	// Fingerprint must be defined.
-	switch e.fingerprint[0] {
-	case 'f':
-		return tree.TYPE_REGULAR
-	case 'd':
-		return tree.TYPE_DIRECTORY
-	case 'l':
-		return tree.TYPE_SYMLINK
-	default:
-		return tree.TYPE_UNKNOWN
-	}
+	return e.fileInfo.Type
 }
 
 // Mode returns the permission bits for this entry.
@@ -111,25 +95,12 @@ func (e *Entry) HasMode() tree.Mode {
 	return e.hasMode
 }
 
-// ParseFingerprint parses the fingerprint of this entry. This is needed for
-// ModTime() and Size().
-func (e *Entry) ParseFingerprint() error {
-	fileInfo, err := tree.ParseFingerprint(e.fingerprint)
-	if err != nil {
-		return err
-	}
-	e.fileInfo = fileInfo
-	return nil
-}
-
-// ModTime returns the last modification time from the fingerprint. It panics if
-// the fingerprint hasn't been parsed with ParseFingerprint().
+// ModTime returns the last modification time.
 func (e *Entry) ModTime() time.Time {
 	return e.fileInfo.ModTime
 }
 
-// Size returns the filesize (for regular files) from the fingerprint. It panics if
-// the fingerprint hasn't been parsed with ParseFingerprint().
+// Size returns the filesize for regular files, or 0.
 func (e *Entry) Size() int64 {
 	return e.fileInfo.Size
 }
@@ -157,13 +128,14 @@ func (e *Entry) addChild(name string, rev revision, fingerprint string, hash []b
 		// duplicate path
 		return nil, ErrExists
 	}
-	if fingerprint == "" {
-		return nil, ErrInvalidFingerprint
+	fileInfo, err := tree.ParseFingerprint(fingerprint)
+	if err != nil {
+		return nil, err
 	}
 	newEntry := &Entry{
 		name:        name,
 		revision:    rev,
-		fingerprint: fingerprint,
+		fileInfo:    fileInfo,
 		hash:        hash,
 		children:    make(map[string]*Entry),
 		parent:      e,
@@ -190,10 +162,10 @@ func (e *Entry) Equal(e2 *Entry) bool {
 	if e.revision == e2.revision {
 		return true
 	}
-	if e.fingerprint == e2.fingerprint {
+	if tree.MatchFingerprint(e, e2) {
 		return true
 	}
-	if bytes.Equal(e.hash, e2.hash) && len(e.hash) > 0 {
+	if len(e.hash) > 0 && bytes.Equal(e.hash, e2.hash) {
 		return true
 	}
 	return false
@@ -286,14 +258,11 @@ func (e *Entry) Add(info tree.FileInfo) (*Entry, error) {
 
 // Update updates the revision if the file was changed. The file is not changed
 // if the fingerprint but not the hash changed.
-func (e *Entry) Update(fingerprint string, hash []byte) {
-	if fingerprint == "" {
-		// programming error
-		panic("invalid fingerprint")
-	}
-	if fingerprint != e.fingerprint {
-		e.fingerprint = fingerprint
-		e.fileInfo = nil
+func (e *Entry) Update(info tree.FileInfo, hash []byte) {
+	if !tree.MatchFingerprint(e, info) {
+		e.fileInfo.Type = info.Type()
+		e.fileInfo.ModTime = info.ModTime()
+		e.fileInfo.Size = info.Size()
 		if e.Type() == tree.TYPE_SYMLINK {
 			// Changes in fingerprints of symbolic links must be tracked. For
 			// regular files we look at the hash and for directories fingerprint

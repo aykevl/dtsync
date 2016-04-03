@@ -42,7 +42,7 @@ Option-Test: abc
 
 path	fingerprint	hash	revision	options
 conflict.txt	f/2016-02-14T19:10:10.327687803Z/0		0:2	
-dir	d/2016-02-15T19:17:51.35414374Z/0		0:1	
+dir	d/2016-02-15T19:17:51.35414374Z		0:1	
 dir/file.txt	f/2016-02-15T19:18:18.290458876Z/0		0:1	
 file1.txt	f/2013-01-03T19:04:31.721713001Z/0	NUKtf9FUAgogL4_fgiXMrK4MsFbBBzzxSTUIBq5Y5Nk	0:1	
 file2.html	f/2012-12-19T20:25:21.119862001Z/0		0:2	
