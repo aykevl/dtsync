@@ -402,7 +402,7 @@ func (r *Tree) UpdateSymlink(file, source tree.FileInfo, contents string) (tree.
 	e.st, err = os.Lstat(fullPath)
 	if err != nil {
 		return nil, nil, err
-	} else if e.Type() != file.Type() {
+	} else if file.Type() != tree.TYPE_SYMLINK || e.Type() != tree.TYPE_SYMLINK {
 		return nil, nil, tree.ErrNoSymlink(e.RelativePath())
 	} else if !tree.MatchFingerprint(e.Info(), file) {
 		return nil, nil, tree.ErrChanged(e.RelativePath())
