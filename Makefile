@@ -2,11 +2,13 @@
 all:
 	go install ./dtsync
 
+packages=./tree/memory ./tree/file ./tree/remote ./dtdiff ./sync ./dtsync
+
 test:
-	go test ./tree/memory ./tree/file ./tree/remote ./dtdiff ./sync ./dtsync
+	go test $(packages)
 
 fmt:
-	go fmt ./tree/memory ./tree/file ./tree/remote ./dtdiff ./sync ./dtsync
+	go fmt ./tree $(packages)
 
 vet:
-	go vet ./tree/memory ./tree/file ./tree/remote ./dtdiff ./sync ./dtsync
+	go vet ./tree $(packages)
