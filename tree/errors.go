@@ -29,9 +29,9 @@
 package tree
 
 import (
-	"strings"
 	"errors"
 	"os"
+	"strings"
 )
 
 // Error codes that can be used by any filesystem implementation.
