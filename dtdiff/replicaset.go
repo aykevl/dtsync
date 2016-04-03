@@ -76,7 +76,7 @@ func Scan(fs1, fs2 tree.Tree) (*ReplicaSet, error) {
 						scanErrors[i] <- err
 						return
 					}
-					ignore = replica.Header()["Ignore"]
+					ignore = replica.options["Ignore"]
 					replica.AddIgnore(ignore...)
 				}
 				rs.set[i] = replica

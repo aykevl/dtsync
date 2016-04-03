@@ -53,6 +53,11 @@ detected, this number is incremented by one.
 `Knowledge`: a key-value format to store what changes of other replicas have
 been (fully) integrated into this replica.
 
+`Option-*`: options (e.g. `Ignore`) are put in a header starting with `Option-`
+with the key after that. E.g.: `Option-Ignore: /.sync`. Options are kept even if
+the option cannot be interpreted by the parser. Other headers are removed if
+they are unknown.
+
 Then follows the body, just like in HTTP. The format of the body is in TSV, with
 escape characters as described in [UniTSV](https://github.com/aykevl/unitsv). In
 short, the escape characters are literal `\\`, `\n` and `\t` to encode `\`,

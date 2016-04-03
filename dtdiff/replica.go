@@ -46,8 +46,6 @@ import (
 	"github.com/aykevl/unitsv"
 )
 
-type Header textproto.MIMEHeader
-
 var (
 	ErrContentType            = errors.New("dtdiff: wrong content type")
 	ErrNoIdentity             = errors.New("dtdiff: no Identity header")
@@ -72,7 +70,7 @@ type Replica struct {
 	isKnowledgeChanged bool // true if the Knowledge header was updated
 	knowledge          map[string]int
 	rootEntry          *Entry
-	header             textproto.MIMEHeader
+	options            textproto.MIMEHeader
 	ignore             []string // paths to ignore
 }
 
@@ -90,7 +88,7 @@ func ScanTree(fs tree.LocalFileTree, recvOptionsChan, sendOptionsChan chan tree.
 		replica, _ = loadReplica(file)
 	}
 
-	ignored := replica.Header()["Ignore"]
+	ignored := replica.options["Ignore"]
 	replica.AddIgnore(ignored...)
 	sendOptionsChan <- tree.NewScanOptions(ignored)
 
@@ -329,19 +327,15 @@ func (r *Replica) load(file io.Reader) error {
 		}
 	}
 
-	// Remove all headers that are written by Serialize() anyway.
-	header.Del("Content-Type")
-	header.Del("Identity")
-	header.Del("Generation")
-	header.Del("Knowledge")
-	header.Del("Version")
-	r.header = header
+	// Put all headers that start with Option- in the option list.
+	r.options = make(textproto.MIMEHeader)
+	for key, values := range header {
+		if strings.HasPrefix(key, "Option-") {
+			r.options[key[len("Option-"):]] = values
+		}
+	}
 
 	return nil
-}
-
-func (r *Replica) Header() Header {
-	return Header(r.header)
 }
 
 func (r *Replica) Serialize(out io.Writer) error {
@@ -371,9 +365,9 @@ func (r *Replica) Serialize(out io.Writer) error {
 	writeKeyValue(writer, "Identity", r.identity)
 	writeKeyValue(writer, "Generation", strconv.Itoa(r.generation))
 	writeKeyValue(writer, "Knowledge", strings.Join(knowledgeList, ","))
-	for key, values := range r.header {
+	for key, values := range r.options {
 		for _, value := range values {
-			writeKeyValue(writer, key, value)
+			writeKeyValue(writer, "Option-"+key, value)
 		}
 	}
 	writer.WriteByte('\n')
