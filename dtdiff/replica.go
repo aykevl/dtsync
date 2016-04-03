@@ -279,12 +279,12 @@ func (r *Replica) load(file io.Reader) error {
 			}
 		}
 
-		revContent := strings.Split(fields[TSV_REVISION], ":")
-		if len(revContent) != 2 {
+		revParts := strings.Split(fields[TSV_REVISION], ":")
+		if len(revParts) != 2 {
 			return ErrInvalidEntryRevision
 		}
 
-		revReplicaIndex, err := strconv.Atoi(revContent[0])
+		revReplicaIndex, err := strconv.Atoi(revParts[0])
 		if err != nil {
 			return ErrInvalidEntryRevision
 		}
@@ -293,7 +293,7 @@ func (r *Replica) load(file io.Reader) error {
 		}
 
 		revReplica := peers[revReplicaIndex]
-		revGeneration, err := strconv.Atoi(revContent[1])
+		revGeneration, err := strconv.Atoi(revParts[1])
 		if err != nil || revGeneration < 1 {
 			return ErrInvalidEntryRevision
 		}
@@ -429,16 +429,16 @@ func (e *Entry) serializeChildren(tsvWriter *unitsv.Writer, peerIndex map[string
 			hash = strings.TrimRight(hash, "=")
 		}
 
-		identity := strconv.Itoa(peerIndex[child.revContent.identity])
-		generation := strconv.Itoa(child.revContent.generation)
-		revContent := identity + ":" + generation
+		identity := strconv.Itoa(peerIndex[child.identity])
+		generation := strconv.Itoa(child.generation)
+		revString := identity + ":" + generation
 
 		var options string
 		if !child.removed.IsZero() {
 			options = "removed=" + child.removed.UTC().Format(time.RFC3339)
 		}
 
-		err := tsvWriter.WriteRow([]string{childpath, child.fingerprint, hash, revContent, options})
+		err := tsvWriter.WriteRow([]string{childpath, child.fingerprint, hash, revString, options})
 		if err != nil {
 			return err
 		}

@@ -45,7 +45,7 @@ type revision struct {
 // An Entry is one object (row) in a Replica. It belongs to one Replica.
 type Entry struct {
 	name        string
-	revContent  revision // last content (hash) change
+	revision    // last content (hash) change
 	fingerprint string
 	fileInfo    *tree.FingerprintInfo // parsed fingerprint
 	hash        []byte
@@ -57,7 +57,7 @@ type Entry struct {
 
 // String function, for debugging purposes
 func (e *Entry) String() string {
-	return "dtdiff.Entry(" + e.name + "," + e.revContent.identity + ":" + strconv.Itoa(e.revContent.generation) + ")"
+	return "dtdiff.Entry(" + e.name + "," + e.identity + ":" + strconv.Itoa(e.generation) + ")"
 }
 
 // Name returns the name of this entry
@@ -123,7 +123,7 @@ func (e *Entry) Size() int64 {
 }
 
 // Add new entry by recursively finding the parent
-func (e *Entry) add(path []string, revContent revision, fingerprint string, hash []byte) (*Entry, error) {
+func (e *Entry) add(path []string, rev revision, fingerprint string, hash []byte) (*Entry, error) {
 	if path[0] == "" {
 		return nil, ErrInvalidPath
 	}
@@ -134,13 +134,13 @@ func (e *Entry) add(path []string, revContent revision, fingerprint string, hash
 			// or: the path has a parent that hasn't yet been scanned
 			return nil, ErrInvalidPath
 		}
-		return child.add(path[1:], revContent, fingerprint, hash)
+		return child.add(path[1:], rev, fingerprint, hash)
 	} else {
-		return e.addChild(path[0], revContent, fingerprint, hash)
+		return e.addChild(path[0], rev, fingerprint, hash)
 	}
 }
 
-func (e *Entry) addChild(name string, revContent revision, fingerprint string, hash []byte) (*Entry, error) {
+func (e *Entry) addChild(name string, rev revision, fingerprint string, hash []byte) (*Entry, error) {
 	if _, ok := e.children[name]; ok {
 		// duplicate path
 		return nil, ErrExists
@@ -150,7 +150,7 @@ func (e *Entry) addChild(name string, revContent revision, fingerprint string, h
 	}
 	newEntry := &Entry{
 		name:        name,
-		revContent:  revContent,
+		revision:    rev,
 		fingerprint: fingerprint,
 		hash:        hash,
 		children:    make(map[string]*Entry),
@@ -169,13 +169,13 @@ func (e *Entry) Get(name string) *Entry {
 // HasRevision returns true if this file (actually, this replica) includes the
 // revision the other entry is at.
 func (e *Entry) HasRevision(other *Entry) bool {
-	return e.replica.knowledge[other.revContent.identity] >= other.revContent.generation
+	return e.replica.knowledge[other.identity] >= other.generation
 }
 
 // Equal returns true if both entries are of the same revision (replica and
 // generation). Not recursive.
 func (e *Entry) Equal(e2 *Entry) bool {
-	if e.revContent == e2.revContent {
+	if e.revision == e2.revision {
 		return true
 	}
 	if e.fingerprint == e2.fingerprint {
@@ -189,7 +189,7 @@ func (e *Entry) Equal(e2 *Entry) bool {
 
 // After returns true if this entry was modified after the other.
 func (e *Entry) After(e2 *Entry) bool {
-	return e.revContent.generation > e2.replica.knowledge[e.revContent.identity]
+	return e.generation > e2.replica.knowledge[e.identity]
 }
 
 // Before returns true if this entry is modified before the other.
@@ -287,7 +287,7 @@ func (e *Entry) Update(fingerprint string, hash []byte) {
 			// regular files we look at the hash and for directories fingerprint
 			// changes do not cause updates at all (but are still tracked).
 			e.replica.markChanged()
-			e.revContent = e.replica.revision
+			e.revision = e.replica.revision
 		} else {
 			e.replica.markMetaChanged()
 		}
@@ -301,7 +301,7 @@ func (e *Entry) UpdateHash(hash []byte) {
 	if !bytes.Equal(e.hash, hash) {
 		e.replica.markChanged()
 		e.hash = hash
-		e.revContent = e.replica.revision
+		e.revision = e.replica.revision
 	}
 }
 
