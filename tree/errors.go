@@ -36,9 +36,8 @@ import (
 
 // Error codes that can be used by any filesystem implementation.
 var (
-	ErrInvalidName        = errors.New("tree: invalid file name")
-	ErrCancelled          = errors.New("tree: write cancelled")
-	ErrParsingFingerprint = errors.New("tree: invalid fingerprint")
+	ErrInvalidName = errors.New("tree: invalid file name")
+	ErrCancelled   = errors.New("tree: write cancelled")
 )
 
 type PathError interface {

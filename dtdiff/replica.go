@@ -58,6 +58,7 @@ var (
 	ErrSameIdentity           = errors.New("dtdiff: two replicas with the same ID")
 	ErrSameRoot               = errors.New("dtdiff: trying to synchronize the same directory")
 	ErrCanceled               = errors.New("dtdiff: canceled") // must always be handled
+	ErrParsingFingerprint     = errors.New("dtdiff: could not parse fingerprint")
 )
 
 // File where current status of the tree is stored.
@@ -106,9 +107,7 @@ func loadReplica(file io.Reader) (*Replica, error) {
 	r := &Replica{
 		rootEntry: &Entry{
 			children: make(map[string]*Entry),
-			fileInfo: &tree.FingerprintInfo{
-				Type: tree.TYPE_DIRECTORY,
-			},
+			fileType: tree.TYPE_DIRECTORY,
 		},
 	}
 	r.rootEntry.replica = r
@@ -435,7 +434,7 @@ func (e *Entry) serializeChildren(tsvWriter *unitsv.Writer, peerIndex map[string
 			options = "removed=" + child.removed.UTC().Format(time.RFC3339)
 		}
 
-		err := tsvWriter.WriteRow([]string{childpath, tree.Fingerprint(child), hash, revString, options})
+		err := tsvWriter.WriteRow([]string{childpath, serializeFingerprint(child), hash, revString, options})
 		if err != nil {
 			return err
 		}

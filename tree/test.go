@@ -215,7 +215,7 @@ func TreeTest(t Tester, fs1, fs2 TestTree) {
 	info, err = fs1.ReadInfo([]string{"file.txt"})
 	if err != nil {
 		t.Error("cannot ReadInfo file.txt:", err)
-	} else if Fingerprint(info) != Fingerprint(info1) {
+	} else if !MatchFingerprint(info, info1) {
 		t.Error("file.txt updated while it was cancelled")
 	}
 

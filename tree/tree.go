@@ -35,7 +35,6 @@ package tree
 import (
 	"io"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -365,18 +364,7 @@ func (fi *FileInfoStruct) HasMode() Mode {
 }
 
 func (fi *FileInfoStruct) String() string {
-	return "FileInfoStruct{" + strings.Join(fi.path, "/") + "," + Fingerprint(fi) + "}"
-}
-
-// Fingerprint returns a fingerprint for this file.
-func Fingerprint(e FileInfo) string {
-	parts := make([]string, 0, 4)
-	modTime := e.ModTime().UTC().Format(time.RFC3339Nano)
-	parts = append(parts, e.Type().Char(), modTime)
-	if e.Type() == TYPE_REGULAR {
-		parts = append(parts, strconv.FormatInt(e.Size(), 10))
-	}
-	return strings.Join(parts, "/")
+	return "FileInfoStruct{" + strings.Join(fi.path, "/") + " " + fi.modTime.String() + "}"
 }
 
 // MatchFingerprint returns whether two FileInfos would have the same
@@ -390,50 +378,6 @@ func MatchFingerprint(info1, info2 FileInfo) bool {
 	}
 	// Equal() only looks at the time instant, not the timezone.
 	return info1.ModTime().Equal(info2.ModTime())
-}
-
-type FingerprintInfo struct {
-	Type    Type
-	ModTime time.Time
-	Size    int64
-}
-
-// ParseFingerprint parses the given fingerprint.
-func ParseFingerprint(fingerprint string) (*FingerprintInfo, error) {
-	info := &FingerprintInfo{}
-
-	parts := strings.Split(fingerprint, "/")
-	if len(parts) < 2 {
-		return info, ErrParsingFingerprint
-	}
-
-	switch parts[0] {
-	case "f":
-		info.Type = TYPE_REGULAR
-	case "d":
-		info.Type = TYPE_DIRECTORY
-	case "l":
-		info.Type = TYPE_SYMLINK
-	default:
-		info.Type = TYPE_UNKNOWN
-	}
-
-	modTime, err := time.Parse(time.RFC3339Nano, parts[1])
-	if err != nil {
-		return info, err
-	}
-	info.ModTime = modTime
-
-	if len(parts) < 3 {
-		return info, nil
-	}
-
-	size, err := strconv.ParseInt(parts[2], 10, 64)
-	if err != nil {
-		return info, err
-	}
-	info.Size = size
-	return info, nil
 }
 
 // EntrySlice is a sortable list of Entries, sorting in incrasing order by the

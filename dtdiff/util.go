@@ -30,6 +30,8 @@ package dtdiff
 
 import (
 	"math/rand"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/aykevl/dtsync/tree"
@@ -113,4 +115,59 @@ func LeastName(names ...string) string {
 		}
 	}
 	return name
+}
+
+// serializeFingerprint returns a fingerprint string from a FileInfo.
+func serializeFingerprint(e tree.FileInfo) string {
+	parts := make([]string, 0, 4)
+	modTime := e.ModTime().UTC().Format(time.RFC3339Nano)
+	parts = append(parts, e.Type().Char(), modTime)
+	if e.Type() == tree.TYPE_REGULAR {
+		parts = append(parts, strconv.FormatInt(e.Size(), 10))
+	}
+	return strings.Join(parts, "/")
+}
+
+type fingerprintInfo struct {
+	fileType tree.Type
+	modTime  time.Time
+	size     int64
+}
+
+// parseFingerprint parses the given fingerprint string.
+func parseFingerprint(fingerprint string) (fingerprintInfo, error) {
+	info := fingerprintInfo{}
+
+	parts := strings.Split(fingerprint, "/")
+	if len(parts) < 2 {
+		return info, ErrParsingFingerprint
+	}
+
+	switch parts[0] {
+	case "f":
+		info.fileType = tree.TYPE_REGULAR
+	case "d":
+		info.fileType = tree.TYPE_DIRECTORY
+	case "l":
+		info.fileType = tree.TYPE_SYMLINK
+	default:
+		info.fileType = tree.TYPE_UNKNOWN
+	}
+
+	modTime, err := time.Parse(time.RFC3339Nano, parts[1])
+	if err != nil {
+		return info, err
+	}
+	info.modTime = modTime
+
+	if len(parts) < 3 {
+		return info, nil
+	}
+
+	size, err := strconv.ParseInt(parts[2], 10, 64)
+	if err != nil {
+		return info, err
+	}
+	info.size = size
+	return info, nil
 }

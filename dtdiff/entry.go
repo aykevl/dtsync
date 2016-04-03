@@ -44,16 +44,18 @@ type revision struct {
 
 // An Entry is one object (row) in a Replica. It belongs to one Replica.
 type Entry struct {
-	name        string
-	revision    // last content (hash) change
-	fileInfo    *tree.FingerprintInfo // parsed fingerprint
-	mode        tree.Mode
-	hasMode     tree.Mode
-	hash        []byte
-	children    map[string]*Entry
-	parent      *Entry
-	replica     *Replica
-	removed     time.Time
+	name     string
+	revision // last content (hash) change
+	fileType tree.Type
+	modTime  time.Time
+	size     int64
+	mode     tree.Mode
+	hasMode  tree.Mode
+	hash     []byte
+	children map[string]*Entry
+	parent   *Entry
+	replica  *Replica
+	removed  time.Time
 }
 
 // String function, for debugging purposes
@@ -82,7 +84,7 @@ func (e *Entry) Hash() []byte {
 
 // Type returns the tree.Type filetype.
 func (e *Entry) Type() tree.Type {
-	return e.fileInfo.Type
+	return e.fileType
 }
 
 // Mode returns the permission bits for this entry.
@@ -97,12 +99,12 @@ func (e *Entry) HasMode() tree.Mode {
 
 // ModTime returns the last modification time.
 func (e *Entry) ModTime() time.Time {
-	return e.fileInfo.ModTime
+	return e.modTime
 }
 
 // Size returns the filesize for regular files, or 0.
 func (e *Entry) Size() int64 {
-	return e.fileInfo.Size
+	return e.size
 }
 
 // Add new entry by recursively finding the parent
@@ -128,18 +130,20 @@ func (e *Entry) addChild(name string, rev revision, fingerprint string, hash []b
 		// duplicate path
 		return nil, ErrExists
 	}
-	fileInfo, err := tree.ParseFingerprint(fingerprint)
+	fileInfo, err := parseFingerprint(fingerprint)
 	if err != nil {
 		return nil, err
 	}
 	newEntry := &Entry{
-		name:        name,
-		revision:    rev,
-		fileInfo:    fileInfo,
-		hash:        hash,
-		children:    make(map[string]*Entry),
-		parent:      e,
-		replica:     e.replica,
+		name:     name,
+		revision: rev,
+		fileType: fileInfo.fileType,
+		modTime:  fileInfo.modTime,
+		size:     fileInfo.size,
+		hash:     hash,
+		children: make(map[string]*Entry),
+		parent:   e,
+		replica:  e.replica,
 	}
 	e.children[newEntry.name] = newEntry
 	return newEntry, nil
@@ -253,16 +257,16 @@ func (e *Entry) List() []*Entry {
 // Add a new status entry.
 func (e *Entry) Add(info tree.FileInfo) (*Entry, error) {
 	e.replica.markChanged()
-	return e.addChild(info.Name(), e.replica.revision, tree.Fingerprint(info), info.Hash())
+	return e.addChild(info.Name(), e.replica.revision, serializeFingerprint(info), info.Hash())
 }
 
 // Update updates the revision if the file was changed. The file is not changed
 // if the fingerprint but not the hash changed.
 func (e *Entry) Update(info tree.FileInfo, hash []byte) {
 	if !tree.MatchFingerprint(e, info) {
-		e.fileInfo.Type = info.Type()
-		e.fileInfo.ModTime = info.ModTime()
-		e.fileInfo.Size = info.Size()
+		e.fileType = info.Type()
+		e.modTime = info.ModTime()
+		e.size = info.Size()
 		if e.Type() == tree.TYPE_SYMLINK {
 			// Changes in fingerprints of symbolic links must be tracked. For
 			// regular files we look at the hash and for directories fingerprint
