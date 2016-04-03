@@ -42,6 +42,7 @@ import (
 // Entry is one file or directory.
 type Entry struct {
 	fileType tree.Type
+	mode     tree.Mode
 	modTime  time.Time
 	name     string
 	contents []byte
@@ -70,7 +71,7 @@ func (e *Entry) Close() error {
 
 func (e *Entry) root() *Entry {
 	root := e
-	for root.parent != nil {
+	for !root.isRoot() {
 		root = root.parent
 	}
 	return root
@@ -92,6 +93,16 @@ func (e *Entry) isRoot() bool {
 // Type returns the file type (file, directory)
 func (e *Entry) Type() tree.Type {
 	return e.fileType
+}
+
+// Mode returns the mode permission bits.
+func (e *Entry) Mode() tree.Mode {
+	return e.mode
+}
+
+// HasMode returns the supported mode bits, currently 0777.
+func (e *Entry) HasMode() tree.Mode {
+	return 0777
 }
 
 // Name returns the filename (not the path)
@@ -152,7 +163,7 @@ func (e *Entry) hash() []byte {
 }
 
 func (e *Entry) makeInfo(hash []byte) tree.FileInfo {
-	return tree.NewFileInfo(e.RelativePath(), e.fileType, e.modTime, e.Size(), hash)
+	return tree.NewFileInfo(e.RelativePath(), e.fileType, e.mode, 0777, e.modTime, e.Size(), hash)
 }
 
 // Info returns a FileInfo object without a hash.

@@ -48,6 +48,8 @@ type Entry struct {
 	revision    // last content (hash) change
 	fingerprint string
 	fileInfo    *tree.FingerprintInfo // parsed fingerprint
+	mode        tree.Mode
+	hasMode     tree.Mode
 	hash        []byte
 	children    map[string]*Entry
 	parent      *Entry
@@ -97,6 +99,16 @@ func (e *Entry) Type() tree.Type {
 	default:
 		return tree.TYPE_UNKNOWN
 	}
+}
+
+// Mode returns the permission bits for this entry.
+func (e *Entry) Mode() tree.Mode {
+	return e.mode
+}
+
+// HasMode returns the permission bits this entry supports.
+func (e *Entry) HasMode() tree.Mode {
+	return e.hasMode
 }
 
 // ParseFingerprint parses the fingerprint of this entry. This is needed for

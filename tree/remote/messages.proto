@@ -50,9 +50,11 @@ enum ErrorType {
 message FileInfo {
 	repeated string   path      = 1;
 	optional FileType type      = 2;
-	optional sint64   modTime   = 3;
-	optional sint64   size      = 4;
-	optional bytes    hash      = 5;
+	optional uint32   mode      = 3;
+	optional uint32   hasMode   = 4;
+	optional sint64   modTime   = 5;
+	optional sint64   size      = 6;
+	optional bytes    hash      = 7;
 }
 
 message ScanOptions {

@@ -164,11 +164,15 @@ func serializeFileInfo(info tree.FileInfo) *FileInfo {
 
 	size := info.Size()
 	fileType := FileType(info.Type())
+	mode := uint32(info.Mode())
+	hasMode := uint32(info.HasMode())
 	fileInfo := &FileInfo{
-		Path: path,
-		Type: &fileType,
-		Size: &size,
-		Hash: info.Hash(),
+		Path:    path,
+		Type:    &fileType,
+		Mode:    &mode,
+		HasMode: &hasMode,
+		Size:    &size,
+		Hash:    info.Hash(),
 	}
 	if !info.ModTime().IsZero() {
 		modTime := info.ModTime().UnixNano()
@@ -187,15 +191,14 @@ func parseFileInfo(info *FileInfo) tree.FileInfo {
 	if info.Type != nil {
 		fileType = tree.Type(*info.Type)
 	}
+	mode := tree.Mode(info.GetMode())
+	hasMode := tree.Mode(info.GetHasMode())
 	modTime := time.Time{}
 	if info.ModTime != nil {
 		modTime = time.Unix(0, *info.ModTime)
 	}
-	var size int64
-	if info.Size != nil {
-		size = *info.Size
-	}
-	return tree.NewFileInfo(info.Path, fileType, modTime, size, info.Hash)
+	size := info.GetSize()
+	return tree.NewFileInfo(info.Path, fileType, mode, hasMode, modTime, size, info.Hash)
 }
 
 // receivedData is one unparsed protobuf message received from the other end.

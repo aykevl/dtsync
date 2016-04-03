@@ -233,10 +233,10 @@ func applyTestCase(t *testing.T, fs tree.TestTree, tc testCase) {
 	switch tc.action {
 	case ACTION_COPY: // add
 		if tc.contents == nil {
-			_, err = fs.CreateDir(name, tree.NewFileInfo(parts[:len(parts)-1], tree.TYPE_DIRECTORY, time.Time{}, 0, nil))
+			_, err = fs.CreateDir(name, tree.NewFileInfo(parts[:len(parts)-1], tree.TYPE_DIRECTORY, 0755, 0777, time.Time{}, 0, nil))
 		} else if string(tc.contents[:3]) == "→" {
-			parent := tree.NewFileInfo(parts[:len(parts)-1], tree.TYPE_DIRECTORY, time.Time{}, 0, nil)
-			source := tree.NewFileInfo(parts, tree.TYPE_SYMLINK, time.Now(), 0, nil)
+			parent := tree.NewFileInfo(parts[:len(parts)-1], tree.TYPE_DIRECTORY, 0755, 0777, time.Time{}, 0, nil)
+			source := tree.NewFileInfo(parts, tree.TYPE_SYMLINK, 0644, 0777, time.Now(), 0, nil)
 			_, _, err = fs.CreateSymlink(name, parent, source, string(tc.contents[3:]))
 		} else {
 			_, err = fs.PutFile(parts, tc.contents)
@@ -246,7 +246,7 @@ func applyTestCase(t *testing.T, fs tree.TestTree, tc testCase) {
 			var file tree.FileInfo
 			file, err = fs.ReadInfo(strings.Split(tc.file, "/"))
 			assert(err)
-			source := tree.NewFileInfo(parts, tree.TYPE_SYMLINK, time.Now(), 0, nil)
+			source := tree.NewFileInfo(parts, tree.TYPE_SYMLINK, 0644, 0777, time.Now(), 0, nil)
 			_, _, err = fs.UpdateSymlink(file, source, string(tc.contents[3:]))
 		} else {
 			_, err = fs.PutFile(parts, tc.contents)

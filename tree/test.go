@@ -104,7 +104,7 @@ func TreeTest(t Tester, fs1, fs2 TestTree) {
 	}
 
 	// try copy with invalid source info
-	infoWrong := NewFileInfo(info1.RelativePath(), info1.Type(), time.Now(), info1.Size(), info1.Hash())
+	infoWrong := &FileInfoStruct{info1.RelativePath(), info1.Type(), 0666, 0666, time.Now(), info1.Size(), info1.Hash()}
 	reader, err := fs1.CopySource(infoWrong)
 	if err == nil {
 		buf := make([]byte, 1024)
@@ -203,7 +203,7 @@ func TreeTest(t Tester, fs1, fs2 TestTree) {
 		t.Error("ReadInfo failed for file-create.txt:", err)
 	}
 
-	cp, err = fs1.UpdateFile(info1, NewFileInfo(info2.RelativePath(), TYPE_REGULAR, time.Time{}, 0, nil))
+	cp, err = fs1.UpdateFile(info1, &FileInfoStruct{info2.RelativePath(), TYPE_REGULAR, 0666, 0666, time.Time{}, 0, nil})
 	if err != nil {
 		t.Fatal("could not update file.txt:", err)
 	}
@@ -285,14 +285,14 @@ func TreeTest(t Tester, fs1, fs2 TestTree) {
 	}
 
 	// try to update symlink (must fail)
-	link2 := NewFileInfo(link1.RelativePath(), TYPE_SYMLINK, time.Time{}, 0, nil)
+	link2 := NewFileInfo(link1.RelativePath(), TYPE_SYMLINK, 0666, 0666, time.Time{}, 0, nil)
 	_, _, err = Update(fs1, fs2, link1, link2)
 	if !IsNotExist(err) {
 		t.Error("Update link was not 'not found':", err)
 	}
 
 	// try to copy 'modified' symlink
-	link1Wrong := NewFileInfo(link1.RelativePath(), TYPE_SYMLINK, time.Time{}, 0, nil)
+	link1Wrong := &FileInfoStruct{link1.RelativePath(), TYPE_SYMLINK, 0666, 0666, time.Time{}, 0, nil}
 	_, _, err = Copy(fs1, fs2, link1Wrong, &FileInfoStruct{})
 	if !IsChanged(err) {
 		t.Errorf("No ErrChanged while copying %s: %s", link2.Name(), err)
@@ -312,7 +312,7 @@ func TreeTest(t Tester, fs1, fs2 TestTree) {
 
 	// update symlink
 	linkTarget = "file-does-not-exist"
-	link1Source := &FileInfoStruct{[]string{"link"}, TYPE_SYMLINK, time.Now(), 0, nil}
+	link1Source := &FileInfoStruct{[]string{"link"}, TYPE_SYMLINK, 0666, 0666, time.Now(), 0, nil}
 	link1, _, err = fs1.UpdateSymlink(link1, link1Source, linkTarget)
 	if err != nil {
 		t.Fatal("could not update symlink (with mtime):", err)
@@ -489,8 +489,10 @@ func sameInfo(t Tester, info FileInfo, entry Entry) bool {
 	if err != nil {
 		t.Fatalf("could not hash %s: %s", entry, err)
 	}
+	modeMask := info.HasMode() | entry.HasMode()
 	if info.Name() != entry.Name() ||
 		info.Type() != entry.Type() ||
+		info.Mode()&modeMask != entry.Mode()&modeMask ||
 		!info.ModTime().Equal(entry.ModTime()) ||
 		info.Size() != entry.Size() ||
 		!bytes.Equal(info.Hash(), entryHash) {

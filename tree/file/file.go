@@ -129,6 +129,20 @@ func (e *Entry) Type() tree.Type {
 	}
 }
 
+// Mode returns the mode bits for this file, as far as the filesystem supports
+// them.
+func (e *Entry) Mode() tree.Mode {
+	// TODO dummy value
+	return 0
+}
+
+// HasMode returns the permission bits this filesystem supports (at least 0777
+// for Unix-like filesystems).
+func (e *Entry) HasMode() tree.Mode {
+	// TODO dummy value
+	return 0
+}
+
 // ModTime returns the modification time from the (cached) stat() call.
 func (e *Entry) ModTime() time.Time {
 	return e.st.ModTime()
@@ -161,7 +175,7 @@ func (e *Entry) Hash() ([]byte, error) {
 // expensive to calculate and can return errors, it is left to the caller to use
 // it.
 func (e *Entry) makeInfo(hash []byte) tree.FileInfo {
-	return tree.NewFileInfo(e.RelativePath(), e.Type(), e.ModTime(), e.Size(), hash)
+	return tree.NewFileInfo(e.RelativePath(), e.Type(), e.Mode(), e.HasMode(), e.ModTime(), e.Size(), hash)
 }
 
 // FullInfo returns a tree.FileInfo with hash, or an error if the hash couldn't

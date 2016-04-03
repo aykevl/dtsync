@@ -66,6 +66,9 @@ func (t Type) Char() string {
 	}
 }
 
+// The mode (mainly Unix-like permissions) used in FileInfo.Mode().
+type Mode uint32
+
 // Tree is an abstraction layer over various types of trees. It tries to be as
 // generic as possible, making it possible to synchronize varying types of trees
 // (filesystem, sftp, remote filesystem, mtp, etc.). It may even be possible to
@@ -153,6 +156,10 @@ type Entry interface {
 	RelativePath() []string
 	// Type returns the file type (see the Type constants above)
 	Type() Type
+	// Mode returns the mode (permission) bits of this file.
+	Mode() Mode
+	// HasMode returns the permission bits the filesystem supports.
+	HasMode() Mode
 	// ModTime returns the last modification time.
 	ModTime() time.Time
 	// Size returns the filesize for regular files. For others, it's
@@ -283,13 +290,18 @@ type FileInfo interface {
 	// RelativePath returns the path relative to the root of this tree. The last
 	// element is always the same as the name.
 	RelativePath() []string
+	// Type returns the file type (see the Type constants above)
+	Type() Type
+	// Mode returns the mode bits (mainly permissions), see os.FileMode.
+	Mode() Mode
+	// HasMode returns the supported mode bits, 0 for the simplest filesystems
+	// (e.g. FAT32).
+	HasMode() Mode
+	// ModTime returns the last modification time.
+	ModTime() time.Time
 	// Size returns the filesize for regular files. For others, it's
 	// implementation-dependent.
 	Size() int64
-	// Type returns the file type (see the Type constants above)
-	Type() Type
-	// ModTime returns the last modification time.
-	ModTime() time.Time
 	// Hash returns the blake2b hash of the file, or nil if no hash is known
 	// (e.g. for directories).
 	Hash() []byte
@@ -298,15 +310,19 @@ type FileInfo interface {
 type FileInfoStruct struct {
 	path     []string
 	fileType Type
+	mode     Mode
+	hasMode  Mode
 	modTime  time.Time
 	size     int64
 	hash     []byte
 }
 
-func NewFileInfo(path []string, fileType Type, modTime time.Time, size int64, hash []byte) FileInfo {
+func NewFileInfo(path []string, fileType Type, mode Mode, hasMode Mode, modTime time.Time, size int64, hash []byte) FileInfo {
 	return &FileInfoStruct{
 		path:     path,
 		fileType: fileType,
+		mode:     mode,
+		hasMode:  hasMode,
 		modTime:  modTime,
 		size:     size,
 		hash:     hash,
@@ -338,6 +354,14 @@ func (fi *FileInfoStruct) Size() int64 {
 
 func (fi *FileInfoStruct) Type() Type {
 	return fi.fileType
+}
+
+func (fi *FileInfoStruct) Mode() Mode {
+	return fi.mode
+}
+
+func (fi *FileInfoStruct) HasMode() Mode {
+	return fi.hasMode
 }
 
 func (fi *FileInfoStruct) String() string {
