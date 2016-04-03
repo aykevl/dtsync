@@ -111,7 +111,7 @@ func (r Tree) entryFromPathName(parentPath []string, name string) (*Entry, error
 }
 
 // CreateDir adds a single child directory.
-func (r *Tree) CreateDir(name string, parent tree.FileInfo) (tree.FileInfo, error) {
+func (r *Tree) CreateDir(name string, parent, source tree.FileInfo) (tree.FileInfo, error) {
 	child, err := r.entryFromPathName(parent.RelativePath(), name)
 	if err != nil {
 		return nil, err

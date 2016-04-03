@@ -80,7 +80,7 @@ type Tree interface {
 
 	// mkdir: create a directory in this directory with the given name. The
 	// modification time is unknown and will likely be the current time.
-	CreateDir(name string, parent FileInfo) (FileInfo, error) // TODO update mtime
+	CreateDir(name string, parent, source FileInfo) (FileInfo, error) // TODO update parent mtime
 	// Remove removes the indicated file, but checks the fingerprint first. It
 	// returns ErrChanged if the metadata does not match, or another error if
 	// the remove failed.

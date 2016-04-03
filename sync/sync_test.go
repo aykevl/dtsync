@@ -165,7 +165,8 @@ func syncRoots(t *testing.T, scheme1, scheme2 string) {
 		fileAction   func(fs tree.TestTree) error
 	}{
 		{"dir", ACTION_COPY, 2, func(fs tree.TestTree) error {
-			_, err := fs.CreateDir("dir", &tree.FileInfoStruct{})
+			source := tree.NewFileInfo(nil, tree.TYPE_DIRECTORY, 0755, 0777, time.Now(), 0, nil)
+			_, err := fs.CreateDir("dir", &tree.FileInfoStruct{}, source)
 			if err != nil {
 				return err
 			}
@@ -233,7 +234,9 @@ func applyTestCase(t *testing.T, fs tree.TestTree, tc testCase) {
 	switch tc.action {
 	case ACTION_COPY: // add
 		if tc.contents == nil {
-			_, err = fs.CreateDir(name, tree.NewFileInfo(parts[:len(parts)-1], tree.TYPE_DIRECTORY, 0755, 0777, time.Time{}, 0, nil))
+			parent := tree.NewFileInfo(parts[:len(parts)-1], tree.TYPE_DIRECTORY, 0755, 0777, time.Time{}, 0, nil)
+			source := tree.NewFileInfo(nil, tree.TYPE_DIRECTORY, 0755, 0777, time.Now(), 0, nil)
+			_, err = fs.CreateDir(name, parent, source)
 		} else if string(tc.contents[:3]) == "→" {
 			parent := tree.NewFileInfo(parts[:len(parts)-1], tree.TYPE_DIRECTORY, 0755, 0777, time.Time{}, 0, nil)
 			source := tree.NewFileInfo(parts, tree.TYPE_SYMLINK, 0644, 0777, time.Now(), 0, nil)

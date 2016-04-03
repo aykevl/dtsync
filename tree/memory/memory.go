@@ -304,14 +304,14 @@ func (e *Entry) SetFile(name string) (io.WriteCloser, error) {
 }
 
 // CreateDir creates a directory with the given name.
-func (e *Entry) CreateDir(name string, parentInfo tree.FileInfo) (tree.FileInfo, error) {
+func (e *Entry) CreateDir(name string, parentInfo, sourceInfo tree.FileInfo) (tree.FileInfo, error) {
 	parent := e.get(parentInfo.RelativePath())
 	if parent == nil {
 		return nil, tree.ErrNotFound([]string{name})
 	}
 	child := &Entry{
 		fileType: tree.TYPE_DIRECTORY,
-		mode:     DEFAULT_DIR_MODE & parent.hasMode,
+		mode:     sourceInfo.Mode() & parent.hasMode,
 		hasMode:  parent.hasMode,
 		modTime:  time.Now(),
 		name:     name,

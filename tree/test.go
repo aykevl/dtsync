@@ -376,7 +376,7 @@ func TreeTest(t Tester, fs1, fs2 TestTree) {
 
 	/*** Test directories ***/
 
-	infoDir1, err := fs1.CreateDir("dir", &FileInfoStruct{})
+	infoDir1, err := fs1.CreateDir("dir", &FileInfoStruct{}, &FileInfoStruct{mode: 0777, hasMode: 0777})
 	if err != nil {
 		t.Error("could not create directory 1:", err)
 	}
@@ -388,7 +388,7 @@ func TreeTest(t Tester, fs1, fs2 TestTree) {
 		checkFile(t, root1, dir1, 0, 3, "dir")
 	}
 
-	infoDir2, err := fs2.CreateDir("dir", &FileInfoStruct{})
+	infoDir2, err := fs2.CreateDir("dir", &FileInfoStruct{}, infoDir1)
 	if err != nil {
 		t.Fatal("could not create directory 2:", err)
 	}

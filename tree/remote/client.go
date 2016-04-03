@@ -336,21 +336,24 @@ func (c *Client) RemoteScan(sendOptions, recvOptions chan tree.ScanOptions) (io.
 	return stream, nil
 }
 
-func (c *Client) CreateDir(name string, parent tree.FileInfo) (tree.FileInfo, error) {
+func (c *Client) CreateDir(name string, parent, source tree.FileInfo) (tree.FileInfo, error) {
 	debugLog("\nC: CreateDir")
-	return c.returnsParent(Command_MKDIR, &name, parent)
+	return c.returnsParent(Command_MKDIR, &name, parent, source)
 }
 
 func (c *Client) Remove(file tree.FileInfo) (tree.FileInfo, error) {
 	debugLog("\nC: Remove")
-	return c.returnsParent(Command_REMOVE, nil, file)
+	return c.returnsParent(Command_REMOVE, nil, file, nil)
 }
 
-func (c *Client) returnsParent(command Command, name *string, file tree.FileInfo) (tree.FileInfo, error) {
+func (c *Client) returnsParent(command Command, name *string, file, source tree.FileInfo) (tree.FileInfo, error) {
 	request := &Request{
 		Command:   &command,
 		Name:      name,
 		FileInfo1: serializeFileInfo(file),
+	}
+	if source != nil {
+		request.FileInfo2 = serializeFileInfo(source)
 	}
 	ch := c.handleReply(request, nil, nil)
 	respData := <-ch

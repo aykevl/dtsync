@@ -191,10 +191,10 @@ func (s *Server) handleRequest(msg *Request, recvStreams map[uint64]chan []byte)
 		s.currentScan = nil
 	case Command_MKDIR:
 		// Client wants to create a directory.
-		if msg.FileInfo1 == nil || msg.Name == nil {
-			return invalidRequest{"MKDIR expects fileInfo1 and name fields"}
+		if msg.FileInfo1 == nil || msg.Name == nil || msg.FileInfo2 == nil {
+			return invalidRequest{"MKDIR expects fileInfo1, FileInfo2 and name fields"}
 		}
-		go s.mkdir(*msg.RequestId, *msg.Name, parseFileInfo(msg.FileInfo1))
+		go s.mkdir(*msg.RequestId, *msg.Name, parseFileInfo(msg.FileInfo1), parseFileInfo(msg.FileInfo2))
 	case Command_REMOVE:
 		// Client wants to create a directory.
 		if msg.FileInfo1 == nil || msg.FileInfo1.Path == nil || msg.FileInfo1.Type == nil {
@@ -466,8 +466,8 @@ func (s *Server) readSymlink(requestId uint64, file tree.FileInfo) {
 	}
 }
 
-func (s *Server) mkdir(requestId uint64, name string, parent tree.FileInfo) {
-	info, err := s.fs.CreateDir(name, parent)
+func (s *Server) mkdir(requestId uint64, name string, parent, source tree.FileInfo) {
+	info, err := s.fs.CreateDir(name, parent, source)
 	s.replyInfo(requestId, info, err)
 }
 
