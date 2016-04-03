@@ -124,8 +124,8 @@ func TreeTest(t Tester, fs1, fs2 TestTree) {
 		file2 := getFile(root2, "file.txt")
 		checkFile(t, root2, file2, 0, 1, "file.txt")
 	}
-	if Fingerprint(info1) != Fingerprint(info2) {
-		t.Errorf("files do not match after copy: %s %s", info1, info2)
+	if !sameInfo(info1, info2) {
+		t.Errorf("files do not match after Copy: %s %s", info1, info2)
 	}
 	if !bytes.Equal(info2.Hash(), hashes[""]) {
 		t.Errorf("Hash mismatch for file %s during Copy: expected %x, got %x", info2, hashes[""], info2.Hash())
@@ -260,6 +260,9 @@ func TreeTest(t Tester, fs1, fs2 TestTree) {
 	if !bytes.Equal(info2.Hash(), hashes["qbf"]) {
 		t.Errorf("Hash mismatch during Update for file %s: expected %x, got %x", info2, hashes["qbf"], info2.Hash())
 	}
+	if !sameInfo(info1, info2) {
+		t.Errorf("files do not match after Update: %s %s", info1, info2)
+	}
 	if root1 != nil && root2 != nil && !testEqual(t, root1, root2) {
 		t.Error("root1 is not equal to root2 after Update")
 	}
@@ -302,6 +305,9 @@ func TreeTest(t Tester, fs1, fs2 TestTree) {
 	link2, _, err = Copy(fs1, fs2, link1, &FileInfoStruct{})
 	if err != nil {
 		t.Fatal("cannot copy link:", err)
+	}
+	if !sameInfo(link1, link2) {
+		t.Errorf("symlinks do not match after Copy: %s %s", link1, link2)
 	}
 
 	// try copying symlink again
@@ -365,6 +371,9 @@ func TreeTest(t Tester, fs1, fs2 TestTree) {
 	if err != nil {
 		t.Error("cannot update link:", err)
 	}
+	if !sameInfo(link1, link2) {
+		t.Errorf("symlinks do not match after Update: %s %s", link1, link2)
+	}
 
 	// try writing to symlink
 	_, err = fs1.PutFile(pathSplit("link"), []byte("impossible"))
@@ -382,7 +391,7 @@ func TreeTest(t Tester, fs1, fs2 TestTree) {
 	}
 	if root1 != nil {
 		dir1 := getFile(root1, "dir")
-		if !sameInfo(t, infoDir1, dir1) {
+		if !sameInfoEntry(t, infoDir1, dir1) {
 			t.Errorf("FileInfo of %s does not match the return value of CreateDir", dir1)
 		}
 		checkFile(t, root1, dir1, 0, 3, "dir")
@@ -394,7 +403,7 @@ func TreeTest(t Tester, fs1, fs2 TestTree) {
 	}
 	if root2 != nil {
 		dir2 := getFile(root2, "dir")
-		if !sameInfo(t, infoDir2, dir2) {
+		if !sameInfoEntry(t, infoDir2, dir2) {
 			t.Errorf("FileInfo of %s does not match the return value of CreateDir", dir2)
 		}
 		checkFile(t, root2, dir2, 0, 3, "dir")
@@ -482,24 +491,36 @@ func pathJoin(p []string) string {
 	return strings.Join(p, "/")
 }
 
-// sameInfo returns true if both FileInfo interfaces are exactly equal for all
-// properties.
-func sameInfo(t Tester, info FileInfo, entry Entry) bool {
-	entryHash, err := entry.Hash()
+func sameInfoEntry(t Tester, info FileInfo, entry Entry) bool {
+	info2, err := entry.FullInfo()
 	if err != nil {
-		t.Fatalf("could not hash %s: %s", entry, err)
+		t.Fatalf("could not get info from %s: %s", entry, err)
 	}
-	modeMask := info.HasMode() | entry.HasMode()
-	if info.Name() != entry.Name() ||
-		info.Type() != entry.Type() ||
-		info.Mode()&modeMask != entry.Mode()&modeMask ||
-		!info.ModTime().Equal(entry.ModTime()) ||
-		info.Size() != entry.Size() ||
-		!bytes.Equal(info.Hash(), entryHash) {
+	return sameFullInfo(info, info2)
+}
+
+// sameFullInfo returns true if both FileInfo interfaces are exactly equal for
+// all properties.
+func sameFullInfo(info1, info2 FileInfo) bool {
+	if !bytes.Equal(info1.Hash(), info2.Hash()) {
 		return false
 	}
-	path1 := info.RelativePath()
-	path2 := entry.RelativePath()
+	return sameInfo(info1, info2)
+}
+
+// sameInfo returns true if both FileInfo interfaces are exactly equal for all
+// properties except for the hash.
+func sameInfo(info1, info2 FileInfo) bool {
+	modeMask := info1.HasMode() | info2.HasMode()
+	if info1.Name() != info2.Name() ||
+		info1.Type() != info2.Type() ||
+		info1.Mode()&modeMask != info2.Mode()&modeMask ||
+		!info1.ModTime().Equal(info2.ModTime()) ||
+		info1.Size() != info2.Size() {
+		return false
+	}
+	path1 := info1.RelativePath()
+	path2 := info2.RelativePath()
 	if len(path1) != len(path2) {
 		return false
 	}
