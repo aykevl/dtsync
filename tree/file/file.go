@@ -132,15 +132,14 @@ func (e *Entry) Type() tree.Type {
 // Mode returns the mode bits for this file, as far as the filesystem supports
 // them.
 func (e *Entry) Mode() tree.Mode {
-	// TODO dummy value
-	return 0
+	return tree.Mode(e.st.Mode().Perm())
 }
 
 // HasMode returns the permission bits this filesystem supports (at least 0777
 // for Unix-like filesystems).
 func (e *Entry) HasMode() tree.Mode {
 	// TODO dummy value
-	return 0
+	return 0777
 }
 
 // ModTime returns the modification time from the (cached) stat() call.

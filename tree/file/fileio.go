@@ -57,11 +57,12 @@ func (w *fileHashWriter) Finish() (tree.FileInfo, tree.FileInfo, error) {
 	if err != nil {
 		return nil, nil, err
 	}
+	info, parentInfo, err2 := w.finished(w.hash.Sum(nil))
 	err = w.fp.Close()
 	if err != nil {
 		return nil, nil, err
 	}
-	return w.finished(w.hash.Sum(nil))
+	return info, parentInfo, err2
 }
 
 // Cancel removes the temporary file, and calls the cancel callback.

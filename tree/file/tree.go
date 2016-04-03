@@ -117,7 +117,7 @@ func (r *Tree) CreateDir(name string, parent, source tree.FileInfo) (tree.FileIn
 		return nil, err
 	}
 
-	err = os.Mkdir(child.fullPath(), 0777)
+	err = os.Mkdir(child.fullPath(), os.FileMode(source.Mode().Calc(source.HasMode(), 0777)))
 	if err != nil {
 		return nil, err
 	}
@@ -308,7 +308,15 @@ func (e *Entry) replaceFile(source tree.FileInfo, hash hash.Hash, update bool) (
 				}
 			}()
 			if !source.ModTime().IsZero() {
+				// TODO: use futimens function
 				err = os.Chtimes(tempPath, source.ModTime(), source.ModTime())
+				if err != nil {
+					return nil, nil, err
+				}
+			}
+
+			if source.HasMode() != 0 {
+				err = fp.Chmod(os.FileMode(source.Mode().Calc(source.HasMode(), 0666)))
 				if err != nil {
 					return nil, nil, err
 				}
@@ -333,7 +341,7 @@ func (e *Entry) replaceFile(source tree.FileInfo, hash hash.Hash, update bool) (
 				return nil, nil, err
 			}
 
-			e.st, err = os.Lstat(e.fullPath())
+			e.st, err = fp.Stat()
 			if err != nil {
 				return nil, nil, err
 			}
@@ -461,6 +469,37 @@ func (r *Tree) ReadSymlink(file tree.FileInfo) (string, error) {
 	}
 
 	return os.Readlink(fullPath)
+}
+
+// Chmod applies the given mode bits and returns the stat() result. Not all
+// bits may be applied (subject to HasMode()).
+func (r *Tree) Chmod(target, source tree.FileInfo) (tree.FileInfo, error) {
+	e := r.entryFromPath(target.RelativePath())
+	fullPath := e.fullPath()
+
+	handle, err := os.Open(fullPath)
+	if err != nil {
+		return nil, err
+	}
+	defer handle.Close()
+
+	e.st, err = handle.Stat()
+	if err != nil {
+		return nil, err
+	} else if !tree.MatchFingerprint(e.Info(), target) {
+		return nil, tree.ErrChanged(e.RelativePath())
+	}
+
+	err = handle.Chmod(os.FileMode(source.Mode().Calc(source.HasMode(), 0666)))
+	if err != nil {
+		return nil, err
+	}
+
+	e.st, err = handle.Stat()
+	if err != nil {
+		return nil, err
+	}
+	return e.Info(), nil
 }
 
 // PutFile implements tree.TestTree by writing a single file with the given

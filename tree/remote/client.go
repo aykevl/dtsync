@@ -338,15 +338,26 @@ func (c *Client) RemoteScan(sendOptions, recvOptions chan tree.ScanOptions) (io.
 
 func (c *Client) CreateDir(name string, parent, source tree.FileInfo) (tree.FileInfo, error) {
 	debugLog("\nC: CreateDir")
-	return c.returnsParent(Command_MKDIR, &name, parent, source)
+	return c.returnsFileInfo(Command_MKDIR, &name, parent, source)
 }
 
 func (c *Client) Remove(file tree.FileInfo) (tree.FileInfo, error) {
 	debugLog("\nC: Remove")
-	return c.returnsParent(Command_REMOVE, nil, file, nil)
+	return c.returnsFileInfo(Command_REMOVE, nil, file, nil)
 }
 
-func (c *Client) returnsParent(command Command, name *string, file, source tree.FileInfo) (tree.FileInfo, error) {
+// Chmod sends a chmod request to the remote server.
+func (c *Client) Chmod(target, source tree.FileInfo) (tree.FileInfo, error) {
+	debugLog("\nC: Chmod")
+	command := Command_CHMOD
+	return c.requestReturnsFileInfo(&Request{
+		Command:   &command,
+		FileInfo1: serializeFileInfo(target),
+		FileInfo2: serializeFileInfo(source),
+	})
+}
+
+func (c *Client) returnsFileInfo(command Command, name *string, file, source tree.FileInfo) (tree.FileInfo, error) {
 	request := &Request{
 		Command:   &command,
 		Name:      name,
@@ -355,6 +366,10 @@ func (c *Client) returnsParent(command Command, name *string, file, source tree.
 	if source != nil {
 		request.FileInfo2 = serializeFileInfo(source)
 	}
+	return c.requestReturnsFileInfo(request)
+}
+
+func (c *Client) requestReturnsFileInfo(request *Request) (tree.FileInfo, error) {
 	ch := c.handleReply(request, nil, nil)
 	respData := <-ch
 	resp, err := respData.resp, respData.err

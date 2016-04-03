@@ -103,6 +103,17 @@ func TreeTest(t Tester, fs1, fs2 TestTree) {
 		checkInfo(t, root1, info1, 0, 1, "file.txt")
 	}
 
+	// chmod before copy
+	info1Expected := cloneFileInfo(info1)
+	info1Expected.mode = 0600
+	info1, err = fs1.Chmod(info1, &FileInfoStruct{mode: 0600, hasMode: 0777})
+	if err != nil {
+		t.Fatal("could not chmod:", err)
+	}
+	if !sameInfo(info1, info1Expected) {
+		t.Errorf("could not update mode with Chmod:\nexpected: %s\nactual:   %s", info1Expected, info1)
+	}
+
 	// try copy with invalid source info
 	infoWrong := &FileInfoStruct{info1.RelativePath(), info1.Type(), 0666, 0666, time.Now(), info1.Size(), info1.Hash()}
 	reader, err := fs1.CopySource(infoWrong)
@@ -263,6 +274,26 @@ func TreeTest(t Tester, fs1, fs2 TestTree) {
 		t.Error("root1 is not equal to root2 after Update")
 	}
 
+	// chmod before update
+	info1Expected = cloneFileInfo(info1)
+	info1Expected.mode = 0606
+	info1, err = fs1.Chmod(info1, &FileInfoStruct{mode: 0606, hasMode: 0777})
+	if err != nil {
+		t.Fatal("could not chmod:", err)
+	}
+	if !sameInfo(info1, info1Expected) {
+		t.Errorf("did not fully update file with chmod:\nexpected: %s\nactual:   %s", info1Expected, info1)
+	}
+
+	// chmod in Update
+	info2, _, err = Update(fs1, fs2, info1, info2)
+	if err != nil {
+		t.Fatal("could not Update after chmod:", err)
+	}
+	if !sameInfo(info1, info2) {
+		t.Errorf("did not fully Update after chmod:\n%s\n%s", info1, info2)
+	}
+
 	/*** Test symlinks ***/
 
 	// create symlink
@@ -381,9 +412,12 @@ func TreeTest(t Tester, fs1, fs2 TestTree) {
 
 	/*** Test directories ***/
 
-	infoDir1, err := fs1.CreateDir("dir", &FileInfoStruct{}, &FileInfoStruct{mode: 0777, hasMode: 0777})
+	infoDir1, err := fs1.CreateDir("dir", &FileInfoStruct{}, &FileInfoStruct{mode: 0705, hasMode: 0777})
 	if err != nil {
 		t.Error("could not create directory 1:", err)
+	}
+	if infoDir1.Mode() != 0705 {
+		t.Errorf("mode was not applied to directory (expected %o, got %o)", 0705, infoDir1.Mode())
 	}
 	if root1 != nil {
 		dir1 := getFile(root1, "dir")
@@ -507,10 +541,10 @@ func sameFullInfo(info1, info2 FileInfo) bool {
 // sameInfo returns true if both FileInfo interfaces are exactly equal for all
 // properties except for the hash.
 func sameInfo(info1, info2 FileInfo) bool {
-	modeMask := info1.HasMode() | info2.HasMode()
 	if info1.Name() != info2.Name() ||
 		info1.Type() != info2.Type() ||
-		info1.Mode()&modeMask != info2.Mode()&modeMask ||
+		info1.Mode() != info2.Mode() ||
+		info1.HasMode() != info2.HasMode() ||
 		!info1.ModTime().Equal(info2.ModTime()) ||
 		info1.Size() != info2.Size() {
 		return false

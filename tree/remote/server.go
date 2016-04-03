@@ -254,6 +254,14 @@ func (s *Server) handleRequest(msg *Request, recvStreams map[uint64]chan []byte)
 			return invalidRequest{"COPYSRC expects fileInfo1 with type, path, modTime and size fields"}
 		}
 		go s.copySource(*msg.RequestId, parseFileInfo(msg.FileInfo1))
+	case Command_CHMOD:
+		// Client wants to chmod a file.
+		if msg.FileInfo1 == nil || msg.FileInfo1.Type == nil || msg.FileInfo1.Path == nil ||
+			msg.FileInfo1.ModTime == nil || msg.FileInfo1.Size == nil || msg.FileInfo1.Mode == nil || msg.FileInfo1.HasMode == nil ||
+			msg.FileInfo2 == nil || msg.FileInfo2.Mode == nil || msg.FileInfo2.HasMode == nil {
+			return invalidRequest{"CHMOD expects fileInfo1 with type, path, modTime, size, mode and hasMode fields, and fileInfo2 with mode and hasMode fields"}
+		}
+		go s.chmod(*msg.RequestId, parseFileInfo(msg.FileInfo1), parseFileInfo(msg.FileInfo2))
 	case Command_PUTFILE:
 		if msg.FileInfo1 == nil || msg.FileInfo1.Path == nil || msg.Data == nil {
 			return invalidRequest{"PUTFILE expects fileInfo1 with path and data"}
@@ -474,6 +482,11 @@ func (s *Server) mkdir(requestId uint64, name string, parent, source tree.FileIn
 func (s *Server) remove(requestId uint64, file tree.FileInfo) {
 	parentInfo, err := s.fs.Remove(file)
 	s.replyInfo(requestId, parentInfo, err)
+}
+
+func (s *Server) chmod(requestId uint64, target, source tree.FileInfo) {
+	info, err := s.fs.Chmod(target, source)
+	s.replyInfo(requestId, info, err)
 }
 
 func (s *Server) replyInfo(requestId uint64, info tree.FileInfo, err error) {

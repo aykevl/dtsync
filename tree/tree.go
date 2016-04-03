@@ -35,6 +35,7 @@ package tree
 import (
 	"io"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -68,6 +69,18 @@ func (t Type) Char() string {
 // The mode (mainly Unix-like permissions) used in FileInfo.Mode().
 type Mode uint32
 
+// Calculate new mode bits from the source filesystem and the default
+// permissions on the target filesystem.
+func (m Mode) Calc(sourceHasMode, targetDefault Mode) Mode {
+	// Recipe:
+	//  - Take the default mode of the target.
+	//  - Remove the bits the source supports.
+	//    What results is 000 if the source is a Unix filesystem and
+	//    targetDefault if the source is e.g. FAT32.
+	//  - Add the bits from the source file.
+	return (targetDefault &^ sourceHasMode) | m
+}
+
 // Tree is an abstraction layer over various types of trees. It tries to be as
 // generic as possible, making it possible to synchronize varying types of trees
 // (filesystem, sftp, remote filesystem, mtp, etc.). It may even be possible to
@@ -84,6 +97,9 @@ type Tree interface {
 	// returns ErrChanged if the metadata does not match, or another error if
 	// the remove failed.
 	Remove(file FileInfo) (parentInfo FileInfo, err error)
+	// Chmod updates the mode (permission) bits of a file. The newly returned
+	// FileInfo contains the new mode.
+	Chmod(target, source FileInfo) (FileInfo, error)
 
 	// Get this file. This only exists to read the status file, not to implement
 	// copying in the syncer!
@@ -247,23 +263,31 @@ func Update(this, other Tree, source, target FileInfo) (FileInfo, FileInfo, erro
 
 	switch source.Type() {
 	case TYPE_REGULAR:
-		inf, err := thisFileTree.CopySource(source)
-		if err != nil {
-			return nil, nil, err
-		}
-		defer inf.Close()
+		if MatchFingerprint(source, target) {
+			if source.Mode()&source.HasMode() == target.Mode()&target.HasMode() {
+				return nil, nil, ErrNotImplemented("source and target are equal - I don't know what to do")
+			}
+			newInfo, err := other.Chmod(target, source)
+			return newInfo, nil, err
+		} else {
+			inf, err := thisFileTree.CopySource(source)
+			if err != nil {
+				return nil, nil, err
+			}
+			defer inf.Close()
 
-		outf, err := otherFileTree.UpdateFile(target, source)
-		if err != nil {
-			return nil, nil, err
-		}
+			outf, err := otherFileTree.UpdateFile(target, source)
+			if err != nil {
+				return nil, nil, err
+			}
 
-		_, err = io.Copy(outf, inf)
-		if err != nil {
-			return nil, nil, err
-		}
+			_, err = io.Copy(outf, inf)
+			if err != nil {
+				return nil, nil, err
+			}
 
-		return outf.Finish()
+			return outf.Finish()
+		}
 
 	case TYPE_SYMLINK:
 		link, err := thisFileTree.ReadSymlink(source)
@@ -328,6 +352,24 @@ func NewFileInfo(path []string, fileType Type, mode Mode, hasMode Mode, modTime 
 	}
 }
 
+func cloneFileInfo(orig FileInfo) *FileInfoStruct {
+	info := &FileInfoStruct{
+		path:     orig.RelativePath(),
+		fileType: orig.Type(),
+		mode:     orig.Mode(),
+		hasMode:  orig.HasMode(),
+		modTime:  orig.ModTime(),
+		size:     orig.Size(),
+		hash:     nil,
+	}
+	if orig.Hash() != nil {
+		hash := make([]byte, len(orig.Hash()))
+		copy(hash, orig.Hash())
+		info.hash = hash
+	}
+	return info
+}
+
 func (fi *FileInfoStruct) Name() string {
 	if len(fi.path) == 0 {
 		return ""
@@ -364,7 +406,7 @@ func (fi *FileInfoStruct) HasMode() Mode {
 }
 
 func (fi *FileInfoStruct) String() string {
-	return "FileInfoStruct{" + strings.Join(fi.path, "/") + " " + fi.modTime.String() + "}"
+	return "FileInfoStruct{" + strings.Join(fi.path, "/") + " " + fi.modTime.String() + " " + strconv.FormatUint(uint64(fi.mode), 8) + "}"
 }
 
 // MatchFingerprint returns whether two FileInfos would have the same

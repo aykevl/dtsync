@@ -15,6 +15,7 @@ enum Command {
 	CREATELINK  = 15; // create symlink
 	UPDATELINK  = 16; // update symlink
 	READLINK    = 17; // remove symlink
+	CHMOD       = 18; // change permissions
 
 	GETFILE     = 20;
 	SETFILE     = 21;

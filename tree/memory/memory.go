@@ -396,6 +396,7 @@ func (e *Entry) UpdateFile(file, source tree.FileInfo) (tree.Copier, error) {
 	return newFileCopier(func(buffer *bytes.Buffer) (tree.FileInfo, tree.FileInfo, error) {
 		child.modTime = source.ModTime()
 		child.contents = buffer.Bytes()
+		child.mode = source.Mode().Calc(source.HasMode(), DEFAULT_MODE) & child.hasMode
 		return child.fullInfo(), child.parent.Info(), nil
 	}), nil
 }
@@ -461,6 +462,17 @@ func (e *Entry) ReadSymlink(file tree.FileInfo) (string, error) {
 		return "", tree.ErrChanged(child.RelativePath())
 	}
 	return string(child.contents), nil
+}
+
+// Chmod applies the given mode bits, as far as this in-memory tree 'supports'
+// them.
+func (e *Entry) Chmod(target, source tree.FileInfo) (tree.FileInfo, error) {
+	child := e.get(target.RelativePath())
+	if child == nil {
+		return nil, tree.ErrNotFound(target.RelativePath())
+	}
+	child.mode = source.Mode().Calc(source.HasMode(), DEFAULT_MODE) & child.hasMode
+	return child.Info(), nil
 }
 
 // PutFile writes the contents to a new or existing file.
