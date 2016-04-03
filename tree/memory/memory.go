@@ -39,10 +39,17 @@ import (
 	"github.com/aykevl/dtsync/tree"
 )
 
+const (
+	DEFAULT_MODE     = 0644
+	DEFAULT_DIR_MODE = 0755
+	DEFAULT_HAS_MODE = 0777
+)
+
 // Entry is one file or directory.
 type Entry struct {
 	fileType tree.Type
 	mode     tree.Mode
+	hasMode  tree.Mode
 	modTime  time.Time
 	name     string
 	contents []byte
@@ -54,6 +61,8 @@ type Entry struct {
 func NewRoot() *Entry {
 	return &Entry{
 		fileType: tree.TYPE_DIRECTORY,
+		mode:     DEFAULT_DIR_MODE,
+		hasMode:  DEFAULT_HAS_MODE,
 		modTime:  time.Now(),
 	}
 }
@@ -278,6 +287,8 @@ func (e *Entry) SetFile(name string) (io.WriteCloser, error) {
 		return newFileCloser(func(buf *bytes.Buffer) {
 			child := &Entry{
 				fileType: tree.TYPE_REGULAR,
+				mode:     DEFAULT_MODE & e.hasMode,
+				hasMode:  e.hasMode,
 				modTime:  time.Now(),
 				name:     name,
 				contents: buf.Bytes(),
@@ -300,6 +311,8 @@ func (e *Entry) CreateDir(name string, parentInfo tree.FileInfo) (tree.FileInfo,
 	}
 	child := &Entry{
 		fileType: tree.TYPE_DIRECTORY,
+		mode:     DEFAULT_DIR_MODE & parent.hasMode,
+		hasMode:  parent.hasMode,
 		modTime:  time.Now(),
 		name:     name,
 		parent:   parent,
@@ -326,6 +339,8 @@ func (e *Entry) CreateFile(name string, parent, source tree.FileInfo) (tree.Copi
 
 	child := &Entry{
 		fileType: tree.TYPE_REGULAR,
+		mode:     source.Mode() & p.hasMode,
+		hasMode:  p.hasMode,
 		modTime:  source.ModTime(),
 		name:     name,
 		parent:   p,
@@ -394,6 +409,8 @@ func (e *Entry) CreateSymlink(name string, parentInfo, sourceInfo tree.FileInfo,
 
 	child := &Entry{
 		fileType: tree.TYPE_SYMLINK,
+		mode:     sourceInfo.Mode() & parent.hasMode,
+		hasMode:  parent.hasMode,
 		name:     name,
 		contents: []byte(contents),
 		parent:   parent,
@@ -465,6 +482,8 @@ func (e *Entry) PutFile(path []string, contents []byte) (tree.FileInfo, error) {
 	} else {
 		child = &Entry{
 			fileType: tree.TYPE_REGULAR,
+			mode:     DEFAULT_MODE & parent.hasMode,
+			hasMode:  parent.hasMode,
 			modTime:  time.Now(),
 			name:     path[len(path)-1],
 			contents: contents,
