@@ -229,16 +229,12 @@ func TreeTest(t Tester, fs1, fs2 TestTree) {
 		t.Error("root1 is equal to root2 after file1 got updated")
 	}
 
-	if root1 != nil {
-		file1 := getFile(root1, "file.txt")
-
-		hash, err := file1.Hash()
-		if err != nil {
-			t.Fatal("could not get hash of file1:", err)
-		}
-		if !bytes.Equal(hash, hashes["qbf"]) {
-			t.Errorf("Hash mismatch for file %s during Hash: expected %x, got %x", info1, hashes["qbf"], hash)
-		}
+	info1, err = fs1.ReadInfo(info1.RelativePath())
+	if err != nil {
+		t.Fatal("could not get hash of file1:", err)
+	}
+	if !bytes.Equal(info1.Hash(), hashes["qbf"]) {
+		t.Errorf("Hash mismatch for file %s: expected %x, got %x", info1, hashes["qbf"], info1.Hash())
 	}
 
 	f, err := fs1.GetFile("file.txt")
