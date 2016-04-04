@@ -447,11 +447,7 @@ func (e *Entry) serializeChildren(tsvWriter *unitsv.Writer, peerIndex map[string
 		identity := strconv.Itoa(peerIndex[child.identity])
 		generation := strconv.Itoa(child.generation)
 		revString := identity + ":" + generation
-
-		var options string
-		if !child.removed.IsZero() {
-			options = "removed=" + child.removed.UTC().Format(time.RFC3339)
-		}
+		options := child.serializeOptions()
 
 		err := tsvWriter.WriteRow([]string{childpath, serializeFingerprint(child), modeString, hash, revString, options})
 		if err != nil {
@@ -464,6 +460,14 @@ func (e *Entry) serializeChildren(tsvWriter *unitsv.Writer, peerIndex map[string
 	}
 
 	return nil
+}
+
+func (e *Entry) serializeOptions() string {
+	var options []string
+	if !e.removed.IsZero() {
+		options = append(options, "removed="+e.removed.UTC().Format(time.RFC3339))
+	}
+	return strings.Join(options, ",")
 }
 
 // Write a simple MIME key/value line to the output.
