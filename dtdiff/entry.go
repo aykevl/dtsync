@@ -141,6 +141,7 @@ func (e *Entry) addChild(name string, rev revision, fileInfo fingerprintInfo, mo
 		modTime:  fileInfo.modTime,
 		size:     fileInfo.size,
 		mode:     mode,
+		hasMode:  e.hasMode,
 		hash:     hash,
 		children: make(map[string]*Entry),
 		parent:   e,

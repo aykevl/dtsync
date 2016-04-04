@@ -38,6 +38,7 @@ Content-Type: text/tab-separated-values; charset=utf-8
 Identity: first
 Generation: 2
 Knowledge: second:1
+Root-Options: hasmode=777
 Option-Test: abc
 
 path	fingerprint	mode	hash	revision	options
@@ -55,6 +56,7 @@ Content-Type: text/tab-separated-values; charset=utf-8
 Identity: second
 Generation: 5
 Knowledge: first:1,other:0
+Root-Options: hasmode=757
 
 path	fingerprint	mode	hash	revision	options
 conflict.txt	f/2016-02-14T20:10:10.327687803Z/0	644		0:3	

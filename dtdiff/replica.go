@@ -242,6 +242,15 @@ func (r *Replica) load(file io.Reader) error {
 		}
 	}
 
+	// Parse root options, if they exist.
+	rootOptions := header.Get("Root-Options")
+	if rootOptions != "" {
+		err := r.rootEntry.parseOptions(rootOptions)
+		if err != nil {
+			return err
+		}
+	}
+
 	const (
 		TSV_PATH = iota
 		TSV_FINGERPRINT
@@ -300,7 +309,7 @@ func (r *Replica) load(file io.Reader) error {
 			return ErrInvalidEntryRevision
 		}
 
-		mode, err := strconv.ParseUint(fields[TSV_MODE], 8, 9)
+		mode, err := strconv.ParseUint(fields[TSV_MODE], 8, 32)
 		if err != nil {
 			return ErrInvalidMode
 		}
@@ -354,6 +363,14 @@ func (e *Entry) parseOptions(s string) error {
 		}
 	}
 
+	if hasModeString, ok := options["hasmode"]; ok {
+		hasMode, err := strconv.ParseUint(hasModeString, 8, 32)
+		if err != nil {
+			return err
+		}
+		e.hasMode = tree.Mode(hasMode)
+	}
+
 	return nil
 }
 
@@ -377,6 +394,8 @@ func (r *Replica) Serialize(out io.Writer) error {
 		peerIndex[id] = i + 1 // peer index, starting with 1 (0 means ourself)
 	}
 
+	rootOptions := r.rootEntry.serializeOptions()
+
 	writer := bufio.NewWriter(out)
 	// Don't look at the error return values, errors will be caught in .Flush().
 	writeKeyValue(writer, "Version", version.VERSION)
@@ -384,6 +403,9 @@ func (r *Replica) Serialize(out io.Writer) error {
 	writeKeyValue(writer, "Identity", r.identity)
 	writeKeyValue(writer, "Generation", strconv.Itoa(r.generation))
 	writeKeyValue(writer, "Knowledge", strings.Join(knowledgeList, ","))
+	if rootOptions != "" {
+		writeKeyValue(writer, "Root-Options", rootOptions)
+	}
 	for key, values := range r.options {
 		for _, value := range values {
 			writeKeyValue(writer, "Option-"+key, value)
@@ -466,6 +488,9 @@ func (e *Entry) serializeOptions() string {
 	var options []string
 	if !e.removed.IsZero() {
 		options = append(options, "removed="+e.removed.UTC().Format(time.RFC3339))
+	}
+	if e.isRoot() || e.hasMode != e.parent.hasMode {
+		options = append(options, "hasmode="+strconv.FormatUint(uint64(e.hasMode), 8))
 	}
 	return strings.Join(options, ",")
 }
