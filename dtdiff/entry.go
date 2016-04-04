@@ -293,8 +293,8 @@ func (e *Entry) Update(info tree.FileInfo, hash []byte) {
 func (e *Entry) UpdateHash(hash []byte) {
 	if !bytes.Equal(e.hash, hash) {
 		e.replica.markChanged()
-		e.hash = hash
 		e.revision = e.replica.revision
+		e.hash = hash
 	}
 }
 
