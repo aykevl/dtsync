@@ -315,23 +315,9 @@ func (r *Replica) load(file io.Reader) error {
 		}
 
 		if len(fields[TSV_OPTIONS]) > 0 {
-			// split the options field in this simple key-value format:
-			//    key1=value1,r=3
-			options := make(map[string]string)
-			for _, field := range strings.Split(fields[TSV_OPTIONS], ",") {
-				kv := strings.SplitN(field, "=", 2)
-				if len(kv) == 2 {
-					options[kv[0]] = kv[1]
-				} else {
-					options[kv[0]] = ""
-				}
-			}
-
-			if removed, ok := options["removed"]; ok {
-				child.removed, err = time.Parse(time.RFC3339, removed)
-				if err != nil {
-					return err
-				}
+			err = child.parseOptions(fields[TSV_OPTIONS])
+			if err != nil {
+				return err
 			}
 		}
 	}
@@ -341,6 +327,30 @@ func (r *Replica) load(file io.Reader) error {
 	for key, values := range header {
 		if strings.HasPrefix(key, "Option-") {
 			r.options[key[len("Option-"):]] = values
+		}
+	}
+
+	return nil
+}
+
+func (e *Entry) parseOptions(s string) error {
+	// split the options field in this simple key-value format:
+	//    key1=value1,r=3
+	options := make(map[string]string)
+	for _, field := range strings.Split(s, ",") {
+		kv := strings.SplitN(field, "=", 2)
+		if len(kv) == 2 {
+			options[kv[0]] = kv[1]
+		} else {
+			options[kv[0]] = ""
+		}
+	}
+
+	if removed, ok := options["removed"]; ok {
+		var err error
+		e.removed, err = time.Parse(time.RFC3339, removed)
+		if err != nil {
+			return err
 		}
 	}
 
