@@ -121,18 +121,18 @@ func (e *Entry) add(path []string, rev revision, fingerprint string, mode tree.M
 		}
 		return child.add(path[1:], rev, fingerprint, mode, hash)
 	} else {
-		return e.addChild(path[0], rev, fingerprint, mode, hash)
+		fileInfo, err := parseFingerprint(fingerprint)
+		if err != nil {
+			return nil, err
+		}
+		return e.addChild(path[0], rev, fileInfo, mode, hash)
 	}
 }
 
-func (e *Entry) addChild(name string, rev revision, fingerprint string, mode tree.Mode, hash []byte) (*Entry, error) {
+func (e *Entry) addChild(name string, rev revision, fileInfo fingerprintInfo, mode tree.Mode, hash []byte) (*Entry, error) {
 	if _, ok := e.children[name]; ok {
 		// duplicate path
 		return nil, ErrExists
-	}
-	fileInfo, err := parseFingerprint(fingerprint)
-	if err != nil {
-		return nil, err
 	}
 	newEntry := &Entry{
 		name:     name,
@@ -258,7 +258,12 @@ func (e *Entry) List() []*Entry {
 // Add a new status entry.
 func (e *Entry) Add(info tree.FileInfo) (*Entry, error) {
 	e.replica.markChanged()
-	return e.addChild(info.Name(), e.replica.revision, serializeFingerprint(info), info.Mode(), info.Hash())
+	fileInfo := fingerprintInfo{info.Type(), info.ModTime(), info.Size()}
+	if fileInfo.fileType != tree.TYPE_REGULAR {
+		// Maybe not necessary, but just to be safe...
+		fileInfo.size = 0
+	}
+	return e.addChild(info.Name(), e.replica.revision, fileInfo, info.Mode(), info.Hash())
 }
 
 // Update updates the revision if the file was changed. The file is not changed
