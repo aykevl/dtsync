@@ -44,7 +44,7 @@ import (
 type testCase struct {
 	file      string
 	action    Action
-	contents  []byte
+	contents  interface{}
 	fileCount int
 }
 
@@ -129,30 +129,30 @@ func syncRoots(t *testing.T, scheme1, scheme2 string) {
 
 	testCases := []testCase{
 		// basic copy/update/remove
-		{"file1.txt", ACTION_COPY, []byte("The quick brown fox..."), 2},
-		{"file1.txt", ACTION_UPDATE, []byte("The quick brown fox jumps over the lazy dog."), 2},
+		{"file1.txt", ACTION_COPY, "f The quick brown fox...", 2},
+		{"file1.txt", ACTION_UPDATE, "f The quick brown fox jumps over the lazy dog.", 2},
 		{"file1.txt", ACTION_REMOVE, nil, 1},
 		// insert a file before and after an existing file
-		{"file1.txt", ACTION_COPY, []byte("Still jumping..."), 2},
-		{"file0.txt", ACTION_COPY, []byte("Before"), 3},
-		{"file2.txt", ACTION_COPY, []byte("After"), 4},
-		{"file0.txt", ACTION_UPDATE, []byte("-"), 4},
-		{"file2.txt", ACTION_UPDATE, []byte("-"), 4},
-		{"file1.txt", ACTION_UPDATE, []byte("-"), 4},
+		{"file1.txt", ACTION_COPY, "f Still jumping...", 2},
+		{"file0.txt", ACTION_COPY, "f Before", 3},
+		{"file2.txt", ACTION_COPY, "f After", 4},
+		{"file0.txt", ACTION_UPDATE, "f -", 4},
+		{"file2.txt", ACTION_UPDATE, "f -", 4},
+		{"file1.txt", ACTION_UPDATE, "f -", 4},
 		{"file0.txt", ACTION_REMOVE, nil, 3},
 		{"file2.txt", ACTION_REMOVE, nil, 2},
 		{"file1.txt", ACTION_REMOVE, nil, 1},
 		// directory
-		{"dir", ACTION_COPY, nil, 2},
-		{"dir/file.txt", ACTION_COPY, []byte("abc"), 2},
-		{"dir/file.txt", ACTION_UPDATE, []byte("def"), 2},
+		{"dir", ACTION_COPY, "d ", 2},
+		{"dir/file.txt", ACTION_COPY, "f abc", 2},
+		{"dir/file.txt", ACTION_UPDATE, "f def", 2},
 		{"dir/file.txt", ACTION_REMOVE, nil, 2},
 		{"dir", ACTION_REMOVE, nil, 1},
 		// symbolic links
-		{"link1", ACTION_COPY, []byte("→dir"), 2},
-		{"link2", ACTION_COPY, []byte("→file1.txt"), 3},
-		{"link3", ACTION_COPY, []byte("→file-404"), 4},
-		{"link1", ACTION_UPDATE, []byte("→file2.txt"), 4},
+		{"link1", ACTION_COPY, "l dir", 2},
+		{"link2", ACTION_COPY, "l file1.txt", 3},
+		{"link3", ACTION_COPY, "l file-404", 4},
+		{"link1", ACTION_UPDATE, "l file2.txt", 4},
 		{"link1", ACTION_REMOVE, nil, 3},
 		{"link2", ACTION_REMOVE, nil, 2},
 		{"link3", ACTION_REMOVE, nil, 1},
@@ -233,26 +233,36 @@ func applyTestCase(t *testing.T, fs tree.TestTree, tc testCase) {
 	var err error
 	switch tc.action {
 	case ACTION_COPY: // add
-		if tc.contents == nil {
+		action := tc.contents.(string)[0]
+		contents := tc.contents.(string)[2:]
+		switch action {
+		case 'd':
 			parent := tree.NewFileInfo(parts[:len(parts)-1], tree.TYPE_DIRECTORY, 0755, 0777, time.Time{}, 0, nil)
 			source := tree.NewFileInfo(nil, tree.TYPE_DIRECTORY, 0755, 0777, time.Now(), 0, nil)
 			_, err = fs.CreateDir(name, parent, source)
-		} else if string(tc.contents[:3]) == "→" {
+		case 'f':
+			_, err = fs.PutFile(parts, []byte(contents))
+		case 'l':
 			parent := tree.NewFileInfo(parts[:len(parts)-1], tree.TYPE_DIRECTORY, 0755, 0777, time.Time{}, 0, nil)
 			source := tree.NewFileInfo(parts, tree.TYPE_SYMLINK, 0644, 0777, time.Now(), 0, nil)
-			_, _, err = fs.CreateSymlink(name, parent, source, string(tc.contents[3:]))
-		} else {
-			_, err = fs.PutFile(parts, tc.contents)
+			_, _, err = fs.CreateSymlink(name, parent, source, contents)
+		default:
+			panic("unknown copy action: " + tc.contents.(string))
 		}
 	case ACTION_UPDATE:
-		if string(tc.contents[:3]) == "→" {
+		action := tc.contents.(string)[0]
+		contents := tc.contents.(string)[2:]
+		switch action {
+		case 'f':
+			_, err = fs.PutFile(parts, []byte(contents))
+		case 'l':
 			var file tree.FileInfo
 			file, err = fs.ReadInfo(strings.Split(tc.file, "/"))
 			assert(err)
 			source := tree.NewFileInfo(parts, tree.TYPE_SYMLINK, 0644, 0777, time.Now(), 0, nil)
-			_, _, err = fs.UpdateSymlink(file, source, string(tc.contents[3:]))
-		} else {
-			_, err = fs.PutFile(parts, tc.contents)
+			_, _, err = fs.UpdateSymlink(file, source, contents)
+		default:
+			panic("unknown update action: " + tc.contents.(string))
 		}
 	case ACTION_REMOVE:
 		info, err := fs.ReadInfo(strings.Split(tc.file, "/"))
