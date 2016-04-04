@@ -54,6 +54,7 @@ var (
 	ErrInvalidEntryRevision   = errors.New("dtdiff: invalid revision in entry row")
 	ErrInvalidPath            = errors.New("dtdiff: invalid or missing path in entry row")
 	ErrInvalidFingerprint     = errors.New("dtdiff: invalid or missing fingerprint in entry row")
+	ErrInvalidMode            = errors.New("dtdiff: invalid or missing mode in entry row")
 	ErrExists                 = errors.New("dtdiff: already exists")
 	ErrSameIdentity           = errors.New("dtdiff: two replicas with the same ID")
 	ErrSameRoot               = errors.New("dtdiff: trying to synchronize the same directory")
@@ -245,13 +246,14 @@ func (r *Replica) load(file io.Reader) error {
 		TSV_PATH = iota
 		TSV_FINGERPRINT
 		TSV_REVISION
+		TSV_MODE
 		TSV_HASH
 		TSV_OPTIONS
 	)
 
 	tsvReader, err := unitsv.NewReader(reader, unitsv.Config{
 		Required: []string{"path", "fingerprint", "revision"},
-		Optional: []string{"hash", "options"},
+		Optional: []string{"mode", "hash", "options"},
 	})
 	if err != nil {
 		return err
@@ -298,11 +300,16 @@ func (r *Replica) load(file io.Reader) error {
 			return ErrInvalidEntryRevision
 		}
 
+		mode, err := strconv.ParseUint(fields[TSV_MODE], 8, 9)
+		if err != nil {
+			return ErrInvalidMode
+		}
+
 		fingerprint := fields[TSV_FINGERPRINT]
 		path := strings.Split(fields[TSV_PATH], "/")
 
 		// now add this entry
-		child, err := r.rootEntry.add(path, revision{revReplica, revGeneration}, fingerprint, hash)
+		child, err := r.rootEntry.add(path, revision{revReplica, revGeneration}, fingerprint, tree.Mode(mode), hash)
 		if err != nil {
 			return err
 		}
@@ -374,7 +381,7 @@ func (r *Replica) Serialize(out io.Writer) error {
 	}
 	writer.WriteByte('\n')
 
-	tsvWriter, err := unitsv.NewWriter(writer, []string{"path", "fingerprint", "hash", "revision", "options"})
+	tsvWriter, err := unitsv.NewWriter(writer, []string{"path", "fingerprint", "mode", "hash", "revision", "options"})
 	if err != nil {
 		return err
 	}
@@ -425,6 +432,8 @@ func (e *Entry) serializeChildren(tsvWriter *unitsv.Writer, peerIndex map[string
 			hash = strings.TrimRight(hash, "=")
 		}
 
+		modeString := strconv.FormatUint(uint64(child.mode), 8)
+
 		identity := strconv.Itoa(peerIndex[child.identity])
 		generation := strconv.Itoa(child.generation)
 		revString := identity + ":" + generation
@@ -434,7 +443,7 @@ func (e *Entry) serializeChildren(tsvWriter *unitsv.Writer, peerIndex map[string
 			options = "removed=" + child.removed.UTC().Format(time.RFC3339)
 		}
 
-		err := tsvWriter.WriteRow([]string{childpath, serializeFingerprint(child), hash, revString, options})
+		err := tsvWriter.WriteRow([]string{childpath, serializeFingerprint(child), modeString, hash, revString, options})
 		if err != nil {
 			return err
 		}

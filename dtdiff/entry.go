@@ -108,7 +108,7 @@ func (e *Entry) Size() int64 {
 }
 
 // Add new entry by recursively finding the parent
-func (e *Entry) add(path []string, rev revision, fingerprint string, hash []byte) (*Entry, error) {
+func (e *Entry) add(path []string, rev revision, fingerprint string, mode tree.Mode, hash []byte) (*Entry, error) {
 	if path[0] == "" {
 		return nil, ErrInvalidPath
 	}
@@ -119,13 +119,13 @@ func (e *Entry) add(path []string, rev revision, fingerprint string, hash []byte
 			// or: the path has a parent that hasn't yet been scanned
 			return nil, ErrInvalidPath
 		}
-		return child.add(path[1:], rev, fingerprint, hash)
+		return child.add(path[1:], rev, fingerprint, mode, hash)
 	} else {
-		return e.addChild(path[0], rev, fingerprint, hash)
+		return e.addChild(path[0], rev, fingerprint, mode, hash)
 	}
 }
 
-func (e *Entry) addChild(name string, rev revision, fingerprint string, hash []byte) (*Entry, error) {
+func (e *Entry) addChild(name string, rev revision, fingerprint string, mode tree.Mode, hash []byte) (*Entry, error) {
 	if _, ok := e.children[name]; ok {
 		// duplicate path
 		return nil, ErrExists
@@ -140,6 +140,7 @@ func (e *Entry) addChild(name string, rev revision, fingerprint string, hash []b
 		fileType: fileInfo.fileType,
 		modTime:  fileInfo.modTime,
 		size:     fileInfo.size,
+		mode:     mode,
 		hash:     hash,
 		children: make(map[string]*Entry),
 		parent:   e,
@@ -257,7 +258,7 @@ func (e *Entry) List() []*Entry {
 // Add a new status entry.
 func (e *Entry) Add(info tree.FileInfo) (*Entry, error) {
 	e.replica.markChanged()
-	return e.addChild(info.Name(), e.replica.revision, serializeFingerprint(info), info.Hash())
+	return e.addChild(info.Name(), e.replica.revision, serializeFingerprint(info), info.Mode(), info.Hash())
 }
 
 // Update updates the revision if the file was changed. The file is not changed
@@ -267,6 +268,8 @@ func (e *Entry) Update(info tree.FileInfo, hash []byte) {
 		e.fileType = info.Type()
 		e.modTime = info.ModTime()
 		e.size = info.Size()
+		e.mode = info.Mode()
+		e.hasMode = info.HasMode()
 		if e.Type() == tree.TYPE_SYMLINK {
 			// Changes in fingerprints of symbolic links must be tracked. For
 			// regular files we look at the hash and for directories fingerprint
