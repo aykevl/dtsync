@@ -170,7 +170,7 @@ func (e *Entry) HasRevision(other *Entry) bool {
 // Equal returns true if both entries are of the same revision (replica and
 // generation). Not recursive.
 func (e *Entry) Equal(e2 *Entry) bool {
-	return e.revision == e2.revision
+	return e.HasRevision(e2) && e2.HasRevision(e)
 }
 
 // EqualContents returns true if the contents (fingerprint/hash) of these
@@ -184,6 +184,13 @@ func (e *Entry) EqualContents(e2 *Entry) bool {
 	}
 	return false
 }
+
+// EqualMode compares the mode bits, noting the HasMode of both entries.
+func (e *Entry) EqualMode(e2 *Entry) bool {
+	hasMode := e.hasMode & e2.hasMode
+	return e.mode&hasMode == e2.mode&hasMode
+}
+
 
 // After returns true if this entry was modified after the other.
 func (e *Entry) After(e2 *Entry) bool {
