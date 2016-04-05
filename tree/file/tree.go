@@ -50,7 +50,8 @@ func NewRoot(rootPath string) (*Tree, error) {
 	rootPath = filepath.Clean(rootPath)
 
 	// Check that the path exists and is a directory.
-	st, err := os.Lstat(rootPath)
+	// Use Stat() here as described in symlink(7) (on Linux).
+	st, err := os.Stat(rootPath)
 	if err != nil {
 		return nil, err
 	}
