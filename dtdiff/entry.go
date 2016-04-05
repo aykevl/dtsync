@@ -42,6 +42,11 @@ type revision struct {
 	generation int    // starts at 1, 0 means 'no generation'
 }
 
+// String for debug/test printing.
+func (r revision) String() string {
+	return r.identity + ":" + strconv.Itoa(r.generation)
+}
+
 // An Entry is one object (row) in a Replica. It belongs to one Replica.
 type Entry struct {
 	name     string
@@ -60,7 +65,7 @@ type Entry struct {
 
 // String function, for debugging purposes
 func (e *Entry) String() string {
-	return "dtdiff.Entry(" + e.name + "," + e.identity + ":" + strconv.Itoa(e.generation) + ")"
+	return "dtdiff.Entry(" + e.name + "," + e.revision.String() + ")"
 }
 
 // Name returns the name of this entry
