@@ -168,8 +168,11 @@ func (e *Entry) Equal(e2 *Entry) bool {
 	if e.revision == e2.revision {
 		return true
 	}
+	if e.fileType != e2.fileType {
+		return false
+	}
 	modeMask := e.hasMode | e2.hasMode
-	if e.mode&modeMask != e2.mode&modeMask {
+	if e.fileType != tree.TYPE_SYMLINK && e.mode&modeMask != e2.mode&modeMask {
 		return false
 	}
 	if tree.MatchFingerprint(e, e2) {
