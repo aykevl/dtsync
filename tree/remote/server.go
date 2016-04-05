@@ -551,25 +551,27 @@ func (s *Server) scan(requestId uint64, optionsChan chan *ScanOptions) {
 
 	// Write to a file and to the client at the same time.
 	writer1, err := s.fs.SetFile(dtdiff.STATUS_FILE)
+	if err != nil {
+		// TODO: writer1.Revert()
+		if writer1 != nil {
+			writer1.Close()
+		}
+		s.replyError(requestId, err)
+		return
+	}
 	reader, writer2 := io.Pipe()
 	writer := io.MultiWriter(writer1, writer2)
 
-	if err != nil {
-		s.replyError(requestId, err)
-		// TODO: writer1.Revert()
+	go func() {
+		err = replica.Serialize(writer)
+		if err != nil {
+			s.replyError(requestId, err)
+		}
 		writer1.Close()
 		writer2.Close()
-	} else {
-		go func() {
-			err = replica.Serialize(writer)
-			if err != nil {
-				s.replyError(requestId, err)
-			}
-			writer1.Close()
-			writer2.Close()
-		}()
-		s.streamSendData(requestId, reader)
-	}
+	}()
+
+	s.streamSendData(requestId, reader)
 }
 
 func (s *Server) streamSendData(requestId uint64, reader io.Reader) {
