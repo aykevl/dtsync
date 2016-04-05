@@ -47,20 +47,31 @@ import (
 )
 
 var (
-	ErrContentType            = errors.New("dtdiff: wrong content type")
-	ErrNoIdentity             = errors.New("dtdiff: no Identity header")
-	ErrInvalidGeneration      = errors.New("dtdiff: invalid or missing Generation header")
-	ErrInvalidKnowledgeHeader = errors.New("dtdiff: invalid Knowledge header")
-	ErrInvalidEntryRevision   = errors.New("dtdiff: invalid revision in entry row")
-	ErrInvalidPath            = errors.New("dtdiff: invalid or missing path in entry row")
-	ErrInvalidFingerprint     = errors.New("dtdiff: invalid or missing fingerprint in entry row")
-	ErrInvalidMode            = errors.New("dtdiff: invalid or missing mode in entry row")
 	ErrExists                 = errors.New("dtdiff: already exists")
 	ErrSameIdentity           = errors.New("dtdiff: two replicas with the same ID")
 	ErrSameRoot               = errors.New("dtdiff: trying to synchronize the same directory")
-	ErrCanceled               = errors.New("dtdiff: canceled") // must always be handled
 	ErrParsingFingerprint     = errors.New("dtdiff: could not parse fingerprint")
+
+	errCanceled    = errors.New("dtdiff: canceled") // must always be handled
+	errInvalidPath = errors.New("dtdiff: invalid or missing path in entry row")
 )
+
+type ParseError struct {
+	Message string
+	Row     int
+	Err     error
+}
+
+func (e *ParseError) Error() string {
+	s := "dtdiff parser: " + e.Message
+	if e.Row > 0 {
+		s += " (row " + strconv.Itoa(e.Row) + ")"
+	}
+	if e.Err != nil {
+		s += ": " + e.Err.Error()
+	}
+	return s
+}
 
 // File where current status of the tree is stored.
 const STATUS_FILE = ".dtsync"
@@ -185,33 +196,34 @@ func (r *Replica) load(file io.Reader) error {
 
 	header, err := textproto.NewReader(reader).ReadMIMEHeader()
 	if err != nil {
-		return err
+		return &ParseError{"cannot parse status file", 0, err}
 	}
 
-	mediaType, params, err := mime.ParseMediaType(header.Get("Content-Type"))
+	contentType := header.Get("Content-Type")
+	mediaType, params, err := mime.ParseMediaType(contentType)
 	if err != nil {
-		return err
+		return &ParseError{"cannot parse Content-Type header: " + contentType, 0, err}
 	}
 	if mediaType != "text/tab-separated-values" {
-		return ErrContentType
+		return &ParseError{"invalid media type: " + mediaType, 0, nil}
 	}
 	if params["charset"] != "utf-8" {
-		return ErrContentType
+		return &ParseError{"invalid charset: " + params["charset"], 0, nil}
 	}
 
 	identity := header.Get("Identity")
 	if identity == "" {
-		return ErrNoIdentity
+		return &ParseError{"no Identity header", 0, nil}
 	}
 	r.identity = identity
 
 	generationString := header.Get("Generation")
 	if generationString == "" {
-		return ErrInvalidGeneration
+		return &ParseError{"missing generation string", 0, nil}
 	}
 	generation, err := strconv.Atoi(generationString)
 	if err != nil {
-		return ErrInvalidGeneration
+		return &ParseError{"invalid generation string", 0, err}
 	}
 	r.generation = generation
 
@@ -230,12 +242,12 @@ func (r *Replica) load(file io.Reader) error {
 		for i, part := range knowledgeParts {
 			partParts := strings.SplitN(part, ":", 2)
 			if len(partParts) != 2 {
-				return ErrInvalidKnowledgeHeader
+				return &ParseError{"invalid Knowledge header: " + knowledgeString, 0, nil}
 			}
 			peerId := partParts[0]
 			peerGen, err := strconv.Atoi(partParts[1])
 			if err != nil {
-				return ErrInvalidKnowledgeHeader
+				return &ParseError{"invalid Knowledge header: " + knowledgeString, 0, nil}
 			}
 			r.knowledge[peerId] = peerGen
 			peers[i+1] = peerId
@@ -247,7 +259,7 @@ func (r *Replica) load(file io.Reader) error {
 	if rootOptions != "" {
 		err := r.rootEntry.parseOptions(rootOptions)
 		if err != nil {
-			return err
+			return &ParseError{"cannot parse root options (" + rootOptions+ "): ", 0, err}
 		}
 	}
 
@@ -265,17 +277,17 @@ func (r *Replica) load(file io.Reader) error {
 		Optional: []string{"mode", "hash", "options"},
 	})
 	if err != nil {
-		return err
+		return &ParseError{"could not read TSV header", 0, err}
 	}
 
 	// now actually parse the file list
-	for {
+	for row := 1; ; row++ {
 		fields, err := tsvReader.ReadRow()
 		if err != nil {
 			if err == io.EOF {
 				break
 			}
-			return err
+			return &ParseError{"could not read TSV row", row, err}
 		}
 		hashStr := fields[TSV_HASH]
 		if len(hashStr) == 43 {
@@ -286,32 +298,34 @@ func (r *Replica) load(file io.Reader) error {
 		if len(hashStr) > 0 {
 			hash, err = base64.URLEncoding.DecodeString(hashStr)
 			if err != nil {
-				return err
+				return &ParseError{"could not decode hash", row, err}
 			}
 		}
 
 		revParts := strings.Split(fields[TSV_REVISION], ":")
 		if len(revParts) != 2 {
-			return ErrInvalidEntryRevision
+			return &ParseError{"revision does not have exactly two parts", row, nil}
 		}
 
 		revReplicaIndex, err := strconv.Atoi(revParts[0])
 		if err != nil {
-			return ErrInvalidEntryRevision
+			return &ParseError{"cannot parse replica index", row, err}
 		}
 		if revReplicaIndex < 0 || revReplicaIndex >= len(peers) {
-			return ErrInvalidEntryRevision
+			return &ParseError{"replica index outside range", row, nil}
 		}
 
 		revReplica := peers[revReplicaIndex]
 		revGeneration, err := strconv.Atoi(revParts[1])
-		if err != nil || revGeneration < 1 {
-			return ErrInvalidEntryRevision
+		if err != nil {
+			return &ParseError{"cannot parse generation", row, err}
+		} else if revGeneration < 1 {
+			return &ParseError{"generation < 1", row, nil}
 		}
 
 		mode, err := strconv.ParseUint(fields[TSV_MODE], 8, 32)
 		if err != nil {
-			return ErrInvalidMode
+			return &ParseError{"cannot parse mode", row, err}
 		}
 
 		fingerprint := fields[TSV_FINGERPRINT]
@@ -320,13 +334,13 @@ func (r *Replica) load(file io.Reader) error {
 		// now add this entry
 		child, err := r.rootEntry.addRecursive(path, revision{revReplica, revGeneration}, fingerprint, tree.Mode(mode), hash)
 		if err != nil {
-			return err
+			return &ParseError{"could not add row", row, err}
 		}
 
 		if len(fields[TSV_OPTIONS]) > 0 {
 			err = child.parseOptions(fields[TSV_OPTIONS])
 			if err != nil {
-				return err
+				return &ParseError{"could not parse options", row, err}
 			}
 		}
 	}
@@ -521,7 +535,7 @@ func (r *Replica) scanDir(dir tree.Entry, statusDir *Entry, cancel chan struct{}
 	for {
 		select {
 		case <-cancel:
-			return ErrCanceled
+			return errCanceled
 		default:
 		}
 

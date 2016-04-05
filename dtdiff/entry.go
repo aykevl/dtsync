@@ -115,14 +115,14 @@ func (e *Entry) Size() int64 {
 // Add new entry by recursively finding the parent
 func (e *Entry) addRecursive(path []string, rev revision, fingerprint string, mode tree.Mode, hash []byte) (*Entry, error) {
 	if path[0] == "" {
-		return nil, ErrInvalidPath
+		return nil, errInvalidPath
 	}
 	if len(path) > 1 {
 		child, ok := e.children[path[0]]
 		if !ok {
 			// child does not exist
 			// or: the path has a parent that hasn't yet been scanned
-			return nil, ErrInvalidPath
+			return nil, errInvalidPath
 		}
 		return child.addRecursive(path[1:], rev, fingerprint, mode, hash)
 	} else {
