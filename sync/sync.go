@@ -95,41 +95,34 @@ func (r *Result) reconcile(statusDir1, statusDir2 *dtdiff.Entry) {
 				// Don't compare mtime of directories.
 				// Future: maybe check for xattrs?
 				r.reconcile(status1, status2)
+				continue
 			} else if status1.Equal(status2) {
 				// Two equal non-directories. We don't have to do more.
-			} else if status1.Conflict(status2) {
-				r.jobs = append(r.jobs, &Job{
-					result:        r,
-					action:        ACTION_UPDATE,
-					direction:     0,
-					status1:       status1,
-					status2:       status2,
-					statusParent1: statusDir1,
-					statusParent2: statusDir2,
-				})
+				continue
+			}
+
+			job := &Job{
+				result:        r,
+				status1:       status1,
+				status2:       status2,
+				statusParent1: statusDir1,
+				statusParent2: statusDir2,
+			}
+
+			if status1.Conflict(status2) {
+				job.action = ACTION_UPDATE
+				job.direction = 0
 			} else if status1.After(status2) {
-				r.jobs = append(r.jobs, &Job{
-					result:        r,
-					action:        ACTION_UPDATE,
-					direction:     1,
-					status1:       status1,
-					status2:       status2,
-					statusParent1: statusDir1,
-					statusParent2: statusDir2,
-				})
+				job.action = ACTION_UPDATE
+				job.direction = 1
 			} else if status1.Before(status2) {
-				r.jobs = append(r.jobs, &Job{
-					result:        r,
-					action:        ACTION_UPDATE,
-					direction:     -1,
-					status1:       status1,
-					status2:       status2,
-					statusParent1: statusDir1,
-					statusParent2: statusDir2,
-				})
+				job.action = ACTION_UPDATE
+				job.direction = -1
 			} else {
 				panic("equal but not equal? (should be unreachable)")
 			}
+
+			r.jobs = append(r.jobs, job)
 
 		} else {
 			// One of the files does not exist.
