@@ -37,12 +37,14 @@ import (
 	"time"
 
 	"github.com/aykevl/dtsync/tree"
+	"github.com/aykevl/osfs"
 )
 
 // Tree encapsulates the root path, so every Entry can know the root path.
 type Tree struct {
-	path string
-	root *Entry
+	path   string
+	root   *Entry
+	fsInfo *osfs.Info
 }
 
 // NewRoot wraps a root directory in an Entry.
@@ -65,6 +67,10 @@ func NewRoot(rootPath string) (*Tree, error) {
 	r.root = &Entry{
 		root: r,
 		st:   st,
+	}
+	r.fsInfo, err = osfs.Read()
+	if err != nil {
+		return nil, err
 	}
 	return r, nil
 }
@@ -194,7 +200,10 @@ func (r *Tree) Remove(file tree.FileInfo) (tree.FileInfo, error) {
 		if err != nil {
 			return nil, err
 		}
-		parent := Entry{st: st}
+		parent := Entry{
+			root: e.root,
+			st:   st,
+		}
 		parentInfo = parent.makeInfo(nil)
 	}
 	return parentInfo, nil
@@ -236,8 +245,8 @@ func (r *Tree) GetFile(name string) (io.ReadCloser, error) {
 
 func (r *Tree) SetFile(name string) (io.WriteCloser, error) {
 	e := Entry{
-		path: []string{name},
 		root: r,
+		path: []string{name},
 	}
 	tempPath := e.tempPath()
 	destPath := e.fullPath()
@@ -352,7 +361,8 @@ func (e *Entry) replaceFile(source tree.FileInfo, hash hash.Hash, update bool) (
 				return nil, nil, err
 			}
 			parent := Entry{
-				st: parentSt,
+				root: e.root,
+				st:   parentSt,
 			}
 
 			fp = nil
@@ -395,7 +405,8 @@ func (r *Tree) CreateSymlink(name string, parentInfo, sourceInfo tree.FileInfo, 
 		return nil, nil, err
 	}
 	parent := Entry{
-		st: parentSt,
+		root: r,
+		st:   parentSt,
 	}
 	return child.makeInfo(nil), parent.makeInfo(nil), nil
 }
@@ -452,7 +463,8 @@ func (r *Tree) UpdateSymlink(file, source tree.FileInfo, contents string) (tree.
 		return nil, nil, err
 	}
 	parent := Entry{
-		st: parentSt,
+		root: r,
+		st:   parentSt,
 	}
 
 	return e.makeInfo(nil), parent.makeInfo(nil), nil

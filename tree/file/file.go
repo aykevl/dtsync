@@ -138,8 +138,7 @@ func (e *Entry) Mode() tree.Mode {
 // HasMode returns the permission bits this filesystem supports (at least 0777
 // for Unix-like filesystems).
 func (e *Entry) HasMode() tree.Mode {
-	// TODO dummy value
-	return 0777
+	return tree.Mode(e.root.fsInfo.Get(e.fullPath(), e.st).Filesystem().Permissions)
 }
 
 // ModTime returns the modification time from the (cached) stat() call.
@@ -207,9 +206,9 @@ func (e *Entry) List() ([]tree.Entry, error) {
 	listEntries := make([]tree.Entry, len(list))
 	for i, st := range list {
 		listEntries[i] = &Entry{
-			st:   st,
-			path: e.childPath(st.Name()),
 			root: e.root,
+			path: e.childPath(st.Name()),
+			st:   st,
 		}
 	}
 	tree.SortEntries(listEntries)
