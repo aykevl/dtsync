@@ -310,6 +310,12 @@ func (e *Entry) Update(info tree.FileInfo, hash []byte, source *Entry) {
 			e.replica.markMetaChanged()
 		}
 	}
+	if info.HasMode() &^ e.hasMode != 0 {
+		// There are new permission bits. Mark as changed so permissions are
+		// compared.
+		e.replica.markChanged()
+		e.revision = e.replica.revision
+	}
 	if info.HasMode() != e.hasMode {
 		// This is a different filesystem or the support for filesystem
 		// detection changed.
