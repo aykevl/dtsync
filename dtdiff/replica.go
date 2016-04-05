@@ -318,7 +318,7 @@ func (r *Replica) load(file io.Reader) error {
 		path := strings.Split(fields[TSV_PATH], "/")
 
 		// now add this entry
-		child, err := r.rootEntry.add(path, revision{revReplica, revGeneration}, fingerprint, tree.Mode(mode), hash)
+		child, err := r.rootEntry.addRecursive(path, revision{revReplica, revGeneration}, fingerprint, tree.Mode(mode), hash)
 		if err != nil {
 			return err
 		}
@@ -554,7 +554,8 @@ func (r *Replica) scanDir(dir tree.Entry, statusDir *Entry, cancel chan struct{}
 			if err != nil {
 				return err
 			}
-			status, err = statusDir.Add(info)
+			r.markChanged()
+			status, err = statusDir.add(info, r.revision)
 			if err != nil {
 				panic(err) // must not happen
 			}
@@ -576,7 +577,7 @@ func (r *Replica) scanDir(dir tree.Entry, statusDir *Entry, cancel chan struct{}
 					}
 				}
 			}
-			status.Update(info, newHash)
+			status.Update(info, newHash, nil)
 		}
 
 		if file.Type() == tree.TYPE_DIRECTORY {

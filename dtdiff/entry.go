@@ -113,7 +113,7 @@ func (e *Entry) Size() int64 {
 }
 
 // Add new entry by recursively finding the parent
-func (e *Entry) add(path []string, rev revision, fingerprint string, mode tree.Mode, hash []byte) (*Entry, error) {
+func (e *Entry) addRecursive(path []string, rev revision, fingerprint string, mode tree.Mode, hash []byte) (*Entry, error) {
 	if path[0] == "" {
 		return nil, ErrInvalidPath
 	}
@@ -124,7 +124,7 @@ func (e *Entry) add(path []string, rev revision, fingerprint string, mode tree.M
 			// or: the path has a parent that hasn't yet been scanned
 			return nil, ErrInvalidPath
 		}
-		return child.add(path[1:], rev, fingerprint, mode, hash)
+		return child.addRecursive(path[1:], rev, fingerprint, mode, hash)
 	} else {
 		fileInfo, err := parseFingerprint(fingerprint)
 		if err != nil {
@@ -170,16 +170,12 @@ func (e *Entry) HasRevision(other *Entry) bool {
 // Equal returns true if both entries are of the same revision (replica and
 // generation). Not recursive.
 func (e *Entry) Equal(e2 *Entry) bool {
-	if e.revision == e2.revision {
-		return true
-	}
-	if e.fileType != e2.fileType {
-		return false
-	}
-	modeMask := e.hasMode | e2.hasMode
-	if e.fileType != tree.TYPE_SYMLINK && e.mode&modeMask != e2.mode&modeMask {
-		return false
-	}
+	return e.revision == e2.revision
+}
+
+// EqualContents returns true if the contents (fingerprint/hash) of these
+// entries is the same.
+func (e *Entry) EqualContents(e2 *Entry) bool {
 	if tree.MatchFingerprint(e, e2) {
 		return true
 	}
@@ -269,19 +265,23 @@ func (e *Entry) List() []*Entry {
 }
 
 // Add a new status entry.
-func (e *Entry) Add(info tree.FileInfo) (*Entry, error) {
+func (e *Entry) Add(info tree.FileInfo, source *Entry) (*Entry, error) {
+	return e.add(info, source.revision)
+}
+
+func (e *Entry) add(info tree.FileInfo, rev revision) (*Entry, error) {
 	e.replica.markChanged()
 	fileInfo := fingerprintInfo{info.Type(), info.ModTime(), info.Size()}
 	if fileInfo.fileType != tree.TYPE_REGULAR {
 		// Maybe not necessary, but just to be safe...
 		fileInfo.size = 0
 	}
-	return e.addChild(info.Name(), e.replica.revision, fileInfo, info.Mode(), info.Hash())
+	return e.addChild(info.Name(), rev, fileInfo, info.Mode(), info.Hash())
 }
 
 // Update updates the revision if the file was changed. The file is not changed
 // if the fingerprint but not the hash changed.
-func (e *Entry) Update(info tree.FileInfo, hash []byte) {
+func (e *Entry) Update(info tree.FileInfo, hash []byte, source *Entry) {
 	if !tree.MatchFingerprint(e, info) {
 		e.fileType = info.Type()
 		e.modTime = info.ModTime()
@@ -292,8 +292,13 @@ func (e *Entry) Update(info tree.FileInfo, hash []byte) {
 			// Changes in fingerprints of symbolic links must be tracked. For
 			// regular files we look at the hash and for directories fingerprint
 			// changes do not cause updates at all (but are still tracked).
-			e.replica.markChanged()
-			e.revision = e.replica.revision
+			if source != nil {
+				e.replica.markMetaChanged()
+				e.revision = source.revision
+			} else {
+				e.replica.markChanged()
+				e.revision = e.replica.revision
+			}
 		} else {
 			e.replica.markMetaChanged()
 		}
@@ -301,25 +306,34 @@ func (e *Entry) Update(info tree.FileInfo, hash []byte) {
 	if info.HasMode() != e.hasMode {
 		// This is a different filesystem or the support for filesystem
 		// detection changed.
-		e.hasMode = info.HasMode()
 		e.replica.markMetaChanged()
+		e.hasMode = info.HasMode()
 	}
 	hasMode := e.hasMode // same as info.HasMode()
 	if info.Mode()&hasMode != e.mode&hasMode {
 		// The permission bits got updated.
 		e.mode = info.Mode() & hasMode
-		e.replica.markChanged()
-		e.revision = e.replica.revision
+		if source != nil {
+			e.revision = source.revision
+		} else {
+			e.replica.markChanged()
+			e.revision = e.replica.revision
+		}
 	}
-	e.UpdateHash(hash)
+	e.UpdateHash(hash, source)
 }
 
 // UpdateHash sets the new hash from the parameter, marking this file as changed
 // if it is different from the existing one.
-func (e *Entry) UpdateHash(hash []byte) {
+func (e *Entry) UpdateHash(hash []byte, source *Entry) {
 	if !bytes.Equal(e.hash, hash) {
-		e.replica.markChanged()
-		e.revision = e.replica.revision
+		if source != nil {
+			e.replica.markMetaChanged()
+			e.revision = source.revision
+		} else {
+			e.replica.markChanged()
+			e.revision = e.replica.revision
+		}
 		e.hash = hash
 	}
 }

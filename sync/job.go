@@ -158,17 +158,17 @@ func (j *Job) Apply() error {
 		if !bytes.Equal(info.Hash(), status1.Hash()) {
 			// The first file got updated between the scan and update.
 			// TODO Should we report this as an error?
-			status1.UpdateHash(info.Hash())
+			status1.UpdateHash(info.Hash(), nil)
 		}
-		status2.Update(info, info.Hash())
-		statusParent2.Update(parentInfo, nil)
+		status2.Update(info, info.Hash(), status1)
+		statusParent2.Update(parentInfo, nil, statusParent1)
 	case ACTION_REMOVE:
 		parentInfo, err := fs2.Remove(status2)
 		if err != nil {
 			return err
 		}
 		status2.Remove()
-		statusParent2.Update(parentInfo, nil)
+		statusParent2.Update(parentInfo, nil, statusParent1)
 	default:
 		panic("unknown action (must not happen)")
 	}
@@ -187,7 +187,7 @@ func copyFile(fs1, fs2 tree.Tree, status1, statusParent2 *dtdiff.Entry) error {
 		if err != nil {
 			return err
 		}
-		status2, err := statusParent2.Add(info)
+		status2, err := statusParent2.Add(info, status1)
 		if err != nil {
 			panic(err)
 		}
@@ -204,8 +204,8 @@ func copyFile(fs1, fs2 tree.Tree, status1, statusParent2 *dtdiff.Entry) error {
 		if err != nil {
 			return err
 		}
-		statusParent2.Update(parentInfo, nil)
-		_, err = statusParent2.Add(info)
+		statusParent2.Update(parentInfo, nil, nil)
+		_, err = statusParent2.Add(info, status1)
 		if err != nil {
 			return err
 		}
