@@ -92,6 +92,7 @@ func TestSync(t *testing.T) {
 	for i, scheme1 := range schemes {
 		for j := i; j < len(schemes); j++ {
 			scheme2 := schemes[j]
+			t.Logf("Filesystems: %s + %s", scheme1, scheme2)
 			syncRoots(t, scheme1, scheme2)
 			if testing.Short() {
 				return
@@ -312,18 +313,20 @@ func runTestCaseSync(t *testing.T, tc *testCase, fs1, fs2 tree.TestTree, jobDire
 	replica1a := result.rs.Get(0)
 	replica2a := result.rs.Get(1)
 
+	statusBefore := readStatuses(t, fs1, fs2)
+
+	if jobDirection == 1 {
+		//t.Logf("sync %s → %s", replica1a, replica2a)
+	} else {
+		//t.Logf("sync %s ← %s", replica1a, replica2a)
+	}
+
 	// False if one (or both) of the trees is connected over a network.
 	localSync := true
 	for _, fs := range []tree.TestTree{fs1, fs2} {
 		if _, ok := fs.(tree.LocalTree); !ok {
 			localSync = false
 		}
-	}
-
-	if jobDirection == 1 {
-		//t.Logf("sync %s → %s", replica1a, replica2a)
-	} else {
-		//t.Logf("sync %s ← %s", replica1a, replica2a)
 	}
 
 	// Changed() works a bit different over a network connection.
@@ -341,18 +344,17 @@ func runTestCaseSync(t *testing.T, tc *testCase, fs1, fs2 tree.TestTree, jobDire
 			}
 			if replica2a.Changed() == secondSync {
 				t.Errorf("replica 2 %s was changed? (=%v) while test case was applied to the right side", replica2a, replica2a.Changed())
-				panic("abc")
 			}
 		}
 	}
-
-	statusBefore := readStatuses(t, fs1, fs2)
 
 	if scanTwice {
 		// Save, and scan again, to test whether there were any changes.
 		if err := result.SaveStatus(); err != nil {
 			t.Errorf("could not save status: %s", err)
 		}
+
+		statusBefore := readStatuses(t, fs1, fs2)
 
 		result = runTestCaseScan(t, tc, fs1, fs2, jobDirection)
 		replica1b := result.rs.Get(0)
@@ -362,6 +364,14 @@ func runTestCaseSync(t *testing.T, tc *testCase, fs1, fs2 tree.TestTree, jobDire
 		}
 		if replica2b.Changed() {
 			t.Errorf("%s got updated to %s on second scan", replica2a, replica2b)
+		}
+		if t.Failed() {
+			if err := result.SaveStatus(); err != nil {
+				t.Errorf("could not save status: %s", err)
+			}
+			printStatus(t, "before (second scan)", statusBefore)
+			printStatus(t, "after (second scan)", readStatuses(t, fs1, fs2))
+			t.FailNow()
 		}
 	}
 
