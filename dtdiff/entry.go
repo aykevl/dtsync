@@ -191,7 +191,6 @@ func (e *Entry) EqualMode(e2 *Entry) bool {
 	return e.mode&hasMode == e2.mode&hasMode
 }
 
-
 // After returns true if this entry was modified after the other.
 func (e *Entry) After(e2 *Entry) bool {
 	return e.generation > e2.replica.knowledge[e.identity]
@@ -310,7 +309,7 @@ func (e *Entry) Update(info tree.FileInfo, hash []byte, source *Entry) {
 			e.replica.markMetaChanged()
 		}
 	}
-	if info.HasMode() &^ e.hasMode != 0 {
+	if info.HasMode()&^e.hasMode != 0 {
 		// There are new permission bits. Mark as changed so permissions are
 		// compared.
 		e.replica.markChanged()

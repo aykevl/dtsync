@@ -47,10 +47,10 @@ import (
 )
 
 var (
-	ErrExists                 = errors.New("dtdiff: already exists")
-	ErrSameIdentity           = errors.New("dtdiff: two replicas with the same ID")
-	ErrSameRoot               = errors.New("dtdiff: trying to synchronize the same directory")
-	ErrParsingFingerprint     = errors.New("dtdiff: could not parse fingerprint")
+	ErrExists             = errors.New("dtdiff: already exists")
+	ErrSameIdentity       = errors.New("dtdiff: two replicas with the same ID")
+	ErrSameRoot           = errors.New("dtdiff: trying to synchronize the same directory")
+	ErrParsingFingerprint = errors.New("dtdiff: could not parse fingerprint")
 
 	errCanceled    = errors.New("dtdiff: canceled") // must always be handled
 	errInvalidPath = errors.New("dtdiff: invalid or missing path in entry row")
@@ -259,7 +259,7 @@ func (r *Replica) load(file io.Reader) error {
 	if rootOptions != "" {
 		err := r.rootEntry.parseOptions(rootOptions)
 		if err != nil {
-			return &ParseError{"cannot parse root options (" + rootOptions+ "): ", 0, err}
+			return &ParseError{"cannot parse root options (" + rootOptions + "): ", 0, err}
 		}
 	}
 

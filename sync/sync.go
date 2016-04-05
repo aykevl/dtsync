@@ -98,8 +98,7 @@ func (r *Result) reconcile(statusDir1, statusDir2 *dtdiff.Entry) {
 				r.reconcile(status1, status2)
 			}
 
-			if status1.Equal(status2) ||
-					bothDirs && status1.EqualMode(status2) {
+			if status1.Equal(status2) || bothDirs && status1.EqualMode(status2) {
 				// Two equal non-directories. We don't have to do more.
 				continue
 			}
