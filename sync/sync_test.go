@@ -132,6 +132,7 @@ func syncRoots(t *testing.T, scheme1, scheme2 string) {
 		// basic copy/update/remove
 		{"file1.txt", ACTION_COPY, "f The quick brown fox...", 2},
 		{"file1.txt", ACTION_UPDATE, "f The quick brown fox jumps over the lazy dog.", 2},
+		{"file1.txt", ACTION_CHMOD, 0606, 2},
 		{"file1.txt", ACTION_REMOVE, nil, 1},
 		// insert a file before and after an existing file
 		{"file1.txt", ACTION_COPY, "f Still jumping...", 2},
@@ -147,7 +148,9 @@ func syncRoots(t *testing.T, scheme1, scheme2 string) {
 		{"dir", ACTION_COPY, "d ", 2},
 		{"dir/file.txt", ACTION_COPY, "f abc", 2},
 		{"dir/file.txt", ACTION_UPDATE, "f def", 2},
+		{"dir/file.txt", ACTION_CHMOD, 0602, 2},
 		{"dir/file.txt", ACTION_REMOVE, nil, 2},
+		{"dir", ACTION_CHMOD, 0705, 2},
 		{"dir", ACTION_REMOVE, nil, 1},
 		// symbolic links
 		{"link1", ACTION_COPY, "l dir", 2},
@@ -265,6 +268,12 @@ func applyTestCase(t *testing.T, fs tree.TestTree, tc testCase) {
 		default:
 			panic("unknown update action: " + tc.contents.(string))
 		}
+	case ACTION_CHMOD:
+		var file tree.FileInfo
+		file, err = fs.ReadInfo(strings.Split(tc.file, "/"))
+		source := tree.NewFileInfo(parts, file.Type(), tree.Mode(tc.contents.(int)), 0777, time.Now(), 0, nil)
+		assert(err)
+		_, err = fs.Chmod(file, source)
 	case ACTION_REMOVE:
 		info, err := fs.ReadInfo(strings.Split(tc.file, "/"))
 		assert(err)
@@ -308,6 +317,9 @@ func runTestCase(t *testing.T, fs1, fs2, fsCheck, fsCheckWith tree.TestTree, swa
 func runTestCaseSync(t *testing.T, tc *testCase, fs1, fs2 tree.TestTree, jobDirection int, scanTwice, secondSync bool) {
 	result := runTestCaseScan(t, tc, fs1, fs2, jobDirection)
 	if t.Failed() {
+		if result != nil {
+			assert(result.SaveStatus())
+		}
 		return
 	}
 	replica1a := result.rs.Get(0)

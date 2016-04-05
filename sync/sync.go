@@ -91,12 +91,15 @@ func (r *Result) reconcile(statusDir1, statusDir2 *dtdiff.Entry) {
 		if status1 != nil && status2 != nil {
 			// Both are defined, so compare the contents.
 
-			if status1.Type() == tree.TYPE_DIRECTORY && status2.Type() == tree.TYPE_DIRECTORY {
+			bothDirs := status1.Type() == tree.TYPE_DIRECTORY && status2.Type() == tree.TYPE_DIRECTORY
+			if bothDirs {
 				// Don't compare mtime of directories.
 				// Future: maybe check for xattrs?
 				r.reconcile(status1, status2)
-				continue
-			} else if status1.Equal(status2) {
+			}
+
+			hasMode := status1.HasMode() & status2.HasMode()
+			if status1.Equal(status2) || bothDirs && status1.Mode()&hasMode == status2.Mode()&hasMode {
 				// Two equal non-directories. We don't have to do more.
 				continue
 			}
@@ -109,14 +112,19 @@ func (r *Result) reconcile(statusDir1, statusDir2 *dtdiff.Entry) {
 				statusParent2: statusDir2,
 			}
 
-			if status1.Conflict(status2) {
+			if status1.EqualContents(status2) || bothDirs && status1.Mode()&hasMode != status2.Mode()&hasMode {
+				// only the mode differs
+				job.action = ACTION_CHMOD
+			} else {
+				// the contents changed
 				job.action = ACTION_UPDATE
+			}
+
+			if status1.Conflict(status2) {
 				job.direction = 0
 			} else if status1.After(status2) {
-				job.action = ACTION_UPDATE
 				job.direction = 1
 			} else if status1.Before(status2) {
-				job.action = ACTION_UPDATE
 				job.direction = -1
 			} else {
 				panic("equal but not equal? (should be unreachable)")

@@ -43,6 +43,7 @@ type Action int
 const (
 	ACTION_COPY   Action = iota
 	ACTION_UPDATE Action = iota
+	ACTION_CHMOD  Action = iota
 	ACTION_REMOVE Action = iota
 )
 
@@ -53,6 +54,8 @@ func (a Action) String() string {
 		s = "copy"
 	case ACTION_UPDATE:
 		s = "update"
+	case ACTION_CHMOD:
+		s = "chmod"
 	case ACTION_REMOVE:
 		s = "remove"
 	}
@@ -169,6 +172,12 @@ func (j *Job) Apply() error {
 		}
 		status2.Remove()
 		statusParent2.Update(parentInfo, nil, statusParent1)
+	case ACTION_CHMOD:
+		info, err := fs2.Chmod(status2, status1)
+		if err != nil {
+			return err
+		}
+		status2.Update(info, status2.Hash(), status1)
 	default:
 		panic("unknown action (must not happen)")
 	}
