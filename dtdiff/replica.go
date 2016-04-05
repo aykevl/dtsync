@@ -323,9 +323,13 @@ func (r *Replica) load(file io.Reader) error {
 			return &ParseError{"generation < 1", row, nil}
 		}
 
-		mode, err := strconv.ParseUint(fields[TSV_MODE], 8, 32)
-		if err != nil {
-			return &ParseError{"cannot parse mode", row, err}
+		modeString := fields[TSV_MODE]
+		var mode uint64
+		if modeString != "" {
+			mode, err = strconv.ParseUint(modeString, 8, 32)
+			if err != nil {
+				return &ParseError{"cannot parse mode", row, err}
+			}
 		}
 
 		fingerprint := fields[TSV_FINGERPRINT]
@@ -335,6 +339,12 @@ func (r *Replica) load(file io.Reader) error {
 		child, err := r.rootEntry.addRecursive(path, revision{revReplica, revGeneration}, fingerprint, tree.Mode(mode), hash)
 		if err != nil {
 			return &ParseError{"could not add row", row, err}
+		}
+
+		if modeString == "" {
+			// We couldn't read a mode, so none of the mode bits are
+			// 'supported'.
+			child.hasMode = 0
 		}
 
 		if len(fields[TSV_OPTIONS]) > 0 {
