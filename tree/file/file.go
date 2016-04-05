@@ -82,6 +82,14 @@ func (e *Entry) fullPath() string {
 	return filepath.Join(parts...)
 }
 
+// realPath returns the full path with symlinks resolved.
+func (e *Entry) realPath() string {
+	parts := make([]string, 1, len(e.path)+1)
+	parts[0] = e.root.realPath
+	parts = append(parts, e.path...)
+	return filepath.Join(parts...)
+}
+
 // tempPath returns a full path to a temporary location for this file (in the
 // same parent directory).
 func (e *Entry) tempPath() string {
@@ -138,7 +146,7 @@ func (e *Entry) Mode() tree.Mode {
 // HasMode returns the permission bits this filesystem supports (at least 0777
 // for Unix-like filesystems).
 func (e *Entry) HasMode() tree.Mode {
-	return tree.Mode(e.root.fsInfo.Get(e.fullPath(), e.st).Filesystem().Permissions)
+	return tree.Mode(e.root.fsInfo.GetReal(e.realPath(), e.st).Filesystem().Permissions)
 }
 
 // ModTime returns the modification time from the (cached) stat() call.

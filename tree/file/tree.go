@@ -42,9 +42,10 @@ import (
 
 // Tree encapsulates the root path, so every Entry can know the root path.
 type Tree struct {
-	path   string
-	root   *Entry
-	fsInfo *osfs.Info
+	path     string
+	realPath string
+	root     *Entry
+	fsInfo   *osfs.Info
 }
 
 // NewRoot wraps a root directory in an Entry.
@@ -61,8 +62,18 @@ func NewRoot(rootPath string) (*Tree, error) {
 		return nil, tree.ErrNoDirectory([]string{rootPath})
 	}
 
+	realPath, err := filepath.Abs(rootPath)
+	if err != nil {
+		return nil, err
+	}
+	realPath, err = filepath.EvalSymlinks(realPath)
+	if err != nil {
+		return nil, err
+	}
+
 	r := &Tree{
-		path: rootPath,
+		path:     rootPath,
+		realPath: realPath,
 	}
 	r.root = &Entry{
 		root: r,
