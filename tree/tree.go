@@ -264,30 +264,27 @@ func Update(this, other Tree, source, target FileInfo) (FileInfo, FileInfo, erro
 	switch source.Type() {
 	case TYPE_REGULAR:
 		if MatchFingerprint(source, target) {
-			if source.Mode()&source.HasMode() == target.Mode()&target.HasMode() {
-				return nil, nil, ErrNotImplemented("source and target are equal - I don't know what to do")
-			}
-			newInfo, err := other.Chmod(target, source)
-			return newInfo, nil, err
-		} else {
-			inf, err := thisFileTree.CopySource(source)
-			if err != nil {
-				return nil, nil, err
-			}
-			defer inf.Close()
-
-			outf, err := otherFileTree.UpdateFile(target, source)
-			if err != nil {
-				return nil, nil, err
-			}
-
-			_, err = io.Copy(outf, inf)
-			if err != nil {
-				return nil, nil, err
-			}
-
-			return outf.Finish()
+			// A check that fingerprint updates are not done via the regular
+			// Update().
+			return nil, nil, ErrNotImplemented("source and target are equal - I don't know what to do")
 		}
+		inf, err := thisFileTree.CopySource(source)
+		if err != nil {
+			return nil, nil, err
+		}
+		defer inf.Close()
+
+		outf, err := otherFileTree.UpdateFile(target, source)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		_, err = io.Copy(outf, inf)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		return outf.Finish()
 
 	case TYPE_SYMLINK:
 		link, err := thisFileTree.ReadSymlink(source)

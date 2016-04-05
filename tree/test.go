@@ -284,14 +284,17 @@ func TreeTest(t Tester, fs1, fs2 TestTree) {
 	if !sameInfo(info1, info1Expected) {
 		t.Errorf("did not fully update file with chmod:\nexpected: %s\nactual:   %s", info1Expected, info1)
 	}
+	if sameInfo(info1, info2) {
+		t.Errorf("Expected info1 and info2 to differ after chmod: %s", info1)
+	}
 
 	// chmod in Update
-	info2, _, err = Update(fs1, fs2, info1, info2)
+	info2, err = fs1.Chmod(info2, info1)
 	if err != nil {
 		t.Fatal("could not Update after chmod:", err)
 	}
 	if !sameInfo(info1, info2) {
-		t.Errorf("did not fully Update after chmod:\n%s\n%s", info1, info2)
+		t.Errorf("did not fully chmod:\n%s\n%s", info1, info2)
 	}
 
 	/*** Test symlinks ***/
