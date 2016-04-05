@@ -168,6 +168,10 @@ func (e *Entry) Equal(e2 *Entry) bool {
 	if e.revision == e2.revision {
 		return true
 	}
+	modeMask := e.hasMode | e2.hasMode
+	if e.mode&modeMask != e2.mode&modeMask {
+		return false
+	}
 	if tree.MatchFingerprint(e, e2) {
 		return true
 	}
@@ -285,6 +289,19 @@ func (e *Entry) Update(info tree.FileInfo, hash []byte) {
 		} else {
 			e.replica.markMetaChanged()
 		}
+	}
+	if info.HasMode() != e.hasMode {
+		// This is a different filesystem or the support for filesystem
+		// detection changed.
+		e.hasMode = info.HasMode()
+		e.replica.markMetaChanged()
+	}
+	hasMode := e.hasMode // same as info.HasMode()
+	if info.Mode()&hasMode != e.mode&hasMode {
+		// The permission bits got updated.
+		e.mode = info.Mode() & hasMode
+		e.replica.markChanged()
+		e.revision = e.replica.revision
 	}
 	e.UpdateHash(hash)
 }

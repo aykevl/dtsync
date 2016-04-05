@@ -410,7 +410,7 @@ func (e *Entry) CreateSymlink(name string, parentInfo, sourceInfo tree.FileInfo,
 
 	child := &Entry{
 		fileType: tree.TYPE_SYMLINK,
-		mode:     sourceInfo.Mode() & parent.hasMode,
+		mode:     sourceInfo.Mode() & parent.hasMode, // not relevant on Unix filesystems
 		hasMode:  parent.hasMode,
 		name:     name,
 		contents: []byte(contents),

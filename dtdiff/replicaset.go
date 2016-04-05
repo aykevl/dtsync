@@ -95,7 +95,7 @@ func Scan(fs1, fs2 tree.Tree) (*ReplicaSet, error) {
 				replica.AddIgnore(options.Ignore()...)
 
 				// Now we can start.
-				scanErrors[i] <- replica.scanDir(fs.Root(), replica.Root(), scanCancel[i])
+				scanErrors[i] <- replica.scan(fs, scanCancel[i])
 
 			case tree.RemoteTree:
 				reader, err := fs.RemoteScan(sendOptions[i], sendOptions[(i+1)%2])

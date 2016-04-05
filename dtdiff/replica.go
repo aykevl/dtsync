@@ -97,7 +97,7 @@ func ScanTree(fs tree.LocalFileTree, recvOptionsChan, sendOptionsChan chan tree.
 	recvOptions := <-recvOptionsChan
 	replica.AddIgnore(recvOptions.Ignore()...)
 
-	err = replica.scan(fs)
+	err = replica.scan(fs, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -502,8 +502,9 @@ func writeKeyValue(out *bufio.Writer, key, value string) error {
 	return err
 }
 
-func (r *Replica) scan(fs tree.LocalFileTree) error {
-	return r.scanDir(fs.Root(), r.Root(), nil)
+func (r *Replica) scan(fs tree.LocalFileTree, cancel chan struct{}) error {
+	r.Root().hasMode = fs.Root().Info().HasMode()
+	return r.scanDir(fs.Root(), r.Root(), cancel)
 }
 
 // scanDir scans one side of the tree, updating the status tree to the current
