@@ -519,19 +519,19 @@ func (s *Server) replyInfo2(requestId uint64, file, parent tree.FileInfo, err er
 }
 
 func (s *Server) scan(requestId uint64, optionsChan chan *ScanOptions) {
-	recvOptions := make(chan tree.ScanOptions)
-	sendOptions := make(chan tree.ScanOptions)
+	recvOptions := make(chan *tree.ScanOptions)
+	sendOptions := make(chan *tree.ScanOptions)
 
 	go func() {
 		options := <-optionsChan
-		recvOptions <- tree.NewScanOptions(options.Exclude, options.Include)
+		recvOptions <- &tree.ScanOptions{options.Exclude, options.Include}
 	}()
 
 	go func() {
 		options := <-sendOptions
 		optionsMsg := &ScanOptions{
-			Exclude: options.Exclude(),
-			Include: options.Include(),
+			Exclude: options.Exclude,
+			Include: options.Include,
 		}
 		optionsData, err := proto.Marshal(optionsMsg)
 		if err != nil {

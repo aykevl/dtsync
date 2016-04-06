@@ -149,7 +149,7 @@ type RemoteTree interface {
 	// The sendOptions are sent to the remote scanner (scan will start once
 	// received), and recvOptions is a channel from which the options sent by
 	// the remote can be read.
-	RemoteScan(sendOptions, recvOptions chan ScanOptions) (io.Reader, error)
+	RemoteScan(sendOptions, recvOptions chan *ScanOptions) (io.Reader, error)
 }
 
 type LocalTree interface {
@@ -452,29 +452,8 @@ type Copier interface {
 	Cancel() error
 }
 
-// ScanOptions sets some options in a tree.
-type ScanOptions interface {
-	Exclude() []string
-	Include() []string
-}
-
-// ScanOptionsStruct implements ScanOptions and provides exclude and include
-// lists to the other replica.
-type scanOptions struct {
-	exclude []string
-	include []string
-}
-
-func NewScanOptions(exclude, include []string) ScanOptions {
-	return scanOptions{exclude, include}
-}
-
-// Exclude returns all patterns to exclude, to send to the other replica.
-func (s scanOptions) Exclude() []string {
-	return s.exclude
-}
-
-// Include returns all patterns not to exclude, to send to the other replica.
-func (s scanOptions) Include() []string {
-	return s.include
+// ScanOptions holds some options to send to the other replica.
+type ScanOptions struct {
+	Exclude []string
+	Include []string
 }

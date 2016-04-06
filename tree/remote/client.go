@@ -297,7 +297,7 @@ func (c *Client) Close() error {
 
 // RemoteScan runs a remote scan command and returns an io.Reader with the new
 // status file.
-func (c *Client) RemoteScan(sendOptions, recvOptions chan tree.ScanOptions) (io.Reader, error) {
+func (c *Client) RemoteScan(sendOptions, recvOptions chan *tree.ScanOptions) (io.Reader, error) {
 	debugLog("\nC: RemoteScan")
 	commandScan := Command_SCAN
 	stream, _ := c.recvFile(&Request{
@@ -308,8 +308,8 @@ func (c *Client) RemoteScan(sendOptions, recvOptions chan tree.ScanOptions) (io.
 		// Send excluded files from the other replica to the remote replica.
 		options := <-sendOptions
 		optionsData, err := proto.Marshal(&ScanOptions{
-			Exclude: options.Exclude(),
-			Include: options.Include(),
+			Exclude: options.Exclude,
+			Include: options.Include,
 		})
 		if err != nil {
 			panic(err) // programming error?
@@ -331,7 +331,7 @@ func (c *Client) RemoteScan(sendOptions, recvOptions chan tree.ScanOptions) (io.
 			recvOptions <- nil
 			return
 		}
-		recvOptions <- tree.NewScanOptions(options.Exclude, options.Include)
+		recvOptions <- &tree.ScanOptions{options.Exclude, options.Include}
 	}()
 
 	return stream, nil

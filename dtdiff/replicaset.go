@@ -45,12 +45,12 @@ func Scan(fs1, fs2 tree.Tree) (*ReplicaSet, error) {
 	rs := &ReplicaSet{}
 
 	// Load and scan replica status.
-	var sendOptions [2]chan tree.ScanOptions // start scan on receive
+	var sendOptions [2]chan *tree.ScanOptions // start scan on receive
 	var scanErrors [2]chan error
 	var scanCancel [2]chan struct{}
 	trees := []tree.Tree{fs1, fs2}
 	for i := range trees {
-		sendOptions[i] = make(chan tree.ScanOptions, 1)
+		sendOptions[i] = make(chan *tree.ScanOptions, 1)
 		scanErrors[i] = make(chan error)
 		scanCancel[i] = make(chan struct{}, 1)
 	}
@@ -65,7 +65,7 @@ func Scan(fs1, fs2 tree.Tree) (*ReplicaSet, error) {
 				}
 
 				var replica *Replica
-				var myOptions tree.ScanOptions
+				var myOptions *tree.ScanOptions
 				if tree.IsNotExist(err) {
 					// loadReplica doesn't return errors when creating a new
 					// replica.
@@ -79,10 +79,10 @@ func Scan(fs1, fs2 tree.Tree) (*ReplicaSet, error) {
 				}
 				rs.set[i] = replica
 
-				myOptions = tree.NewScanOptions(
+				myOptions = &tree.ScanOptions{
 					replica.options["Exclude"],
 					replica.options["Include"],
-				)
+				}
 				replica.AddOptions(myOptions)
 
 				// Let the other replica exclude using our rules.

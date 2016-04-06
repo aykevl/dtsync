@@ -88,7 +88,7 @@ type Replica struct {
 	include            []string // paths to not exclude
 }
 
-func ScanTree(fs tree.LocalFileTree, recvOptionsChan, sendOptionsChan chan tree.ScanOptions) (*Replica, error) {
+func ScanTree(fs tree.LocalFileTree, recvOptionsChan, sendOptionsChan chan *tree.ScanOptions) (*Replica, error) {
 	var replica *Replica
 	file, err := fs.GetFile(STATUS_FILE)
 	if tree.IsNotExist(err) {
@@ -102,10 +102,10 @@ func ScanTree(fs tree.LocalFileTree, recvOptionsChan, sendOptionsChan chan tree.
 		replica, _ = loadReplica(file)
 	}
 
-	options := tree.NewScanOptions(
+	options := &tree.ScanOptions{
 		replica.options["Exclude"],
 		replica.options["Include"],
-	)
+	}
 	replica.AddOptions(options)
 	sendOptionsChan <- options
 
@@ -645,7 +645,7 @@ func (r *Replica) matchPatterns(name, relpath string, patterns []string) bool {
 	return false
 }
 
-func (r *Replica) AddOptions(options tree.ScanOptions) {
-	r.exclude = append(r.exclude, options.Exclude()...)
-	r.include = append(r.include, options.Include()...)
+func (r *Replica) AddOptions(options *tree.ScanOptions) {
+	r.exclude = append(r.exclude, options.Exclude...)
+	r.include = append(r.include, options.Include...)
 }
