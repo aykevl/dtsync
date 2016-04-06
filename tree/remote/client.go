@@ -305,10 +305,10 @@ func (c *Client) RemoteScan(sendOptions, recvOptions chan tree.ScanOptions) (io.
 	})
 
 	go func() {
-		// Send ignored files from the other replica to the remote replica.
+		// Send excluded files from the other replica to the remote replica.
 		options := <-sendOptions
 		optionsData, err := proto.Marshal(&ScanOptions{
-			Ignore: options.Ignore(),
+			Exclude: options.Exclude(),
 		})
 		if err != nil {
 			panic(err) // programming error?
@@ -330,7 +330,7 @@ func (c *Client) RemoteScan(sendOptions, recvOptions chan tree.ScanOptions) (io.
 			recvOptions <- nil
 			return
 		}
-		recvOptions <- tree.NewScanOptions(options.Ignore)
+		recvOptions <- tree.NewScanOptions(options.Exclude)
 	}()
 
 	return stream, nil

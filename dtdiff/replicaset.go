@@ -65,7 +65,7 @@ func Scan(fs1, fs2 tree.Tree) (*ReplicaSet, error) {
 				}
 
 				var replica *Replica
-				var ignore []string
+				var exclude []string
 				if tree.IsNotExist(err) {
 					// loadReplica doesn't return errors when creating a new
 					// replica.
@@ -76,15 +76,15 @@ func Scan(fs1, fs2 tree.Tree) (*ReplicaSet, error) {
 						scanErrors[i] <- err
 						return
 					}
-					ignore = replica.options["Ignore"]
-					replica.AddIgnore(ignore...)
+					exclude = replica.options["Exclude"]
+					replica.AddExclude(exclude...)
 				}
 				rs.set[i] = replica
 
-				// Let the other replica ignore using our rules.
-				sendOptions[(i+1)%2] <- tree.NewScanOptions(ignore)
+				// Let the other replica exclude using our rules.
+				sendOptions[(i+1)%2] <- tree.NewScanOptions(exclude)
 
-				// Follow ignore rules from the other replica.
+				// Follow exclude rules from the other replica.
 				options, ok := <-sendOptions[i]
 				if !ok {
 					// Something went wrong with the other replica.
@@ -92,7 +92,7 @@ func Scan(fs1, fs2 tree.Tree) (*ReplicaSet, error) {
 					scanErrors[i] <- nil
 					return
 				}
-				replica.AddIgnore(options.Ignore()...)
+				replica.AddExclude(options.Exclude()...)
 
 				// Now we can start.
 				scanErrors[i] <- replica.scan(fs, scanCancel[i])

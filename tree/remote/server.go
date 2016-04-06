@@ -110,7 +110,7 @@ func (s *Server) Run() error {
 				if recv.err == io.EOF {
 					debugLog("S: CLOSING")
 					// Closing an already-closed pipe might give errors (but we
-					// don't know, so ignore).
+					// don't know, so exclude).
 					err2 := s.reader.Close()
 					if err2 != nil {
 						debugLog("S: error on reader close:", err2)
@@ -524,13 +524,13 @@ func (s *Server) scan(requestId uint64, optionsChan chan *ScanOptions) {
 
 	go func() {
 		options := <-optionsChan
-		recvOptions <- tree.NewScanOptions(options.Ignore)
+		recvOptions <- tree.NewScanOptions(options.Exclude)
 	}()
 
 	go func() {
 		options := <-sendOptions
 		optionsMsg := &ScanOptions{
-			Ignore: options.Ignore(),
+			Exclude: options.Exclude(),
 		}
 		optionsData, err := proto.Marshal(optionsMsg)
 		if err != nil {

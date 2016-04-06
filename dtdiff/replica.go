@@ -84,7 +84,7 @@ type Replica struct {
 	knowledge          map[string]int
 	rootEntry          *Entry
 	options            textproto.MIMEHeader
-	ignore             []string // paths to ignore
+	exclude            []string // paths to exclude
 }
 
 func ScanTree(fs tree.LocalFileTree, recvOptionsChan, sendOptionsChan chan tree.ScanOptions) (*Replica, error) {
@@ -101,12 +101,12 @@ func ScanTree(fs tree.LocalFileTree, recvOptionsChan, sendOptionsChan chan tree.
 		replica, _ = loadReplica(file)
 	}
 
-	ignored := replica.options["Ignore"]
-	replica.AddIgnore(ignored...)
-	sendOptionsChan <- tree.NewScanOptions(ignored)
+	excluded := replica.options["Exclude"]
+	replica.AddExclude(excluded...)
+	sendOptionsChan <- tree.NewScanOptions(excluded)
 
 	recvOptions := <-recvOptionsChan
-	replica.AddIgnore(recvOptions.Ignore()...)
+	replica.AddExclude(recvOptions.Exclude()...)
 
 	err = replica.scan(fs, nil)
 	if err != nil {
@@ -550,9 +550,9 @@ func (r *Replica) scanDir(dir tree.Entry, statusDir *Entry, cancel chan struct{}
 		}
 
 		file, status = iterator()
-		if file != nil && r.isIgnored(file) {
+		if file != nil && r.isExcluded(file) {
 			// Keep status (don't remove) if it exists, in case the file is
-			// un-ignored. It may be desirable to make this configurable.
+			// un-excluded. It may be desirable to make this configurable.
 			if status != nil {
 				r.markMetaChanged()
 				status.removed = time.Now()
@@ -615,9 +615,9 @@ func (r *Replica) scanDir(dir tree.Entry, statusDir *Entry, cancel chan struct{}
 	return nil
 }
 
-func (r *Replica) isIgnored(file tree.Entry) bool {
+func (r *Replica) isExcluded(file tree.Entry) bool {
 	relpath := path.Join(file.RelativePath()...)
-	for _, pattern := range r.ignore {
+	for _, pattern := range r.exclude {
 		if len(pattern) == 0 {
 			continue
 		}
@@ -638,6 +638,6 @@ func (r *Replica) isIgnored(file tree.Entry) bool {
 	return false
 }
 
-func (r *Replica) AddIgnore(ignore ...string) {
-	r.ignore = append(r.ignore, ignore...)
+func (r *Replica) AddExclude(exclude ...string) {
+	r.exclude = append(r.exclude, exclude...)
 }

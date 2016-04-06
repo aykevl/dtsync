@@ -59,7 +59,7 @@ message FileInfo {
 }
 
 message ScanOptions {
-	repeated string ignore = 1;
+	repeated string exclude = 1;
 }
 
 message Error {

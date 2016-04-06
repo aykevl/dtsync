@@ -53,9 +53,9 @@ detected, this number is incremented by one.
 `Knowledge`: a key-value format to store what changes of other replicas have
 been (fully) integrated into this replica.
 
-`Option-*`: options (e.g. `Ignore`) are put in a header starting with `Option-`
-with the key after that. E.g.: `Option-Ignore: /.sync`. Options are kept even if
-the option cannot be interpreted by the parser. Other headers are removed if
+`Option-*`: options (e.g. `Exclude`) are put in a header starting with `Option-`
+with the key after that. E.g.: `Option-Exclude: /.sync`. Options are kept even
+if the option cannot be interpreted by the parser. Other headers are removed if
 they are unknown.
 
 Then follows the body, just like in HTTP. The format of the body is in TSV, with
