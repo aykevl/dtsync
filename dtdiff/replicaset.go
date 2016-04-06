@@ -66,6 +66,7 @@ func Scan(fs1, fs2 tree.Tree) (*ReplicaSet, error) {
 
 				var replica *Replica
 				var exclude []string
+				var include []string
 				if tree.IsNotExist(err) {
 					// loadReplica doesn't return errors when creating a new
 					// replica.
@@ -77,14 +78,16 @@ func Scan(fs1, fs2 tree.Tree) (*ReplicaSet, error) {
 						return
 					}
 					exclude = replica.options["Exclude"]
+					include = replica.options["Include"]
 					replica.AddExclude(exclude...)
+					replica.AddInclude(include...)
 				}
 				rs.set[i] = replica
 
 				// Let the other replica exclude using our rules.
-				sendOptions[(i+1)%2] <- tree.NewScanOptions(exclude)
+				sendOptions[(i+1)%2] <- tree.NewScanOptions(exclude, include)
 
-				// Follow exclude rules from the other replica.
+				// Insert options from the other replica.
 				options, ok := <-sendOptions[i]
 				if !ok {
 					// Something went wrong with the other replica.
@@ -93,6 +96,7 @@ func Scan(fs1, fs2 tree.Tree) (*ReplicaSet, error) {
 					return
 				}
 				replica.AddExclude(options.Exclude()...)
+				replica.AddInclude(options.Include()...)
 
 				// Now we can start.
 				scanErrors[i] <- replica.scan(fs, scanCancel[i])
@@ -152,6 +156,6 @@ func (rs *ReplicaSet) Get(index int) *Replica {
 // MarkSynced sets the generation as including each other. This is done after
 // they have been cleanly synchronized.
 func (rs *ReplicaSet) MarkSynced() {
-	rs.set[0].include(rs.set[1])
-	rs.set[1].include(rs.set[0])
+	rs.set[0].mergeKnowledge(rs.set[1])
+	rs.set[1].mergeKnowledge(rs.set[0])
 }

@@ -85,6 +85,7 @@ type Replica struct {
 	rootEntry          *Entry
 	options            textproto.MIMEHeader
 	exclude            []string // paths to exclude
+	include            []string // paths to not exclude
 }
 
 func ScanTree(fs tree.LocalFileTree, recvOptionsChan, sendOptionsChan chan tree.ScanOptions) (*Replica, error) {
@@ -102,11 +103,14 @@ func ScanTree(fs tree.LocalFileTree, recvOptionsChan, sendOptionsChan chan tree.
 	}
 
 	excluded := replica.options["Exclude"]
+	included := replica.options["Include"]
 	replica.AddExclude(excluded...)
-	sendOptionsChan <- tree.NewScanOptions(excluded)
+	replica.AddInclude(included...)
+	sendOptionsChan <- tree.NewScanOptions(excluded, included)
 
 	recvOptions := <-recvOptionsChan
 	replica.AddExclude(recvOptions.Exclude()...)
+	replica.AddInclude(recvOptions.Include()...)
 
 	err = replica.scan(fs, nil)
 	if err != nil {
@@ -177,7 +181,7 @@ func (r *Replica) Changed() bool {
 	return r.isChanged || r.isMetaChanged
 }
 
-func (r *Replica) include(other *Replica) {
+func (r *Replica) mergeKnowledge(other *Replica) {
 	for id, gen := range other.knowledge {
 		if r.knowledge[id] < gen {
 			r.isKnowledgeChanged = true
@@ -617,7 +621,11 @@ func (r *Replica) scanDir(dir tree.Entry, statusDir *Entry, cancel chan struct{}
 
 func (r *Replica) isExcluded(file tree.Entry) bool {
 	relpath := path.Join(file.RelativePath()...)
-	for _, pattern := range r.exclude {
+	return r.matchPatterns(file.Name(), relpath, r.exclude) && !r.matchPatterns(file.Name(), relpath, r.include)
+}
+
+func (r *Replica) matchPatterns(name, relpath string, patterns []string) bool {
+	for _, pattern := range patterns {
 		if len(pattern) == 0 {
 			continue
 		}
@@ -630,7 +638,7 @@ func (r *Replica) isExcluded(file tree.Entry) bool {
 		} else {
 			// Match only the name. This does not work when the pattern contains
 			// slashes.
-			if match, err := path.Match(pattern, file.Name()); match && err == nil {
+			if match, err := path.Match(pattern, name); match && err == nil {
 				return true
 			}
 		}
@@ -638,6 +646,10 @@ func (r *Replica) isExcluded(file tree.Entry) bool {
 	return false
 }
 
-func (r *Replica) AddExclude(exclude ...string) {
-	r.exclude = append(r.exclude, exclude...)
+func (r *Replica) AddExclude(patterns ...string) {
+	r.exclude = append(r.exclude, patterns...)
+}
+
+func (r *Replica) AddInclude(patterns ...string) {
+	r.include = append(r.include, patterns...)
 }

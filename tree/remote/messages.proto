@@ -60,6 +60,7 @@ message FileInfo {
 
 message ScanOptions {
 	repeated string exclude = 1;
+	repeated string include = 2;
 }
 
 message Error {

@@ -455,17 +455,26 @@ type Copier interface {
 // ScanOptions sets some options in a tree.
 type ScanOptions interface {
 	Exclude() []string
+	Include() []string
 }
 
-// ScanOptionsStruct implements ScanOptions and provides an exclude list to the
-// other replica.
-type scanOptions []string
+// ScanOptionsStruct implements ScanOptions and provides exclude and include
+// lists to the other replica.
+type scanOptions struct {
+	exclude []string
+	include []string
+}
 
-func NewScanOptions(exclude []string) ScanOptions {
-	return scanOptions(exclude)
+func NewScanOptions(exclude, include []string) ScanOptions {
+	return scanOptions{exclude, include}
 }
 
 // Exclude returns all patterns to exclude, to send to the other replica.
 func (s scanOptions) Exclude() []string {
-	return s
+	return s.exclude
+}
+
+// Include returns all patterns not to exclude, to send to the other replica.
+func (s scanOptions) Include() []string {
+	return s.include
 }
