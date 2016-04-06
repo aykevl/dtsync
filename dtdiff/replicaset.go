@@ -65,8 +65,7 @@ func Scan(fs1, fs2 tree.Tree) (*ReplicaSet, error) {
 				}
 
 				var replica *Replica
-				var exclude []string
-				var include []string
+				var myOptions tree.ScanOptions
 				if tree.IsNotExist(err) {
 					// loadReplica doesn't return errors when creating a new
 					// replica.
@@ -77,26 +76,27 @@ func Scan(fs1, fs2 tree.Tree) (*ReplicaSet, error) {
 						scanErrors[i] <- err
 						return
 					}
-					exclude = replica.options["Exclude"]
-					include = replica.options["Include"]
-					replica.AddExclude(exclude...)
-					replica.AddInclude(include...)
 				}
 				rs.set[i] = replica
 
+				myOptions = tree.NewScanOptions(
+					replica.options["Exclude"],
+					replica.options["Include"],
+				)
+				replica.AddOptions(myOptions)
+
 				// Let the other replica exclude using our rules.
-				sendOptions[(i+1)%2] <- tree.NewScanOptions(exclude, include)
+				sendOptions[(i+1)%2] <- myOptions
 
 				// Insert options from the other replica.
-				options, ok := <-sendOptions[i]
+				otherOptions, ok := <-sendOptions[i]
 				if !ok {
 					// Something went wrong with the other replica.
 					// Cancel now.
 					scanErrors[i] <- nil
 					return
 				}
-				replica.AddExclude(options.Exclude()...)
-				replica.AddInclude(options.Include()...)
+				replica.AddOptions(otherOptions)
 
 				// Now we can start.
 				scanErrors[i] <- replica.scan(fs, scanCancel[i])
