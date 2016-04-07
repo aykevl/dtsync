@@ -34,6 +34,7 @@ package memory
 import (
 	"bytes"
 	"io"
+	"path"
 	"strings"
 	"time"
 
@@ -145,6 +146,8 @@ func (e *Entry) Size() int64 {
 		return int64(len(e.contents))
 	case tree.TYPE_DIRECTORY:
 		return int64(len(e.children))
+	case tree.TYPE_NOTFOUND:
+		return 0
 	default:
 		panic("unknown fileType")
 	}
@@ -203,13 +206,55 @@ func (e *Entry) ReadInfo(path []string) (tree.FileInfo, error) {
 
 // List returns a list of directory entries for directories. It returns an error
 // when attempting to list something other than a directory.
-func (e *Entry) List() ([]tree.Entry, error) {
+func (e *Entry) List(options tree.ListOptions) ([]tree.Entry, error) {
 	if e.fileType != tree.TYPE_DIRECTORY {
 		return nil, tree.ErrNoDirectory(e.RelativePath())
 	}
 
 	ret := make([]tree.Entry, 0, len(e.children))
 	for _, entry := range e.children {
+		// Quick path, for normal files.
+		if entry.fileType != tree.TYPE_SYMLINK || options.Follow == nil || !options.Follow(entry.RelativePath()) {
+			ret = append(ret, entry)
+			continue
+		}
+
+		// Handle symlink.
+		entryOrig := entry
+
+		// Keep a set of followed links, to detect circular references.
+		followed := make(map[*Entry]struct{})
+		for entry != nil && entry.fileType == tree.TYPE_SYMLINK {
+			entry = entry.follow()
+			if _, ok := followed[entry]; ok {
+				// This is a circular reference (this entry exists in the
+				// path). A 'not found' error isn't entirely correct, but
+				// otherwise we'd have to define yet another filetype for this
+				// error. Maybe actually reporting this as an error would be
+				// the better solution.
+				entry = nil
+			}
+			followed[entry] = struct{}{}
+		}
+
+		if entry == nil {
+			entry = &Entry{
+				fileType: tree.TYPE_NOTFOUND,
+				name:     entryOrig.Name(),
+				parent:   entryOrig.parent,
+			}
+		} else {
+			// Clone the Entry if a file was found
+			// I hope this works out well.
+			// TODO: separate Entry and Node, make a new Entry but keep the Node.
+			// The Node is then a filesystem inode (which will be required
+			// anyway for hardlink and rename support).
+			clone := *entry
+			entry = &clone
+			entry.name = entryOrig.Name()
+			entry.parent = entryOrig.parent
+		}
+
 		ret = append(ret, entry)
 	}
 	tree.SortEntries(ret)
@@ -220,10 +265,34 @@ func (e *Entry) List() ([]tree.Entry, error) {
 func (e *Entry) get(path []string) *Entry {
 	child := e
 	for _, part := range path {
-		child = child.children[part]
-		if child == nil {
-			return nil
+		if part == ".." {
+			if !child.isRoot() {
+				child = child.parent
+			}
+		} else if part == "." {
+			child = child
+		} else {
+			child = child.children[part]
+			if child == nil {
+				return nil
+			}
 		}
+	}
+	return child
+}
+
+// follow returns the Entry this symlink points to.
+// Only call this function on symlinks.
+func (e *Entry) follow() *Entry {
+	if e.fileType != tree.TYPE_SYMLINK {
+		panic("this is not a symlink that is followed")
+	}
+	relpath := path.Clean(string(e.contents))
+	var child *Entry
+	if path.IsAbs(relpath) {
+		child = e.root().get(strings.Split(relpath[1:], "/"))
+	} else {
+		child = e.parent.get(strings.Split(relpath, "/"))
 	}
 	return child
 }

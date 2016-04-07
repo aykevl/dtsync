@@ -30,6 +30,8 @@ enum FileType {
 	UNKNOWN   = 0; // must not be used
 	REGULAR   = 1;
 	DIRECTORY = 2;
+	SYMLINK   = 3;
+	NOTFOUND  = 4;
 }
 
 enum DataStatus {
@@ -61,6 +63,7 @@ message FileInfo {
 message ScanOptions {
 	repeated string exclude = 1;
 	repeated string include = 2;
+	repeated string follow  = 3;
 }
 
 message Error {

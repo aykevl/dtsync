@@ -86,6 +86,7 @@ type Replica struct {
 	options            textproto.MIMEHeader
 	exclude            []string // paths to exclude
 	include            []string // paths to not exclude
+	follow             []string // paths that should not be treated as symlinks
 }
 
 func ScanTree(fs tree.LocalFileTree, recvOptionsChan, sendOptionsChan chan *tree.ScanOptions) (*Replica, error) {
@@ -105,6 +106,7 @@ func ScanTree(fs tree.LocalFileTree, recvOptionsChan, sendOptionsChan chan *tree
 	options := &tree.ScanOptions{
 		replica.options["Exclude"],
 		replica.options["Include"],
+		replica.options["Follow"],
 	}
 	replica.addScanOptions(options)
 	sendOptionsChan <- options
@@ -537,7 +539,11 @@ func (r *Replica) scan(fs tree.LocalFileTree, cancel chan struct{}) error {
 // scanDir scans one side of the tree, updating the status tree to the current
 // status.
 func (r *Replica) scanDir(dir tree.Entry, statusDir *Entry, cancel chan struct{}) error {
-	fileList, err := dir.List()
+	fileList, err := dir.List(tree.ListOptions{
+		Follow: func(parts []string) bool {
+			return r.matchPatterns(parts[len(parts)-1], path.Join(parts...), r.follow)
+		},
+	})
 	if err != nil {
 		return err
 	}
@@ -649,10 +655,12 @@ func (r *Replica) scanOptions() *tree.ScanOptions {
 	return &tree.ScanOptions{
 		r.options["Exclude"],
 		r.options["Include"],
+		r.options["Follow"],
 	}
 }
 
 func (r *Replica) addScanOptions(options *tree.ScanOptions) {
 	r.exclude = append(r.exclude, options.Exclude...)
 	r.include = append(r.include, options.Include...)
+	r.follow = append(r.follow, options.Follow...)
 }

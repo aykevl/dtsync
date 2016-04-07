@@ -119,7 +119,7 @@ func syncRoots(t *testing.T, scheme1, scheme2 string) {
 		if !ok {
 			continue
 		}
-		list, err := fs.Root().List()
+		list, err := fs.Root().List(tree.ListOptions{})
 		if err != nil {
 			t.Errorf("could not get list for %s: %s", fs, err)
 		}
@@ -253,20 +253,46 @@ func runPatternTest(t *testing.T, fs1, fs2 tree.TestTree) {
 
 	// Set up filesystem.
 	files := []testCase{
+		{"dir/link1-1", ACTION_COPY, "l ../link1-1", 0},
+		{"dir/link1-2", ACTION_COPY, "l ../link1-2", 0},
+		{"dir/link1-3", ACTION_COPY, "l nofile", 0},
 		{"file", ACTION_COPY, "f abc", 0},
 		{"ignore1", ACTION_COPY, "f x", 0},
 		{"ignore1-not", ACTION_COPY, "f x", 0},
 		{"ignore2", ACTION_COPY, "f x", 0},
 		{"ignore2-not", ACTION_COPY, "f x", 0},
+		{"link1-1", ACTION_COPY, "l file", 0},      // found, direct
+		{"link1-2", ACTION_COPY, "l nofile", 0},    // not found, direct
+		{"link1-3", ACTION_COPY, "l link1-1", 0},   // found, indirect
+		{"link1-4", ACTION_COPY, "l link1-2", 0},   // not found, indirect
+		{"link1-5", ACTION_COPY, "l dir", 0},       // link to directory
+		{"link1-6", ACTION_COPY, "l ././file", 0},  // multiple levels of current dir
+		{"link2-1", ACTION_COPY, "l file", 0},      // found, direct
+		{"link2-2", ACTION_COPY, "l nofile", 0},    // not found, direct
+		{"link2-c1", ACTION_COPY, "l link2-c2", 0}, // circle
+		{"link2-c2", ACTION_COPY, "l link2-c1", 0}, // circle
 	}
 
 	effects := []struct {
 		direction int
 		name      string
 	}{
+		{1, "dir/link1-1"},
+		{0, "dir/link1-2"},
+		{0, "dir/link1-3"},
 		{1, "file"},
 		{1, "ignore1-not"},
 		{1, "ignore2-not"},
+		{1, "link1-1"},
+		{0, "link1-2"},
+		{1, "link1-3"},
+		{0, "link1-4"},
+		{1, "link1-5"},
+		{1, "link1-6"},
+		{1, "link2-1"},
+		{0, "link2-2"},
+		{0, "link2-c1"},
+		{0, "link2-c2"},
 	}
 
 	for _, tc := range files {
@@ -291,6 +317,7 @@ func runPatternTest(t *testing.T, fs1, fs2 tree.TestTree) {
 	fs1.PutFile([]string{dtdiff.STATUS_FILE}, []byte(`Content-Type: text/tab-separated-values; charset=utf-8
 Identity: fs1
 Generation: 1
+Option-Follow: link1-*
 Option-Exclude: ignore1*
 Option-Include: ignore1-not*
 
@@ -299,6 +326,7 @@ path	fingerprint	revision
 	fs2.PutFile([]string{dtdiff.STATUS_FILE}, []byte(`Content-Type: text/tab-separated-values; charset=utf-8
 Identity: fs2
 Generation: 1
+Option-Follow: link2-*
 Option-Exclude: ignore2*
 Option-Include: ignore2-not*
 
@@ -547,11 +575,11 @@ func runTestCaseSync(t *testing.T, tc *testCase, fs1, fs2 tree.TestTree, jobDire
 	}
 
 	if localSync {
-		list1, err := fs1.(tree.LocalTree).Root().List()
+		list1, err := fs1.(tree.LocalTree).Root().List(tree.ListOptions{})
 		if err != nil {
 			t.Errorf("could not get list for %s: %s", fs1, err)
 		}
-		list2, err := fs2.(tree.LocalTree).Root().List()
+		list2, err := fs2.(tree.LocalTree).Root().List(tree.ListOptions{})
 		if err != nil {
 			t.Errorf("could not get list for %s: %s", fs2, err)
 		}
@@ -588,7 +616,7 @@ func runTestCaseScan(t *testing.T, tc *testCase, fs1, fs2 tree.TestTree, jobDire
 }
 
 func getEntriesExcept(parent tree.Entry, except string) []tree.Entry {
-	list, err := parent.List()
+	list, err := parent.List(tree.ListOptions{})
 	assert(err)
 
 	listEntries := make([]tree.Entry, 0, len(list)-1)

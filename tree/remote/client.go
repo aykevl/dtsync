@@ -310,6 +310,7 @@ func (c *Client) RemoteScan(sendOptions, recvOptions chan *tree.ScanOptions) (io
 		optionsData, err := proto.Marshal(&ScanOptions{
 			Exclude: options.Exclude,
 			Include: options.Include,
+			Follow:  options.Follow,
 		})
 		if err != nil {
 			panic(err) // programming error?
@@ -331,7 +332,7 @@ func (c *Client) RemoteScan(sendOptions, recvOptions chan *tree.ScanOptions) (io
 			recvOptions <- nil
 			return
 		}
-		recvOptions <- &tree.ScanOptions{options.Exclude, options.Include}
+		recvOptions <- &tree.ScanOptions{options.Exclude, options.Include, options.Follow}
 	}()
 
 	return stream, nil

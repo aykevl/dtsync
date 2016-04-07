@@ -169,6 +169,12 @@ func (r *Result) addSingleJob(job *Job, status1, statusDir2 *dtdiff.Entry, direc
 			job.action = ACTION_REMOVE
 			job.direction = -direction
 		}
+
+		if job.status1 != nil && job.status1.Type() == tree.TYPE_NOTFOUND || job.status2 != nil && job.status2.Type() == tree.TYPE_NOTFOUND {
+			// Maybe this should be an error.
+			job.direction = 0
+		}
+
 		r.jobs = append(r.jobs, job)
 	}
 }

@@ -524,7 +524,7 @@ func (s *Server) scan(requestId uint64, optionsChan chan *ScanOptions) {
 
 	go func() {
 		options := <-optionsChan
-		recvOptions <- &tree.ScanOptions{options.Exclude, options.Include}
+		recvOptions <- &tree.ScanOptions{options.Exclude, options.Include, options.Follow}
 	}()
 
 	go func() {
@@ -532,6 +532,7 @@ func (s *Server) scan(requestId uint64, optionsChan chan *ScanOptions) {
 		optionsMsg := &ScanOptions{
 			Exclude: options.Exclude,
 			Include: options.Include,
+			Follow:  options.Follow,
 		}
 		optionsData, err := proto.Marshal(optionsMsg)
 		if err != nil {

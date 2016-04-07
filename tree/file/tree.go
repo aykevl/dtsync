@@ -223,7 +223,7 @@ func (r *Tree) Remove(file tree.FileInfo) (tree.FileInfo, error) {
 func (e *Entry) removeSelf() error {
 	if e.Type() == tree.TYPE_DIRECTORY {
 		// remove children first
-		list, err := e.List()
+		list, err := e.List(tree.ListOptions{})
 		if err != nil {
 			return err
 		}

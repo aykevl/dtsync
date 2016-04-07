@@ -32,8 +32,11 @@
 package file
 
 import (
-	"golang.org/x/sys/unix"
+	"os"
+	"syscall"
 	"time"
+
+	"golang.org/x/sys/unix"
 )
 
 // Lchtimes changes the ModTime of a file (like os.Chtimes) but does not follow symlinks.
@@ -43,4 +46,20 @@ func Lchtimes(path string, atime time.Time, mtime time.Time) error {
 		unix.NsecToTimespec(mtime.UnixNano()),
 	}
 	return unix.UtimesNanoAt(unix.AT_FDCWD, path, ts, unix.AT_SYMLINK_NOFOLLOW)
+}
+
+// isLoop returns true if this is an ELOOP error (too many levels of symbolic
+// links).
+func isLoop(err error) bool {
+	if err == nil {
+		return false
+	}
+	pathError, ok := err.(*os.PathError)
+	if !ok {
+		return false
+	}
+	if pathError.Err == syscall.ELOOP {
+		return true
+	}
+	return true
 }

@@ -51,6 +51,7 @@ const (
 	TYPE_REGULAR   Type = 1
 	TYPE_DIRECTORY Type = 2
 	TYPE_SYMLINK   Type = 3
+	TYPE_NOTFOUND  Type = 4
 )
 
 func (t Type) Char() string {
@@ -61,6 +62,8 @@ func (t Type) Char() string {
 		return "d"
 	case TYPE_SYMLINK:
 		return "l"
+	case TYPE_NOTFOUND:
+		return "!"
 	default:
 		return "?"
 	}
@@ -193,7 +196,7 @@ type Entry interface {
 	Tree() Tree
 	// Return a list of children, in alphabetic order.
 	// Returns an error when this is not a directory.
-	List() ([]Entry, error)
+	List(ListOptions) ([]Entry, error)
 }
 
 // Copy copies the object indicated by the source to the target in the other
@@ -453,7 +456,13 @@ type Copier interface {
 }
 
 // ScanOptions holds some options to send to the other replica.
+// TODO: replica ID (to compare)
 type ScanOptions struct {
 	Exclude []string
 	Include []string
+	Follow  []string
+}
+
+type ListOptions struct {
+	Follow func([]string) bool
 }

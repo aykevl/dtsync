@@ -34,9 +34,9 @@ package file
 
 import (
 	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
+	"sort"
 	"time"
 
 	"github.com/aykevl/dtsync/tree"
@@ -51,9 +51,10 @@ const (
 // Entry is one file or directory in the filesystem. It additionally contains
 // it's name, parent, root, and stat() result.
 type Entry struct {
-	root *Tree
-	path []string
-	st   os.FileInfo
+	root     *Tree
+	path     []string
+	st       os.FileInfo
+	notFound bool
 }
 
 // String returns a string representation of this file, for debugging.
@@ -125,6 +126,9 @@ func (e *Entry) childPath(name string) []string {
 // Type returns the file type (regular, directory, or unknown). More types may
 // be added in the future.
 func (e *Entry) Type() tree.Type {
+	if e.notFound {
+		return tree.TYPE_NOTFOUND
+	}
 	switch e.st.Mode() & os.ModeType {
 	case 0:
 		return tree.TYPE_REGULAR
@@ -181,6 +185,9 @@ func (e *Entry) Hash() ([]byte, error) {
 // expensive to calculate and can return errors, it is left to the caller to use
 // it.
 func (e *Entry) makeInfo(hash []byte) tree.FileInfo {
+	if e.notFound {
+		return tree.NewFileInfo(e.RelativePath(), e.Type(), 0, 0, time.Time{}, 0, nil)
+	}
 	return tree.NewFileInfo(e.RelativePath(), e.Type(), e.Mode(), e.HasMode(), e.ModTime(), e.Size(), hash)
 }
 
@@ -206,19 +213,46 @@ func (e *Entry) Tree() tree.Tree {
 }
 
 // List returns a directory listing, sorted by name.
-func (e *Entry) List() ([]tree.Entry, error) {
-	list, err := ioutil.ReadDir(e.fullPath())
+func (e *Entry) List(options tree.ListOptions) ([]tree.Entry, error) {
+	dirfp, err := os.Open(e.fullPath())
 	if err != nil {
 		return nil, err
 	}
-	listEntries := make([]tree.Entry, len(list))
-	for i, st := range list {
-		listEntries[i] = &Entry{
-			root: e.root,
-			path: e.childPath(st.Name()),
-			st:   st,
-		}
+	defer dirfp.Close()
+
+	// Read the list of names from the directory.
+	nameList, err := dirfp.Readdirnames(-1)
+	if err != nil {
+		return nil, err
 	}
-	tree.SortEntries(listEntries)
-	return listEntries, nil
+	sort.Strings(nameList)
+
+	// Fill Entry structs.
+	entryList := make([]tree.Entry, len(nameList))
+	for i, name := range nameList {
+		entry := &Entry{
+			root: e.root,
+			path: e.childPath(name),
+		}
+		// TODO: use fstatat with AT_SYMLINK_NOFOLLOW (set or not set)
+		if options.Follow != nil && options.Follow(entry.RelativePath()) {
+			entry.st, err = os.Stat(entry.fullPath())
+			if os.IsNotExist(err) || isLoop(err) {
+				err = nil
+				entry = &Entry{
+					root:     e.root,
+					path:     e.childPath(name),
+					notFound: true,
+				}
+			}
+		} else {
+			entry.st, err = os.Lstat(entry.fullPath())
+		}
+		if err != nil {
+			return nil, err
+		}
+		entryList[i] = entry
+	}
+
+	return entryList, nil
 }

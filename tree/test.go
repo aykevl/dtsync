@@ -481,7 +481,7 @@ func TreeTest(t Tester, fs1, fs2 TestTree) {
 	for i, tc := range removeTests {
 		if localFS, ok := tc.fs.(LocalTree); ok {
 			root := localFS.Root()
-			list, err := root.List()
+			list, err := root.List(ListOptions{})
 			if err != nil {
 				t.Fatalf("could not list directory contents of %s: %s", root, err)
 			}
@@ -495,7 +495,7 @@ func TreeTest(t Tester, fs1, fs2 TestTree) {
 		}
 		if localFS, ok := tc.fs.(LocalTree); ok {
 			root := localFS.Root()
-			list, err := root.List()
+			list, err := root.List(ListOptions{})
 			if err != nil {
 				t.Fatalf("could not list directory contents of %s: %s", root, err)
 			}
@@ -568,7 +568,7 @@ func sameInfo(info1, info2 FileInfo) bool {
 // checkFile tests whether the file exists at a place in the index and checks
 // the number of children the directory has.
 func checkFile(t Tester, dir Entry, file Entry, index, length int, relpath string) {
-	l, err := dir.List()
+	l, err := dir.List(ListOptions{})
 	if err != nil {
 		t.Error("could not list directory:", err)
 		return
@@ -588,7 +588,7 @@ func checkFile(t Tester, dir Entry, file Entry, index, length int, relpath strin
 // checkInfo tests whether the file exists at a place in the index and checks
 // the number of children the directory has.
 func checkInfo(t Tester, dir Entry, info FileInfo, index, length int, relpath string) {
-	l, err := dir.List()
+	l, err := dir.List(ListOptions{})
 	if err != nil {
 		t.Error("could not list directory:", err)
 		return
@@ -607,7 +607,7 @@ func checkInfo(t Tester, dir Entry, info FileInfo, index, length int, relpath st
 
 // getFile returns the entry for the file with that name in the parent.
 func getFile(parent Entry, name string) Entry {
-	list, err := parent.List()
+	list, err := parent.List(ListOptions{})
 	if err != nil {
 		panic(err) // must not happen
 	}
@@ -659,11 +659,11 @@ func Equal(file1, file2 Entry, includeDirModTime bool) (bool, error) {
 		return hashes[0] != nil && bytes.Equal(hashes[0], hashes[1]), nil
 
 	case TYPE_DIRECTORY:
-		list1, err := file1.List()
+		list1, err := file1.List(ListOptions{})
 		if err != nil {
 			return false, err
 		}
-		list2, err := file2.List()
+		list2, err := file2.List(ListOptions{})
 		if err != nil {
 			return false, err
 		}

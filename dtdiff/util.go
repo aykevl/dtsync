@@ -150,6 +150,8 @@ func parseFingerprint(fingerprint string) (fingerprintInfo, error) {
 		info.fileType = tree.TYPE_DIRECTORY
 	case "l":
 		info.fileType = tree.TYPE_SYMLINK
+	case "!":
+		info.fileType = tree.TYPE_NOTFOUND
 	default:
 		info.fileType = tree.TYPE_UNKNOWN
 	}
