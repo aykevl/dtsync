@@ -212,6 +212,7 @@ path	fingerprint	revision
 		for _, swapped := range []bool{false, true} {
 			for _, fsCheckWith := range []tree.TestTree{fs2, fs1} {
 				for _, tc := range testCases {
+					t.Log("Action:", tc.action, tc.file)
 					applyTestCase(t, fs1, tc)
 					runTestCase(t, fs1, fs2, fsCheck, fsCheckWith, swapped, scanTwice, tc)
 				}
@@ -226,11 +227,112 @@ path	fingerprint	revision
 			}
 		}
 	}
+
+	for _, schemes := range [][]string{{scheme1, scheme2}, {scheme2, scheme1}} {
+		fs1 = newTestRoot(t, schemes[0])
+		fs2 = newTestRoot(t, schemes[1])
+		defer removeTestRoots(t, fs1, fs2)
+		runPatternTest(t, fs1, fs2)
+		if schemes[0] == schemes[1] {
+			break
+		}
+	}
+
+	if t.Failed() {
+		// Otherwise an error is printed on the next check.
+		t.FailNow()
+	}
+}
+
+func runPatternTest(t *testing.T, fs1, fs2 tree.TestTree) {
+	for _, fs := range []tree.TestTree{fs1, fs2} {
+		source := tree.NewFileInfo(nil, tree.TYPE_DIRECTORY, 0755, 0777, time.Now(), 0, nil)
+		_, err := fs.CreateDir("dir", &tree.FileInfoStruct{}, source)
+		assert(err)
+	}
+
+	// Set up filesystem.
+	files := []testCase{
+		{"file", ACTION_COPY, "f abc", 0},
+		{"ignore1", ACTION_COPY, "f x", 0},
+		{"ignore1-not", ACTION_COPY, "f x", 0},
+		{"ignore2", ACTION_COPY, "f x", 0},
+		{"ignore2-not", ACTION_COPY, "f x", 0},
+	}
+
+	effects := []struct {
+		direction int
+		name      string
+	}{
+		{1, "file"},
+		{1, "ignore1-not"},
+		{1, "ignore2-not"},
+	}
+
+	for _, tc := range files {
+		applyTestCase(t, fs1, tc)
+	}
+
+	result, err := Scan(fs1, fs2)
+	if err != nil {
+		t.Fatal("could not scan in pattern test:", err)
+	}
+
+	if len(result.Jobs()) != len(files) {
+		t.Errorf("number of jobs is unexpected within pattern test (expected %d, got %d)", len(files), len(result.Jobs()))
+	}
+
+	for _, job := range result.Jobs() {
+		if job.Direction() != 1 {
+			t.Errorf("job direction %s is not left-to-right but %d", job, job.Direction())
+		}
+	}
+
+	fs1.PutFile([]string{dtdiff.STATUS_FILE}, []byte(`Content-Type: text/tab-separated-values; charset=utf-8
+Identity: fs1
+Generation: 1
+Option-Exclude: ignore1*
+Option-Include: ignore1-not*
+
+path	fingerprint	revision
+`))
+	fs2.PutFile([]string{dtdiff.STATUS_FILE}, []byte(`Content-Type: text/tab-separated-values; charset=utf-8
+Identity: fs2
+Generation: 1
+Option-Exclude: ignore2*
+Option-Include: ignore2-not*
+
+path	fingerprint	revision
+`))
+
+	result, err = Scan(fs1, fs2)
+	if err != nil {
+		t.Fatal("could not scan again in pattern test:", err)
+	}
+
+	if len(result.Jobs()) != len(effects) {
+		t.Errorf("number of jobs is unexpected after pattern tests (expected %d, got %d)", len(effects), len(result.Jobs()))
+	}
+
+	for i, effect := range effects {
+		if i >= len(result.Jobs()) {
+			break
+		}
+		job := result.Jobs()[i]
+		if job.Path() != effect.name {
+			t.Errorf("job #%d %s should have name %s", i, job, effect.name)
+			continue
+		}
+		if job.Action() != ACTION_COPY {
+			t.Errorf("job #%d %s should be copy", i, job)
+		}
+		if job.Direction() != effect.direction {
+			t.Errorf("job #%d %s direction is not %d but %d", i, job, effect.direction, job.Direction())
+		}
+	}
 }
 
 func applyTestCase(t *testing.T, fs tree.TestTree, tc testCase) {
-	t.Log("Action:", tc.action, tc.file)
-
 	parts := strings.Split(tc.file, "/")
 	name := parts[len(parts)-1]
 
