@@ -32,6 +32,7 @@ import (
 	"bytes"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/aykevl/dtsync/tree"
@@ -65,7 +66,7 @@ type Entry struct {
 
 // String function, for debugging purposes
 func (e *Entry) String() string {
-	return "dtdiff.Entry(" + e.name + "," + e.revision.String() + ")"
+	return "dtdiff.Entry(" + strings.Join(e.RelativePath(), "/") + "," + e.revision.String() + ")"
 }
 
 // Name returns the name of this entry
