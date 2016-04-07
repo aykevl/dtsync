@@ -34,6 +34,7 @@ package memory
 import (
 	"bytes"
 	"io"
+	"strings"
 	"time"
 
 	"github.com/aykevl/dtsync/tree"
@@ -69,7 +70,7 @@ func NewRoot() *Entry {
 
 // String returns a string for debugging purposes (pretty printing).
 func (e *Entry) String() string {
-	return "memory.Entry(" + e.name + ")"
+	return "memory.Entry(" + e.fileType.Char() + "," + strings.Join(e.RelativePath(), "/") + ")"
 }
 
 // Close does nothing: there are no resources allocated that won't be collected
