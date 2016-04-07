@@ -138,13 +138,15 @@ func loadReplica(file io.Reader) (*Replica, error) {
 		}
 		r.knowledge = make(map[string]int, 1)
 		r.knowledge[r.identity] = r.generation
-		return r, nil
+
+	} else {
+		err := r.load(file)
+		if err != nil {
+			return nil, err
+		}
 	}
 
-	err := r.load(file)
-	if err != nil {
-		return nil, err
-	}
+	r.rootEntry.revision = revision{r.identity, 1}
 
 	return r, nil
 }
