@@ -148,37 +148,28 @@ func (r *Result) reconcile(statusDir1, statusDir2 *dtdiff.Entry) {
 			}
 
 			if status1 != nil {
-				if statusDir2 != nil {
-					if !statusDir2.HasRevision(status1) {
-						job.action = ACTION_COPY
-						job.direction = 1
-					} else {
-						// TODO: check for conflicts (a new or updated file
-						// inside status1).
-						job.action = ACTION_REMOVE
-						job.direction = -1
-					}
-					r.jobs = append(r.jobs, job)
-				}
-
+				r.addSingleJob(job, status1, statusDir2, 1)
 			} else if status2 != nil {
-				if statusDir1 != nil {
-					if !statusDir1.HasRevision(status2) {
-						job.action = ACTION_COPY
-						job.direction = -1
-					} else {
-						// TODO: check for conflicts (a new or updated file
-						// inside status1).
-						job.action = ACTION_REMOVE
-						job.direction = 1
-					}
-					r.jobs = append(r.jobs, job)
-				}
-
+				r.addSingleJob(job, status2, statusDir1, -1)
 			} else {
 				panic("unreachable")
 			}
 		}
+	}
+}
+
+func (r *Result) addSingleJob(job *Job, status1, statusDir2 *dtdiff.Entry, direction int) {
+	if statusDir2 != nil {
+		if !statusDir2.HasRevision(status1) {
+			job.action = ACTION_COPY
+			job.direction = direction
+		} else {
+			// TODO: check for conflicts (a new or updated file
+			// inside status1).
+			job.action = ACTION_REMOVE
+			job.direction = -direction
+		}
+		r.jobs = append(r.jobs, job)
 	}
 }
 
