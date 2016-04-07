@@ -106,10 +106,10 @@ func ScanTree(fs tree.LocalFileTree, recvOptionsChan, sendOptionsChan chan *tree
 		replica.options["Exclude"],
 		replica.options["Include"],
 	}
-	replica.AddOptions(options)
+	replica.addScanOptions(options)
 	sendOptionsChan <- options
 
-	replica.AddOptions(<-recvOptionsChan)
+	replica.addScanOptions(<-recvOptionsChan)
 
 	err = replica.scan(fs, nil)
 	if err != nil {
@@ -645,7 +645,14 @@ func (r *Replica) matchPatterns(name, relpath string, patterns []string) bool {
 	return false
 }
 
-func (r *Replica) AddOptions(options *tree.ScanOptions) {
+func (r *Replica) scanOptions() *tree.ScanOptions {
+	return &tree.ScanOptions{
+		r.options["Exclude"],
+		r.options["Include"],
+	}
+}
+
+func (r *Replica) addScanOptions(options *tree.ScanOptions) {
 	r.exclude = append(r.exclude, options.Exclude...)
 	r.include = append(r.include, options.Include...)
 }

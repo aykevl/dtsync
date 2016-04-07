@@ -79,11 +79,8 @@ func Scan(fs1, fs2 tree.Tree) (*ReplicaSet, error) {
 				}
 				rs.set[i] = replica
 
-				myOptions = &tree.ScanOptions{
-					replica.options["Exclude"],
-					replica.options["Include"],
-				}
-				replica.AddOptions(myOptions)
+				myOptions = replica.scanOptions()
+				replica.addScanOptions(myOptions)
 
 				// Let the other replica exclude using our rules.
 				sendOptions[(i+1)%2] <- myOptions
@@ -96,7 +93,7 @@ func Scan(fs1, fs2 tree.Tree) (*ReplicaSet, error) {
 					scanErrors[i] <- nil
 					return
 				}
-				replica.AddOptions(otherOptions)
+				replica.addScanOptions(otherOptions)
 
 				// Now we can start.
 				scanErrors[i] <- replica.scan(fs, scanCancel[i])
