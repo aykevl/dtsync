@@ -314,6 +314,10 @@ func (e *Entry) Update(info tree.FileInfo, hash []byte, source *Entry) {
 			e.replica.markMetaChanged()
 		}
 	}
+	if e.fileType != tree.TYPE_DIRECTORY {
+		e.children = nil
+	}
+
 	if info.HasMode()&^e.hasMode != 0 {
 		// There are new permission bits. Mark as changed so permissions are
 		// compared.
@@ -337,6 +341,7 @@ func (e *Entry) Update(info tree.FileInfo, hash []byte, source *Entry) {
 			e.revision = e.replica.revision
 		}
 	}
+
 	e.UpdateHash(hash, source)
 }
 
