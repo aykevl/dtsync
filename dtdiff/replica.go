@@ -547,7 +547,7 @@ func (r *Replica) scanDir(dir tree.Entry, statusDir *Entry, cancel chan struct{}
 	if err != nil {
 		return err
 	}
-	iterator := nextFileStatus(fileList, statusDir.List())
+	iterator := nextFileStatus(fileList, statusDir.rawList())
 
 	var file tree.Entry
 	var status *Entry
@@ -593,6 +593,10 @@ func (r *Replica) scanDir(dir tree.Entry, statusDir *Entry, cancel chan struct{}
 				panic(err) // must not happen
 			}
 		} else {
+			if !status.removed.IsZero() {
+				status.removed = time.Time{}
+			}
+
 			// update status (if needed)
 			oldHash := status.Hash()
 			var newHash []byte

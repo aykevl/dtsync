@@ -249,10 +249,7 @@ func (e *Entry) isRoot() bool {
 }
 
 func (e *Entry) List() []*Entry {
-	list := make([]*Entry, 0, len(e.children))
-	for _, entry := range e.children {
-		list = append(list, entry)
-	}
+	list := e.rawList()
 
 	// Remove removed children from the list.
 	p := 0
@@ -265,7 +262,14 @@ func (e *Entry) List() []*Entry {
 			p++
 		}
 	}
-	list = list[:p]
+	return list[:p]
+}
+
+func (e *Entry) rawList() []*Entry {
+	list := make([]*Entry, 0, len(e.children))
+	for _, entry := range e.children {
+		list = append(list, entry)
+	}
 
 	sortEntries(list)
 	return list
