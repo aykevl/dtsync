@@ -87,31 +87,53 @@ type Job struct {
 
 // String returns a representation of this job for debugging.
 func (j *Job) String() string {
-	return "Job(" + j.Action().String() + "," + j.Name() + ")"
+	return "Job(" + j.Action().String() + "," + j.Path() + ")"
 }
 
 // Name returns the filename of the file to be copied, updated, or removed.
 func (j *Job) Name() string {
-	var name1, name2 string
-	if j.status1 != nil {
-		name1 = j.status1.Name()
-	}
-	if j.status2 != nil {
-		name2 = j.status2.Name()
-	}
-	if j.Action() == ACTION_REMOVE {
-		name1, name2 = name2, name1
-	}
+	status1, status2 := j.primary()
 	switch j.Direction() {
 	case 1:
-		return name1
+		return status1.Name()
 	case 0:
-		return name1 + "," + name2
+		return status1.Name() + "," + status2.Name()
 	case -1:
-		return name2
+		return status2.Name()
 	default:
 		panic("unknown direction")
 	}
+}
+
+// Path returns the relative path separated by forward slashes (/). Just like
+// Name().
+func (j *Job) Path() string {
+	status1, status2 := j.primary()
+	switch j.Direction() {
+	case 1:
+		return path.Join(status1.RelativePath()...)
+	case 0:
+		switch {
+		case status1 == nil:
+			return path.Join(status2.RelativePath()...)
+		case status2 == nil:
+			return path.Join(status1.RelativePath()...)
+		default:
+			return path.Join(status1.RelativePath()...) + "," + path.Join(status2.RelativePath()...)
+		}
+	case -1:
+		return path.Join(status2.RelativePath()...)
+	default:
+		panic("unknown direction")
+	}
+}
+
+func (j *Job) primary() (*dtdiff.Entry, *dtdiff.Entry) {
+	status1, status2 := j.status1, j.status2
+	if j.Action() == ACTION_REMOVE {
+		status1, status2 = status2, status1
+	}
+	return status1, status2
 }
 
 // Apply this job (copying, updating, or removing).
