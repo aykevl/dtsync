@@ -140,7 +140,7 @@ func (e *Entry) addChild(name string, rev revision, fileInfo fingerprintInfo, mo
 		// duplicate path
 		return nil, ErrExists
 	}
-	newEntry := &Entry{
+	child := &Entry{
 		name:     name,
 		revision: rev,
 		fileType: fileInfo.fileType,
@@ -153,8 +153,8 @@ func (e *Entry) addChild(name string, rev revision, fileInfo fingerprintInfo, mo
 		parent:   e,
 		replica:  e.replica,
 	}
-	e.children[newEntry.name] = newEntry
-	return newEntry, nil
+	e.children[child.name] = child
+	return child, nil
 }
 
 // Get returns the named child, or nil if it doesn't exist.

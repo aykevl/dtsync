@@ -559,6 +559,10 @@ func (r *Replica) scanDir(dir tree.Entry, statusDir *Entry, cancel chan struct{}
 		}
 
 		file, status = iterator()
+		if file == nil && status == nil {
+			break
+		}
+
 		if file != nil && r.isExcluded(file) {
 			// Keep status (don't remove) if it exists, in case the file is
 			// un-excluded. It may be desirable to make this configurable.
@@ -567,10 +571,6 @@ func (r *Replica) scanDir(dir tree.Entry, statusDir *Entry, cancel chan struct{}
 				status.removed = time.Now()
 			}
 			continue
-		}
-
-		if file == nil && status == nil {
-			break
 		}
 		if file == nil {
 			// This is an old status entry: the file has been removed.
