@@ -87,7 +87,16 @@ type Job struct {
 
 // String returns a representation of this job for debugging.
 func (j *Job) String() string {
-	return "Job(" + j.Action().String() + "," + j.Path() + ")"
+	var direction string
+	switch j.direction {
+	case 1:
+		direction = ",→,"
+	case -1:
+		direction = ",←,"
+	default:
+		direction = ",-,"
+	}
+	return "Job(" + j.Action().String() + direction + j.Path() + ")"
 }
 
 // Name returns the filename of the file to be copied, updated, or removed.
