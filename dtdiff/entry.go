@@ -188,7 +188,7 @@ func (e *Entry) EqualContents(e2 *Entry) bool {
 
 // EqualMode compares the mode bits, noting the HasMode of both entries.
 func (e *Entry) EqualMode(e2 *Entry) bool {
-	hasMode := e.hasMode & e2.hasMode
+	hasMode := e.hasMode & e2.hasMode & e.replica.perms
 	return e.mode&hasMode == e2.mode&hasMode
 }
 

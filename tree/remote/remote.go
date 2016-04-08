@@ -208,19 +208,26 @@ func parseScanOptions(data []byte) (*tree.ScanOptions, error) {
 	if err != nil {
 		return nil, err
 	}
+	var perms tree.Mode
+	if options.Perms != nil {
+		perms = tree.Mode(*options.Perms)
+	}
 	return &tree.ScanOptions{
 		options.Exclude,
 		options.Include,
 		options.Follow,
+		perms,
 	}, nil
 }
 
 // serializeScanOptions packs a tree.ScanOptions in a protobuf *ScanOptions.
 func serializeScanOptions(options *tree.ScanOptions) []byte {
+	perms := uint32(options.Perms)
 	data, err := proto.Marshal(&ScanOptions{
 		Exclude: options.Exclude,
 		Include: options.Include,
 		Follow:  options.Follow,
+		Perms:   &perms,
 	})
 	if err != nil {
 		// programming error?

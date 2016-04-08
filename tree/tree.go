@@ -461,6 +461,7 @@ type ScanOptions struct {
 	Exclude []string
 	Include []string
 	Follow  []string
+	Perms   Mode
 }
 
 type ListOptions struct {

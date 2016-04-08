@@ -56,6 +56,10 @@ var (
 	errInvalidPath = errors.New("dtdiff: invalid or missing path in entry row")
 )
 
+// PERMS_DEFAULT has the default permission bits that are compared. It is
+// possible to compare less bits with the 'perms' option.
+const PERMS_DEFAULT = 0777
+
 type ParseError struct {
 	Message string
 	Row     int
@@ -87,6 +91,7 @@ type Replica struct {
 	exclude            []string // paths to exclude
 	include            []string // paths to not exclude
 	follow             []string // paths that should not be treated as symlinks
+	perms              tree.Mode
 }
 
 func ScanTree(fs tree.LocalFileTree, recvOptionsChan, sendOptionsChan chan *tree.ScanOptions) (*Replica, error) {
@@ -122,6 +127,7 @@ func loadReplica(file io.Reader) (*Replica, error) {
 			children: make(map[string]*Entry),
 			fileType: tree.TYPE_DIRECTORY,
 		},
+		perms: PERMS_DEFAULT,
 	}
 	r.rootEntry.replica = r
 
@@ -654,10 +660,15 @@ func (r *Replica) matchPatterns(name, relpath string, patterns []string) bool {
 }
 
 func (r *Replica) scanOptions() *tree.ScanOptions {
+	optionPerms := tree.Mode(PERMS_DEFAULT)
+	if perms, err := strconv.ParseUint(r.options.Get("Perms"), 8, 32); err == nil {
+		optionPerms = tree.Mode(perms)
+	}
 	return &tree.ScanOptions{
 		r.options["Exclude"],
 		r.options["Include"],
 		r.options["Follow"],
+		optionPerms,
 	}
 }
 
@@ -665,4 +676,5 @@ func (r *Replica) addScanOptions(options *tree.ScanOptions) {
 	r.exclude = append(r.exclude, options.Exclude...)
 	r.include = append(r.include, options.Include...)
 	r.follow = append(r.follow, options.Follow...)
+	r.perms &= options.Perms
 }
