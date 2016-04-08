@@ -29,7 +29,6 @@
 package sync
 
 import (
-	"bytes"
 	"path"
 
 	"github.com/aykevl/dtsync/dtdiff"
@@ -189,20 +188,20 @@ func (j *Job) Apply() error {
 		if err != nil {
 			return err
 		}
-		if !bytes.Equal(info.Hash(), status1.Hash()) {
+		if !info.Hash().Equal(status1.Hash()) {
 			// The first file got updated between the scan and update.
 			// TODO Should we report this as an error?
 			status1.UpdateHash(info.Hash(), nil)
 		}
 		status2.Update(info, info.Hash(), status1)
-		statusParent2.Update(parentInfo, nil, statusParent1)
+		statusParent2.Update(parentInfo, tree.Hash{}, statusParent1)
 	case ACTION_REMOVE:
 		parentInfo, err := fs2.Remove(status2)
 		if err != nil {
 			return err
 		}
 		status2.Remove()
-		statusParent2.Update(parentInfo, nil, statusParent1)
+		statusParent2.Update(parentInfo, tree.Hash{}, statusParent1)
 	case ACTION_CHMOD:
 		info, err := fs2.Chmod(status2, status1)
 		if err != nil {
@@ -244,7 +243,7 @@ func copyFile(fs1, fs2 tree.Tree, status1, statusParent2 *dtdiff.Entry) error {
 		if err != nil {
 			return err
 		}
-		statusParent2.Update(parentInfo, nil, nil)
+		statusParent2.Update(parentInfo, tree.Hash{}, nil)
 		_, err = statusParent2.Add(info, status1)
 		if err != nil {
 			return err

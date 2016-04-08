@@ -157,6 +157,7 @@ func syncRoots(t *testing.T, scheme1, scheme2 string) {
 		{"link2", ACTION_COPY, "l file1.txt", 3},
 		{"link3", ACTION_COPY, "l file-404", 4},
 		{"link1", ACTION_UPDATE, "l file2.txt", 4},
+		{"link1", ACTION_UPDATE, "l file2.txt", -1},
 		{"link1", ACTION_REMOVE, nil, 3},
 		{"link2", ACTION_REMOVE, nil, 2},
 		{"link3", ACTION_REMOVE, nil, 1},
@@ -169,7 +170,7 @@ func syncRoots(t *testing.T, scheme1, scheme2 string) {
 		fileAction   func(fs tree.TestTree) error
 	}{
 		{"dir", ACTION_COPY, 2, func(fs tree.TestTree) error {
-			source := tree.NewFileInfo(nil, tree.TYPE_DIRECTORY, 0755, 0777, time.Now(), 0, nil)
+			source := tree.NewFileInfo(nil, tree.TYPE_DIRECTORY, 0755, 0777, time.Now(), 0, tree.Hash{})
 			_, err := fs.CreateDir("dir", &tree.FileInfoStruct{}, source)
 			if err != nil {
 				return err
@@ -246,7 +247,7 @@ path	fingerprint	revision
 
 func runPatternTest(t *testing.T, fs1, fs2 tree.TestTree) {
 	for _, fs := range []tree.TestTree{fs1, fs2} {
-		source := tree.NewFileInfo(nil, tree.TYPE_DIRECTORY, 0755, 0777, time.Now(), 0, nil)
+		source := tree.NewFileInfo(nil, tree.TYPE_DIRECTORY, 0755, 0777, time.Now(), 0, tree.Hash{})
 		_, err := fs.CreateDir("dir", &tree.FileInfoStruct{}, source)
 		assert(err)
 	}
@@ -371,14 +372,14 @@ func applyTestCase(t *testing.T, fs tree.TestTree, tc testCase) {
 		contents := tc.contents.(string)[2:]
 		switch action {
 		case 'd':
-			parent := tree.NewFileInfo(parts[:len(parts)-1], tree.TYPE_DIRECTORY, 0755, 0777, time.Time{}, 0, nil)
-			source := tree.NewFileInfo(nil, tree.TYPE_DIRECTORY, 0755, 0777, time.Now(), 0, nil)
+			parent := tree.NewFileInfo(parts[:len(parts)-1], tree.TYPE_DIRECTORY, 0755, 0777, time.Time{}, 0, tree.Hash{})
+			source := tree.NewFileInfo(nil, tree.TYPE_DIRECTORY, 0755, 0777, time.Now(), 0, tree.Hash{})
 			_, err = fs.CreateDir(name, parent, source)
 		case 'f':
 			_, err = fs.PutFile(parts, []byte(contents))
 		case 'l':
-			parent := tree.NewFileInfo(parts[:len(parts)-1], tree.TYPE_DIRECTORY, 0755, 0777, time.Time{}, 0, nil)
-			source := tree.NewFileInfo(parts, tree.TYPE_SYMLINK, 0644, 0777, time.Now(), 0, nil)
+			parent := tree.NewFileInfo(parts[:len(parts)-1], tree.TYPE_DIRECTORY, 0755, 0777, time.Time{}, 0, tree.Hash{})
+			source := tree.NewFileInfo(parts, tree.TYPE_SYMLINK, 0777, 0777, time.Now(), 0, tree.Hash{})
 			_, _, err = fs.CreateSymlink(name, parent, source, contents)
 		default:
 			panic("unknown copy action: " + tc.contents.(string))
@@ -393,7 +394,7 @@ func applyTestCase(t *testing.T, fs tree.TestTree, tc testCase) {
 			var file tree.FileInfo
 			file, err = fs.ReadInfo(strings.Split(tc.file, "/"))
 			assert(err)
-			source := tree.NewFileInfo(parts, tree.TYPE_SYMLINK, 0644, 0777, time.Now(), 0, nil)
+			source := tree.NewFileInfo(parts, tree.TYPE_SYMLINK, 0644, 0777, time.Now(), 0, tree.Hash{})
 			_, _, err = fs.UpdateSymlink(file, source, contents)
 		default:
 			panic("unknown update action: " + tc.contents.(string))
@@ -401,7 +402,7 @@ func applyTestCase(t *testing.T, fs tree.TestTree, tc testCase) {
 	case ACTION_CHMOD:
 		var file tree.FileInfo
 		file, err = fs.ReadInfo(strings.Split(tc.file, "/"))
-		source := tree.NewFileInfo(parts, file.Type(), tree.Mode(tc.contents.(int)), 0777, time.Now(), 0, nil)
+		source := tree.NewFileInfo(parts, file.Type(), tree.Mode(tc.contents.(int)), 0777, time.Now(), 0, tree.Hash{})
 		assert(err)
 		_, err = fs.Chmod(file, source)
 	case ACTION_REMOVE:
@@ -446,7 +447,7 @@ func runTestCase(t *testing.T, fs1, fs2, fsCheck, fsCheckWith tree.TestTree, swa
 
 func runTestCaseSync(t *testing.T, tc *testCase, fs1, fs2 tree.TestTree, jobDirection int, scanTwice, secondSync bool) {
 	result := runTestCaseScan(t, tc, fs1, fs2, jobDirection)
-	if t.Failed() {
+	if t.Failed() || result == nil {
 		if result != nil {
 			assert(result.SaveStatus())
 		}
@@ -499,6 +500,9 @@ func runTestCaseSync(t *testing.T, tc *testCase, fs1, fs2 tree.TestTree, jobDire
 		statusBefore := readStatuses(t, fs1, fs2)
 
 		result = runTestCaseScan(t, tc, fs1, fs2, jobDirection)
+		if result == nil {
+			return
+		}
 		replica1b := result.rs.Get(0)
 		replica2b := result.rs.Get(1)
 		if replica1b.Changed() {
@@ -574,7 +578,7 @@ func runTestCaseSync(t *testing.T, tc *testCase, fs1, fs2 tree.TestTree, jobDire
 		}
 	}
 
-	if localSync {
+	if localSync && tc.fileCount >= 0 {
 		list1, err := fs1.(tree.LocalTree).Root().List(tree.ListOptions{})
 		if err != nil {
 			t.Errorf("could not get list for %s: %s", fs1, err)
@@ -596,7 +600,15 @@ func runTestCaseScan(t *testing.T, tc *testCase, fs1, fs2 tree.TestTree, jobDire
 		return nil
 	}
 
-	if len(result.jobs) != 1 {
+	if tc.fileCount < 0 {
+		if len(result.jobs) != 0 {
+			t.Errorf("list of jobs is expected to be 0, but actually is %d: %v", len(result.jobs), result.jobs)
+		}
+		if err := result.SaveStatus(); err != nil {
+			t.Errorf("could not save status: %s", err)
+		}
+		return nil
+	} else if len(result.jobs) != 1 {
 		t.Errorf("list of jobs is expected to be 1, but actually is %d: %v", len(result.jobs), result.jobs)
 		if err := result.SaveStatus(); err != nil {
 			t.Errorf("could not save status: %s", err)

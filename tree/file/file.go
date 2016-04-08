@@ -165,28 +165,36 @@ func (e *Entry) Size() int64 {
 }
 
 // Hash returns the blake2b hash of this file.
-func (e *Entry) Hash() ([]byte, error) {
-	if e.Type() != tree.TYPE_REGULAR {
-		return nil, nil
+func (e *Entry) Hash() (tree.Hash, error) {
+	switch e.Type() {
+	case tree.TYPE_REGULAR:
+		hash := tree.NewHash()
+		file, err := os.Open(e.fullPath())
+		if err != nil {
+			return tree.Hash{}, err
+		}
+		_, err = io.Copy(hash, file)
+		if err != nil {
+			return tree.Hash{}, err
+		}
+		return tree.Hash{tree.HASH_DEFAULT, hash.Sum(nil)}, nil
+	case tree.TYPE_SYMLINK:
+		target, err := os.Readlink(e.fullPath())
+		if err != nil {
+			return tree.Hash{}, err
+		}
+		return tree.Hash{tree.HASH_TARGET, []byte(target)}, nil
+	default:
+		return tree.Hash{}, nil
 	}
-	hash := tree.NewHash()
-	file, err := os.Open(e.fullPath())
-	if err != nil {
-		return nil, err
-	}
-	_, err = io.Copy(hash, file)
-	if err != nil {
-		return nil, err
-	}
-	return hash.Sum(nil), nil
 }
 
 // makeInfo returns a tree.FileInfo object with the given hash. As the hash is
 // expensive to calculate and can return errors, it is left to the caller to use
 // it.
-func (e *Entry) makeInfo(hash []byte) tree.FileInfo {
+func (e *Entry) makeInfo(hash tree.Hash) tree.FileInfo {
 	if e.notFound {
-		return tree.NewFileInfo(e.RelativePath(), e.Type(), 0, 0, time.Time{}, 0, nil)
+		return tree.NewFileInfo(e.RelativePath(), e.Type(), 0, 0, time.Time{}, 0, tree.Hash{})
 	}
 	return tree.NewFileInfo(e.RelativePath(), e.Type(), e.Mode(), e.HasMode(), e.ModTime(), e.Size(), hash)
 }
@@ -204,7 +212,7 @@ func (e *Entry) FullInfo() (tree.FileInfo, error) {
 // Info returns a tree.FileInfo of the stat() result in this Entry (thus,
 // without a hash).
 func (e *Entry) Info() tree.FileInfo {
-	return e.makeInfo(nil)
+	return e.makeInfo(tree.Hash{})
 }
 
 // Tree returns the tree.Tree interface this Entry belongs to.

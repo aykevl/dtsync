@@ -33,6 +33,7 @@
 package tree
 
 import (
+	"bytes"
 	"io"
 	"sort"
 	"strconv"
@@ -82,6 +83,29 @@ func (m Mode) Calc(sourceHasMode, targetDefault Mode) Mode {
 	//    targetDefault if the source is e.g. FAT32.
 	//  - Add the bits from the source file.
 	return (targetDefault &^ sourceHasMode) | m
+}
+
+type HashType int
+
+const (
+	HASH_NONE    HashType = 0 // no hash (nil)
+	HASH_DEFAULT HashType = 1 // currently blake2b
+	HASH_TARGET  HashType = 2 // path of the symlink (via readlink())
+)
+
+// Hash contains a hash type (hash/blake2b, or symlink target), and the
+// contents of the hash (32-byte buffer or variable-width string).
+type Hash struct {
+	Type HashType
+	Data []byte
+}
+
+func (h Hash) Equal(h2 Hash) bool {
+	return h.Type == h2.Type && bytes.Equal(h.Data, h2.Data)
+}
+
+func (h Hash) IsZero() bool {
+	return len(h.Data) == 0
 }
 
 // Tree is an abstraction layer over various types of trees. It tries to be as
@@ -184,7 +208,7 @@ type Entry interface {
 	// implementation-dependent.
 	Size() int64
 	// Hash calculates the blake2b hash of the file and returns it.
-	Hash() ([]byte, error)
+	Hash() (Hash, error)
 	// Info returns a FileInfo without a hash from this Entry.
 	// It must be fast (it shouldn't do any I/O).
 	Info() FileInfo
@@ -327,7 +351,7 @@ type FileInfo interface {
 	Size() int64
 	// Hash returns the blake2b hash of the file, or nil if no hash is known
 	// (e.g. for directories).
-	Hash() []byte
+	Hash() Hash
 }
 
 type FileInfoStruct struct {
@@ -337,10 +361,10 @@ type FileInfoStruct struct {
 	hasMode  Mode
 	modTime  time.Time
 	size     int64
-	hash     []byte
+	hash     Hash
 }
 
-func NewFileInfo(path []string, fileType Type, mode Mode, hasMode Mode, modTime time.Time, size int64, hash []byte) FileInfo {
+func NewFileInfo(path []string, fileType Type, mode Mode, hasMode Mode, modTime time.Time, size int64, hash Hash) FileInfo {
 	return &FileInfoStruct{
 		path:     path,
 		fileType: fileType,
@@ -360,12 +384,11 @@ func cloneFileInfo(orig FileInfo) *FileInfoStruct {
 		hasMode:  orig.HasMode(),
 		modTime:  orig.ModTime(),
 		size:     orig.Size(),
-		hash:     nil,
+		hash:     Hash{Type: orig.Hash().Type},
 	}
-	if orig.Hash() != nil {
-		hash := make([]byte, len(orig.Hash()))
-		copy(hash, orig.Hash())
-		info.hash = hash
+	if !orig.Hash().IsZero() {
+		info.hash.Data = make([]byte, len(orig.Hash().Data))
+		copy(info.hash.Data, orig.Hash().Data)
 	}
 	return info
 }
@@ -381,7 +404,7 @@ func (fi *FileInfoStruct) RelativePath() []string {
 	return fi.path
 }
 
-func (fi *FileInfoStruct) Hash() []byte {
+func (fi *FileInfoStruct) Hash() Hash {
 	return fi.hash
 }
 

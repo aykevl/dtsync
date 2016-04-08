@@ -138,7 +138,7 @@ func TreeTest(t Tester, fs1, fs2 TestTree) {
 	if !sameInfo(info1, info2) {
 		t.Errorf("files do not match after Copy:\n%s\n%s", info1, info2)
 	}
-	if !bytes.Equal(info2.Hash(), hashes[""]) {
+	if !bytes.Equal(info2.Hash().Data, hashes[""]) {
 		t.Errorf("Hash mismatch for file %s during Copy: expected %x, got %x", info2, hashes[""], info2.Hash())
 	}
 
@@ -214,7 +214,7 @@ func TreeTest(t Tester, fs1, fs2 TestTree) {
 		t.Error("ReadInfo failed for file-create.txt:", err)
 	}
 
-	cp, err = fs1.UpdateFile(info1, &FileInfoStruct{info2.RelativePath(), TYPE_REGULAR, 0666, 0666, time.Time{}, 0, nil})
+	cp, err = fs1.UpdateFile(info1, &FileInfoStruct{info2.RelativePath(), TYPE_REGULAR, 0666, 0666, time.Time{}, 0, Hash{}})
 	if err != nil {
 		t.Fatal("could not update file.txt:", err)
 	}
@@ -244,7 +244,7 @@ func TreeTest(t Tester, fs1, fs2 TestTree) {
 	if err != nil {
 		t.Fatal("could not get hash of file1:", err)
 	}
-	if !bytes.Equal(info1.Hash(), hashes["qbf"]) {
+	if !bytes.Equal(info1.Hash().Data, hashes["qbf"]) {
 		t.Errorf("Hash mismatch for file %s: expected %x, got %x", info1, hashes["qbf"], info1.Hash())
 	}
 
@@ -264,7 +264,7 @@ func TreeTest(t Tester, fs1, fs2 TestTree) {
 	if err != nil {
 		t.Fatal("failed to update file:", err)
 	}
-	if !bytes.Equal(info2.Hash(), hashes["qbf"]) {
+	if !bytes.Equal(info2.Hash().Data, hashes["qbf"]) {
 		t.Errorf("Hash mismatch during Update for file %s: expected %x, got %x", info2, hashes["qbf"], info2.Hash())
 	}
 	if !sameInfo(info1, info2) {
@@ -318,14 +318,14 @@ func TreeTest(t Tester, fs1, fs2 TestTree) {
 	}
 
 	// try to update symlink (must fail)
-	link2 := NewFileInfo(link1.RelativePath(), TYPE_SYMLINK, 0666, 0666, time.Time{}, 0, nil)
+	link2 := NewFileInfo(link1.RelativePath(), TYPE_SYMLINK, 0666, 0666, time.Time{}, 0, Hash{})
 	_, _, err = Update(fs1, fs2, link1, link2)
 	if !IsNotExist(err) {
 		t.Error("Update link was not 'not found':", err)
 	}
 
 	// try to copy 'modified' symlink
-	link1Wrong := &FileInfoStruct{link1.RelativePath(), TYPE_SYMLINK, 0666, 0666, time.Time{}, 0, nil}
+	link1Wrong := &FileInfoStruct{link1.RelativePath(), TYPE_SYMLINK, 0666, 0666, time.Time{}, 0, Hash{}}
 	_, _, err = Copy(fs1, fs2, link1Wrong, &FileInfoStruct{})
 	if !IsChanged(err) {
 		t.Errorf("No ErrChanged while copying %s: %s", link2.Name(), err)
@@ -348,7 +348,7 @@ func TreeTest(t Tester, fs1, fs2 TestTree) {
 
 	// update symlink
 	linkTarget = "file-does-not-exist"
-	link1Source := &FileInfoStruct{[]string{"link"}, TYPE_SYMLINK, 0666, 0666, time.Now(), 0, nil}
+	link1Source := &FileInfoStruct{[]string{"link"}, TYPE_SYMLINK, 0666, 0666, time.Now(), 0, Hash{}}
 	link1, _, err = fs1.UpdateSymlink(link1, link1Source, linkTarget)
 	if err != nil {
 		t.Fatal("could not update symlink (with mtime):", err)
@@ -535,7 +535,7 @@ func sameInfoEntry(t Tester, info FileInfo, entry Entry) bool {
 // sameFullInfo returns true if both FileInfo interfaces are exactly equal for
 // all properties.
 func sameFullInfo(info1, info2 FileInfo) bool {
-	if !bytes.Equal(info1.Hash(), info2.Hash()) {
+	if !info1.Hash().Equal(info2.Hash()) {
 		return false
 	}
 	return sameInfo(info1, info2)
@@ -644,7 +644,7 @@ func Equal(file1, file2 Entry, includeDirModTime bool) (bool, error) {
 	}
 	switch file1.Type() {
 	case TYPE_REGULAR:
-		hashes := make([][]byte, 2)
+		hashes := make([]Hash, 2)
 		for i, file := range []Entry{file1, file2} {
 			testTree, ok := file.Tree().(TestTree)
 			if !ok {
@@ -656,7 +656,7 @@ func Equal(file1, file2 Entry, includeDirModTime bool) (bool, error) {
 			}
 			hashes[i] = info.Hash()
 		}
-		return hashes[0] != nil && bytes.Equal(hashes[0], hashes[1]), nil
+		return !hashes[0].IsZero() && hashes[0].Equal(hashes[1]), nil
 
 	case TYPE_DIRECTORY:
 		list1, err := file1.List(ListOptions{})

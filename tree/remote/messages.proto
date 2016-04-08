@@ -57,7 +57,8 @@ message FileInfo {
 	optional uint32   hasMode   = 4;
 	optional sint64   modTime   = 5;
 	optional sint64   size      = 6;
-	optional bytes    hash      = 7;
+	optional uint32   hashType  = 7;
+	optional bytes    hashData  = 8;
 }
 
 message ScanOptions {

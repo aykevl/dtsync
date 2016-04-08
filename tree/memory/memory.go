@@ -159,29 +159,35 @@ func (e *Entry) ModTime() time.Time {
 }
 
 // Hash returns the blake2b hash of this file.
-func (e *Entry) Hash() ([]byte, error) {
+func (e *Entry) Hash() (tree.Hash, error) {
 	return e.hash(), nil
 }
 
-func (e *Entry) hash() []byte {
-	if e.Type() != tree.TYPE_REGULAR {
-		return nil
+func (e *Entry) hash() tree.Hash {
+	switch e.fileType {
+	case tree.TYPE_REGULAR:
+		hash := tree.NewHash()
+		_, err := hash.Write(e.contents)
+		if err != nil {
+			panic(err) // hash writer may not return an error
+		}
+		return tree.Hash{tree.HASH_DEFAULT, hash.Sum(nil)}
+	case tree.TYPE_SYMLINK:
+		// Don't save the hash, but the actual contents of the symlink (which
+		// should be short).
+		return tree.Hash{tree.HASH_TARGET, e.contents}
+	default:
+		return tree.Hash{tree.HASH_NONE, nil}
 	}
-	hash := tree.NewHash()
-	_, err := hash.Write(e.contents)
-	if err != nil {
-		panic(err) // hash writer may not return an error
-	}
-	return hash.Sum(nil)
 }
 
-func (e *Entry) makeInfo(hash []byte) tree.FileInfo {
+func (e *Entry) makeInfo(hash tree.Hash) tree.FileInfo {
 	return tree.NewFileInfo(e.RelativePath(), e.fileType, e.mode, 0777, e.modTime, e.Size(), hash)
 }
 
 // Info returns a FileInfo object without a hash.
 func (e *Entry) Info() tree.FileInfo {
-	return e.makeInfo(nil)
+	return e.makeInfo(tree.Hash{})
 }
 
 // FullInfo returns a FileInfo object with hash. It won't return an error

@@ -166,13 +166,15 @@ func serializeFileInfo(info tree.FileInfo) *FileInfo {
 	fileType := FileType(info.Type())
 	mode := uint32(info.Mode())
 	hasMode := uint32(info.HasMode())
+	hashType := uint32(info.Hash().Type)
 	fileInfo := &FileInfo{
-		Path:    path,
-		Type:    &fileType,
-		Mode:    &mode,
-		HasMode: &hasMode,
-		Size:    &size,
-		Hash:    info.Hash(),
+		Path:     path,
+		Type:     &fileType,
+		Mode:     &mode,
+		HasMode:  &hasMode,
+		Size:     &size,
+		HashType: &hashType,
+		HashData: info.Hash().Data,
 	}
 	if !info.ModTime().IsZero() {
 		modTime := info.ModTime().UnixNano()
@@ -198,7 +200,7 @@ func parseFileInfo(info *FileInfo) tree.FileInfo {
 		modTime = time.Unix(0, *info.ModTime)
 	}
 	size := info.GetSize()
-	return tree.NewFileInfo(info.Path, fileType, mode, hasMode, modTime, size, info.Hash)
+	return tree.NewFileInfo(info.Path, fileType, mode, hasMode, modTime, size, tree.Hash{tree.HashType(info.GetHashType()), info.HashData})
 }
 
 // parseScanOptions unpacks a protobuf *ScanOptions into a tree.ScanOptions.

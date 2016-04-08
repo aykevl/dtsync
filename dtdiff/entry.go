@@ -29,7 +29,6 @@
 package dtdiff
 
 import (
-	"bytes"
 	"sort"
 	"strconv"
 	"strings"
@@ -57,7 +56,7 @@ type Entry struct {
 	size     int64
 	mode     tree.Mode
 	hasMode  tree.Mode
-	hash     []byte
+	hash     tree.Hash
 	children map[string]*Entry
 	parent   *Entry
 	replica  *Replica
@@ -84,7 +83,7 @@ func (e *Entry) RelativePath() []string {
 }
 
 // Hash returns the hash of the status entry, if one is known.
-func (e *Entry) Hash() []byte {
+func (e *Entry) Hash() tree.Hash {
 	return e.hash
 }
 
@@ -114,7 +113,7 @@ func (e *Entry) Size() int64 {
 }
 
 // Add new entry by recursively finding the parent
-func (e *Entry) addRecursive(path []string, rev revision, fingerprint string, mode tree.Mode, hash []byte) (*Entry, error) {
+func (e *Entry) addRecursive(path []string, rev revision, fingerprint string, mode tree.Mode, hash tree.Hash) (*Entry, error) {
 	if path[0] == "" {
 		return nil, errInvalidPath
 	}
@@ -135,7 +134,7 @@ func (e *Entry) addRecursive(path []string, rev revision, fingerprint string, mo
 	}
 }
 
-func (e *Entry) addChild(name string, rev revision, fileInfo fingerprintInfo, mode tree.Mode, hash []byte) (*Entry, error) {
+func (e *Entry) addChild(name string, rev revision, fileInfo fingerprintInfo, mode tree.Mode, hash tree.Hash) (*Entry, error) {
 	if _, ok := e.children[name]; ok {
 		// duplicate path
 		return nil, ErrExists
@@ -180,7 +179,7 @@ func (e *Entry) EqualContents(e2 *Entry) bool {
 	if tree.MatchFingerprint(e, e2) {
 		return true
 	}
-	if len(e.hash) > 0 && bytes.Equal(e.hash, e2.hash) {
+	if !e.hash.IsZero() && e.hash.Equal(e2.hash) {
 		return true
 	}
 	return false
@@ -292,7 +291,7 @@ func (e *Entry) add(info tree.FileInfo, rev revision) (*Entry, error) {
 
 // Update updates the revision if the file was changed. The file is not changed
 // if the fingerprint but not the hash changed.
-func (e *Entry) Update(info tree.FileInfo, hash []byte, source *Entry) {
+func (e *Entry) Update(info tree.FileInfo, hash tree.Hash, source *Entry) {
 	if !tree.MatchFingerprint(e, info) {
 		e.fileType = info.Type()
 		e.modTime = info.ModTime()
@@ -347,8 +346,8 @@ func (e *Entry) Update(info tree.FileInfo, hash []byte, source *Entry) {
 
 // UpdateHash sets the new hash from the parameter, marking this file as changed
 // if it is different from the existing one.
-func (e *Entry) UpdateHash(hash []byte, source *Entry) {
-	if !bytes.Equal(e.hash, hash) {
+func (e *Entry) UpdateHash(hash tree.Hash, source *Entry) {
+	if !e.hash.Equal(hash) {
 		if source != nil {
 			e.replica.markMetaChanged()
 			e.revision = source.revision

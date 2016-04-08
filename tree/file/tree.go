@@ -145,7 +145,7 @@ func (r *Tree) CreateDir(name string, parent, source tree.FileInfo) (tree.FileIn
 		return nil, err
 	}
 
-	return child.makeInfo(nil), nil
+	return child.Info(), nil
 }
 
 func (r *Tree) CopySource(source tree.FileInfo) (io.ReadCloser, error) {
@@ -215,7 +215,7 @@ func (r *Tree) Remove(file tree.FileInfo) (tree.FileInfo, error) {
 			root: e.root,
 			st:   st,
 		}
-		parentInfo = parent.makeInfo(nil)
+		parentInfo = parent.Info()
 	}
 	return parentInfo, nil
 }
@@ -377,7 +377,7 @@ func (e *Entry) replaceFile(source tree.FileInfo, hash hash.Hash, update bool) (
 			}
 
 			fp = nil
-			return e.makeInfo(hash), parent.makeInfo(nil), nil
+			return e.makeInfo(tree.Hash{tree.HASH_DEFAULT, hash}), parent.Info(), nil
 		},
 		cancelled: func(hash []byte) error {
 			return os.Remove(tempPath)
@@ -419,7 +419,7 @@ func (r *Tree) CreateSymlink(name string, parentInfo, sourceInfo tree.FileInfo, 
 		root: r,
 		st:   parentSt,
 	}
-	return child.makeInfo(nil), parent.makeInfo(nil), nil
+	return child.makeInfo(tree.Hash{tree.HASH_TARGET, []byte(contents)}), parent.Info(), nil
 }
 
 func (r *Tree) UpdateSymlink(file, source tree.FileInfo, contents string) (tree.FileInfo, tree.FileInfo, error) {
@@ -478,7 +478,7 @@ func (r *Tree) UpdateSymlink(file, source tree.FileInfo, contents string) (tree.
 		st:   parentSt,
 	}
 
-	return e.makeInfo(nil), parent.makeInfo(nil), nil
+	return e.makeInfo(tree.Hash{tree.HASH_TARGET, []byte(contents)}), parent.Info(), nil
 }
 
 func (r *Tree) ReadSymlink(file tree.FileInfo) (string, error) {
@@ -572,7 +572,7 @@ func (r *Tree) PutFile(path []string, contents []byte) (tree.FileInfo, error) {
 	if err != nil {
 		return nil, err
 	}
-	return child.makeInfo(nil), nil
+	return child.Info(), nil
 }
 
 // ReadInfo returns the FileInfo for the specified file with a hash.

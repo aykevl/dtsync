@@ -299,15 +299,21 @@ func (r *Replica) load(file io.Reader) error {
 			return &ParseError{"could not read TSV row", row, err}
 		}
 		hashStr := fields[TSV_HASH]
-		if len(hashStr) == 43 {
-			// In Go 1.5+, we can use base64.RawURLEncoding
-			hashStr += "="
-		}
-		var hash []byte
+		var hash tree.Hash
 		if len(hashStr) > 0 {
-			hash, err = base64.URLEncoding.DecodeString(hashStr)
-			if err != nil {
-				return &ParseError{"could not decode hash", row, err}
+			if hashStr[0] == '@' {
+				// symlink target
+				hash = tree.Hash{tree.HASH_TARGET, []byte(hashStr[1:])}
+			} else {
+				if len(hashStr) == 43 {
+					// In Go 1.5+, we can use base64.RawURLEncoding
+					hashStr += "="
+				}
+				data, err := base64.URLEncoding.DecodeString(hashStr)
+				if err != nil {
+					return &ParseError{"could not decode hash", row, err}
+				}
+				hash = tree.Hash{tree.HASH_DEFAULT, data}
 			}
 		}
 
@@ -491,10 +497,15 @@ func (e *Entry) serializeChildren(tsvWriter *unitsv.Writer, peerIndex map[string
 		}
 
 		hash := ""
-		if child.hash != nil {
-			hash = base64.URLEncoding.EncodeToString(child.hash)
-			// In Go 1.5+, we can use base64.RawURLEncoding
-			hash = strings.TrimRight(hash, "=")
+		if !child.hash.IsZero() {
+			switch child.hash.Type {
+			case tree.HASH_DEFAULT:
+				hash = base64.URLEncoding.EncodeToString(child.hash.Data)
+				// In Go 1.5+, we can use base64.RawURLEncoding
+				hash = strings.TrimRight(hash, "=")
+			case tree.HASH_TARGET:
+				hash = "@" + string(child.hash.Data)
+			}
 		}
 
 		modeString := strconv.FormatUint(uint64(child.mode), 8)
@@ -603,19 +614,16 @@ func (r *Replica) scanDir(dir tree.Entry, statusDir *Entry, cancel chan struct{}
 
 			// update status (if needed)
 			oldHash := status.Hash()
-			var newHash []byte
+			var newHash tree.Hash
 			info := file.Info()
-			if tree.MatchFingerprint(info, status) && oldHash != nil {
+			if tree.MatchFingerprint(info, status) && !oldHash.IsZero() {
 				// Assume the hash stayed the same when the fingerprint is the
 				// same. But calculate a new hash if there is no hash.
 				newHash = oldHash
 			} else {
-				if file.Type() == tree.TYPE_REGULAR {
-					var err error
-					newHash, err = file.Hash()
-					if err != nil {
-						return err
-					}
+				newHash, err = file.Hash()
+				if err != nil {
+					return err
 				}
 			}
 			status.Update(info, newHash, nil)
