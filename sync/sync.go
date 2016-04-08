@@ -117,6 +117,10 @@ func (r *Result) reconcile(statusDir1, statusDir2 *dtdiff.Entry) {
 			}
 
 			if status1.EqualContents(status2) || bothDirs && !status1.EqualMode(status2) {
+				if status1.EqualMode(status2) {
+					// should never happen
+					panic("same contents and mode?")
+				}
 				// only the mode differs
 				job.action = ACTION_CHMOD
 			} else {

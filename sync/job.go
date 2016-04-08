@@ -313,7 +313,11 @@ func (j *Job) status(status, statusParent, otherStatus, otherStatusParent *dtdif
 		}
 	}
 	if status.After(otherStatus) {
-		return "modified"
+		if j.action == ACTION_CHMOD {
+			return "chmod"
+		} else {
+			return "modified"
+		}
 	}
 	return ""
 }
