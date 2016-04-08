@@ -103,11 +103,7 @@ func ScanTree(fs tree.LocalFileTree, recvOptionsChan, sendOptionsChan chan *tree
 		replica, _ = loadReplica(file)
 	}
 
-	options := &tree.ScanOptions{
-		replica.options["Exclude"],
-		replica.options["Include"],
-		replica.options["Follow"],
-	}
+	options := replica.scanOptions()
 	replica.addScanOptions(options)
 	sendOptionsChan <- options
 
