@@ -55,7 +55,7 @@ type Server struct {
 	writer      io.WriteCloser
 	fs          tree.LocalFileTree
 	replyChan   chan replyResponse
-	currentScan chan *ScanOptions
+	currentScan chan []byte
 }
 
 // NewServer returns a *Server for the given reader, writer, and filesystem
@@ -173,7 +173,7 @@ func (s *Server) handleRequest(msg *Request, recvStreams map[uint64]chan []byte)
 		if s.currentScan != nil {
 			return invalidRequest{"SCAN while a scan is already running"}
 		}
-		s.currentScan = make(chan *ScanOptions)
+		s.currentScan = make(chan []byte)
 		go s.scan(*msg.RequestId, s.currentScan)
 	case Command_SCANOPTS:
 		if msg.Data == nil {
@@ -182,12 +182,7 @@ func (s *Server) handleRequest(msg *Request, recvStreams map[uint64]chan []byte)
 		if s.currentScan == nil {
 			return invalidRequest{"SCANSTATUS outside running scan or sending SCANSTATUS twice"}
 		}
-		status := &ScanOptions{}
-		err := proto.Unmarshal(msg.Data, status)
-		if err != nil {
-			return err
-		}
-		s.currentScan <- status
+		s.currentScan <- msg.Data
 		s.currentScan = nil
 	case Command_MKDIR:
 		// Client wants to create a directory.
@@ -518,26 +513,22 @@ func (s *Server) replyInfo2(requestId uint64, file, parent tree.FileInfo, err er
 	}
 }
 
-func (s *Server) scan(requestId uint64, optionsChan chan *ScanOptions) {
+func (s *Server) scan(requestId uint64, scanOptions chan []byte) {
 	recvOptions := make(chan *tree.ScanOptions)
 	sendOptions := make(chan *tree.ScanOptions)
 
 	go func() {
-		options := <-optionsChan
-		recvOptions <- &tree.ScanOptions{options.Exclude, options.Include, options.Follow}
+		options, err := parseScanOptions(<-scanOptions)
+		if err != nil {
+			s.replyError(requestId, err)
+			return
+		}
+		recvOptions <- options
 	}()
 
 	go func() {
 		options := <-sendOptions
-		optionsMsg := &ScanOptions{
-			Exclude: options.Exclude,
-			Include: options.Include,
-			Follow:  options.Follow,
-		}
-		optionsData, err := proto.Marshal(optionsMsg)
-		if err != nil {
-			panic(err) // programming error?
-		}
+		optionsData := serializeScanOptions(options)
 		command := Command_SCANOPTS
 		s.replyChan <- replyResponse{requestId, &Response{
 			Command: &command,

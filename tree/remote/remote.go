@@ -201,6 +201,34 @@ func parseFileInfo(info *FileInfo) tree.FileInfo {
 	return tree.NewFileInfo(info.Path, fileType, mode, hasMode, modTime, size, info.Hash)
 }
 
+// parseScanOptions unpacks a protobuf *ScanOptions into a tree.ScanOptions.
+func parseScanOptions(data []byte) (*tree.ScanOptions, error) {
+	options := &ScanOptions{}
+	err := proto.Unmarshal(data, options)
+	if err != nil {
+		return nil, err
+	}
+	return &tree.ScanOptions{
+		options.Exclude,
+		options.Include,
+		options.Follow,
+	}, nil
+}
+
+// serializeScanOptions packs a tree.ScanOptions in a protobuf *ScanOptions.
+func serializeScanOptions(options *tree.ScanOptions) []byte {
+	data, err := proto.Marshal(&ScanOptions{
+		Exclude: options.Exclude,
+		Include: options.Include,
+		Follow:  options.Follow,
+	})
+	if err != nil {
+		// programming error?
+		panic(err)
+	}
+	return data
+}
+
 // receivedData is one unparsed protobuf message received from the other end.
 type receivedData struct {
 	buf []byte

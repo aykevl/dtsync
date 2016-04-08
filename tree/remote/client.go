@@ -307,14 +307,7 @@ func (c *Client) RemoteScan(sendOptions, recvOptions chan *tree.ScanOptions) (io
 	go func() {
 		// Send excluded files from the other replica to the remote replica.
 		options := <-sendOptions
-		optionsData, err := proto.Marshal(&ScanOptions{
-			Exclude: options.Exclude,
-			Include: options.Include,
-			Follow:  options.Follow,
-		})
-		if err != nil {
-			panic(err) // programming error?
-		}
+		optionsData := serializeScanOptions(options)
 		commandScanOptions := Command_SCANOPTS
 		statusRequest := &Request{
 			Command: &commandScanOptions,
@@ -324,15 +317,13 @@ func (c *Client) RemoteScan(sendOptions, recvOptions chan *tree.ScanOptions) (io
 	}()
 
 	go func() {
-		data := <-c.scanOptions
-		options := &ScanOptions{}
-		err := proto.Unmarshal(data, options)
+		options, err := parseScanOptions(<-c.scanOptions)
 		if err != nil {
 			stream.setError(err)
 			recvOptions <- nil
 			return
 		}
-		recvOptions <- &tree.ScanOptions{options.Exclude, options.Include, options.Follow}
+		recvOptions <- options
 	}()
 
 	return stream, nil
