@@ -60,6 +60,10 @@ var (
 // possible to compare less bits with the 'perms' option.
 const PERMS_DEFAULT = 0777
 
+// STATUS_RETAIN is the duration how long to retain status entries that have
+// disappeared, in case they reappear (e.g. a disk is mounted again).
+const STATUS_RETAIN = time.Hour * 24 * 30
+
 type ParseError struct {
 	Message string
 	Row     int
@@ -92,6 +96,7 @@ type Replica struct {
 	include            []string // paths to not exclude
 	follow             []string // paths that should not be treated as symlinks
 	perms              tree.Mode
+	startScan          time.Time
 }
 
 func ScanTree(fs tree.LocalFileTree, recvOptionsChan, sendOptionsChan chan *tree.ScanOptions) (*Replica, error) {
@@ -123,6 +128,7 @@ func ScanTree(fs tree.LocalFileTree, recvOptionsChan, sendOptionsChan chan *tree
 
 func loadReplica(file io.Reader) (*Replica, error) {
 	r := &Replica{
+		startScan: time.Now(),
 		rootEntry: &Entry{
 			children: make(map[string]*Entry),
 			fileType: tree.TYPE_DIRECTORY,
@@ -162,12 +168,13 @@ func (r *Replica) Root() *Entry {
 	return r.rootEntry
 }
 
-func (r *Replica) markChanged() {
+func (r *Replica) markChanged() revision {
 	if !r.isChanged {
 		r.isChanged = true
 		r.generation++
 		r.knowledge[r.identity] = r.generation
 	}
+	return r.revision
 }
 
 func (r *Replica) markMetaChanged() {
@@ -584,39 +591,27 @@ func (r *Replica) scanDir(dir tree.Entry, statusDir *Entry, cancel chan struct{}
 		}
 
 		if file != nil && r.isExcluded(file) {
-			// Keep status (don't remove) if it exists, in case the file is
-			// un-excluded. It may be desirable to make this configurable.
 			if status != nil {
-				r.markMetaChanged()
-				status.removed = time.Now()
+				status.Remove()
 			}
 			continue
 		}
 		if file == nil {
-			// This is an old status entry: the file has been removed.
-			// Now we delete it, but we could improve by, for example, keeping
-			// all old entries for up to a month in case the entries appear
-			// again (e.g. the filesystem was not mounted).
 			status.Remove()
 			continue
 		}
 
-		if status == nil {
+		if !status.exists() {
 			// add status
 			info, err := file.FullInfo()
 			if err != nil {
 				return err
 			}
-			r.markChanged()
-			status, err = statusDir.add(info, r.revision)
+			status, err = statusDir.add(info, r.markChanged())
 			if err != nil {
 				panic(err) // must not happen
 			}
 		} else {
-			if !status.removed.IsZero() {
-				status.removed = time.Time{}
-			}
-
 			// update status (if needed)
 			oldHash := status.Hash()
 			var newHash tree.Hash

@@ -135,7 +135,7 @@ func (e *Entry) addRecursive(path []string, rev revision, fingerprint string, mo
 }
 
 func (e *Entry) addChild(name string, rev revision, fileInfo fingerprintInfo, mode tree.Mode, hash tree.Hash) (*Entry, error) {
-	if _, ok := e.children[name]; ok {
+	if e.children[name].exists() {
 		// duplicate path
 		return nil, ErrExists
 	}
@@ -247,6 +247,10 @@ func (e *Entry) isRoot() bool {
 	return e.parent == nil
 }
 
+func (e *Entry) exists() bool {
+	return e != nil && e.removed.IsZero()
+}
+
 func (e *Entry) List() []*Entry {
 	list := e.rawList()
 
@@ -256,7 +260,7 @@ func (e *Entry) List() []*Entry {
 		if i != p {
 			list[p] = list[i]
 		}
-		if child.removed.IsZero() {
+		if child.exists() {
 			// go to next if not removed
 			p++
 		}
@@ -280,7 +284,6 @@ func (e *Entry) Add(info tree.FileInfo, source *Entry) (*Entry, error) {
 }
 
 func (e *Entry) add(info tree.FileInfo, rev revision) (*Entry, error) {
-	e.replica.markChanged()
 	fileInfo := fingerprintInfo{info.Type(), info.ModTime(), info.Size()}
 	if fileInfo.fileType != tree.TYPE_REGULAR {
 		// Maybe not necessary, but just to be safe...
@@ -292,6 +295,8 @@ func (e *Entry) add(info tree.FileInfo, rev revision) (*Entry, error) {
 // Update updates the revision if the file was changed. The file is not changed
 // if the fingerprint but not the hash changed.
 func (e *Entry) Update(info tree.FileInfo, hash tree.Hash, source *Entry) {
+	e.removed = time.Time{}
+
 	if !tree.MatchFingerprint(e, info) {
 		e.fileType = info.Type()
 		e.modTime = info.ModTime()
@@ -306,8 +311,7 @@ func (e *Entry) Update(info tree.FileInfo, hash tree.Hash, source *Entry) {
 				e.replica.markMetaChanged()
 				e.revision = source.revision
 			} else {
-				e.replica.markChanged()
-				e.revision = e.replica.revision
+				e.revision = e.replica.markChanged()
 			}
 		} else {
 			e.replica.markMetaChanged()
@@ -320,8 +324,7 @@ func (e *Entry) Update(info tree.FileInfo, hash tree.Hash, source *Entry) {
 	if info.HasMode()&^e.hasMode != 0 {
 		// There are new permission bits. Mark as changed so permissions are
 		// compared.
-		e.replica.markChanged()
-		e.revision = e.replica.revision
+		e.revision = e.replica.markChanged()
 	}
 	if info.HasMode() != e.hasMode {
 		// This is a different filesystem or the support for filesystem
@@ -336,8 +339,7 @@ func (e *Entry) Update(info tree.FileInfo, hash tree.Hash, source *Entry) {
 		if source != nil {
 			e.revision = source.revision
 		} else {
-			e.replica.markChanged()
-			e.revision = e.replica.revision
+			e.revision = e.replica.markChanged()
 		}
 	}
 
@@ -352,18 +354,28 @@ func (e *Entry) UpdateHash(hash tree.Hash, source *Entry) {
 			e.replica.markMetaChanged()
 			e.revision = source.revision
 		} else {
-			e.replica.markChanged()
-			e.revision = e.replica.revision
+			e.revision = e.replica.markChanged()
 		}
 		e.hash = hash
 	}
 }
 
 // Remove this entry.
+// It will mark this entry as removed, and remove it once it's getting old.
 func (e *Entry) Remove() {
-	e.replica.markChanged()
-	// simply make it unreachable
-	delete(e.parent.children, e.name)
+	if e.removed.IsZero() {
+		// This is an old status entry: the file has been removed. Keep it
+		// around in case it is needed again (e.g. it is moved back or a disk is
+		// mounted).
+		e.replica.markChanged()
+		e.removed = e.replica.startScan
+	} else if e.replica.startScan.Sub(e.removed) > STATUS_RETAIN {
+		// The status entry is quite old, so it's unlikely to be necessary
+		// again.
+		e.replica.markMetaChanged()
+		// simply make it unreachable
+		delete(e.parent.children, e.name)
+	}
 }
 
 type entrySlice []*Entry

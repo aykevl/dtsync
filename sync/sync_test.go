@@ -165,10 +165,10 @@ func syncRoots(t *testing.T, scheme1, scheme2 string) {
 	}
 
 	complexTestCases := []struct {
-		jobName      string
-		jobAction    Action
-		jobFileCount int
-		fileAction   func(fs tree.TestTree) error
+		file     string
+		action   Action
+		jobCount int
+		callback func(fs tree.TestTree) error
 	}{
 		{"dir", ACTION_COPY, 2, func(fs tree.TestTree) error {
 			source := tree.NewFileInfo(nil, tree.TYPE_DIRECTORY, 0755, 0777, time.Now(), 0, tree.Hash{})
@@ -218,12 +218,13 @@ path	fingerprint	revision
 					applyTestCase(t, fs1, tc)
 					runTestCase(t, fs1, fs2, fsCheck, fsCheckWith, swapped, scanTwice, tc)
 				}
-				for _, ctc := range complexTestCases {
-					err := ctc.fileAction(fs1)
+				for _, tc := range complexTestCases {
+					t.Log("Action:", tc.action, tc.file)
+					err := tc.callback(fs1)
 					if err != nil {
 						t.Fatal("could not apply complex test case:", err)
 					}
-					tc := testCase{ctc.jobName, ctc.jobAction, nil, ctc.jobFileCount}
+					tc := testCase{tc.file, tc.action, nil, tc.jobCount}
 					runTestCase(t, fs1, fs2, fsCheck, fsCheckWith, swapped, scanTwice, tc)
 				}
 			}
@@ -595,6 +596,8 @@ func runTestCaseSync(t *testing.T, tc *testCase, fs1, fs2 tree.TestTree, jobDire
 }
 
 func runTestCaseScan(t *testing.T, tc *testCase, fs1, fs2 tree.TestTree, jobDirection int) *Result {
+	statusBefore := readStatuses(t, fs1, fs2)
+
 	result, err := Scan(fs1, fs2)
 	if err != nil {
 		t.Errorf("could not sync after: %s %s: %s", tc.action, tc.file, err)
@@ -623,6 +626,15 @@ func runTestCaseScan(t *testing.T, tc *testCase, fs1, fs2 tree.TestTree, jobDire
 		if job.action != tc.action || job.Name() != parts[len(parts)-1] {
 			t.Errorf("expected a %s job for file %s, but got %s", tc.action, tc.file, job)
 		}
+	}
+
+	if t.Failed() {
+		if err := result.SaveStatus(); err != nil {
+			t.Errorf("could not save status: %s", err)
+		}
+		printStatus(t, "before (scan)", statusBefore)
+		printStatus(t, "after (scan)", readStatuses(t, fs1, fs2))
+		t.FailNow()
 	}
 
 	return result
