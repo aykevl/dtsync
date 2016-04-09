@@ -445,8 +445,13 @@ func (r *Replica) Serialize(out io.Writer) error {
 	if rootOptions != "" {
 		writeKeyValue(writer, "Root-Options", rootOptions)
 	}
-	for key, values := range r.options {
-		for _, value := range values {
+	keys := make([]string, 0, len(r.options))
+	for key, _ := range r.options {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		for _, value := range r.options[key] {
 			writeKeyValue(writer, "Option-"+key, value)
 		}
 	}
