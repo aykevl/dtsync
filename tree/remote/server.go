@@ -527,8 +527,7 @@ func (s *Server) scan(requestId uint64, scanOptions chan []byte) {
 	}()
 
 	go func() {
-		options := <-sendOptions
-		optionsData := serializeScanOptions(options)
+		optionsData := serializeScanOptions(<-sendOptions)
 		command := Command_SCANOPTS
 		s.replyChan <- replyResponse{requestId, &Response{
 			Command: &command,

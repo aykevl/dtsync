@@ -75,7 +75,7 @@ func (e *Entry) Name() string {
 
 // RelativePath returns the path relative to the root
 func (e *Entry) RelativePath() []string {
-	if e.parent == nil {
+	if e.isRoot() {
 		return nil
 	} else {
 		return append(e.parent.RelativePath(), e.name)

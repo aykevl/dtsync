@@ -65,7 +65,6 @@ func Scan(fs1, fs2 tree.Tree) (*ReplicaSet, error) {
 				}
 
 				var replica *Replica
-				var myOptions *tree.ScanOptions
 				if tree.IsNotExist(err) {
 					// loadReplica doesn't return errors when creating a new
 					// replica.
@@ -79,10 +78,8 @@ func Scan(fs1, fs2 tree.Tree) (*ReplicaSet, error) {
 				}
 				rs.set[i] = replica
 
-				myOptions = replica.scanOptions()
+				myOptions := replica.scanOptions()
 				replica.addScanOptions(myOptions)
-
-				// Let the other replica exclude using our rules.
 				sendOptions[(i+1)%2] <- myOptions
 
 				// Insert options from the other replica.

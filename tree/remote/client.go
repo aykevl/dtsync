@@ -306,8 +306,7 @@ func (c *Client) RemoteScan(sendOptions, recvOptions chan *tree.ScanOptions) (io
 
 	go func() {
 		// Send excluded files from the other replica to the remote replica.
-		options := <-sendOptions
-		optionsData := serializeScanOptions(options)
+		optionsData := serializeScanOptions(<-sendOptions)
 		commandScanOptions := Command_SCANOPTS
 		statusRequest := &Request{
 			Command: &commandScanOptions,
