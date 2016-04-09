@@ -99,13 +99,13 @@ func ScanTree(fs tree.LocalFileTree, recvOptionsChan, sendOptionsChan chan *tree
 	file, err := fs.GetFile(STATUS_FILE)
 	if tree.IsNotExist(err) {
 		replica, err = loadReplica(nil)
-		if err != nil {
-			return nil, err
-		}
 	} else if err != nil {
 		return nil, err
 	} else {
-		replica, _ = loadReplica(file)
+		replica, err = loadReplica(file)
+	}
+	if err != nil {
+		return nil, err
 	}
 
 	options := replica.scanOptions()
