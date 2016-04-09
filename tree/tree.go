@@ -479,12 +479,12 @@ type Copier interface {
 }
 
 // ScanOptions holds some options to send to the other replica.
-// TODO: replica ID (to compare)
 type ScanOptions struct {
 	Exclude []string
 	Include []string
 	Follow  []string
 	Perms   Mode
+	Replica string
 }
 
 type ListOptions struct {

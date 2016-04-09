@@ -48,7 +48,6 @@ import (
 
 var (
 	ErrExists             = errors.New("dtdiff: already exists")
-	ErrSameIdentity       = errors.New("dtdiff: two replicas with the same ID")
 	ErrSameRoot           = errors.New("dtdiff: trying to synchronize the same directory")
 	ErrParsingFingerprint = errors.New("dtdiff: could not parse fingerprint")
 
@@ -79,6 +78,14 @@ func (e *ParseError) Error() string {
 		s += ": " + e.Err.Error()
 	}
 	return s
+}
+
+type ErrSameIdentity struct {
+	Identity string
+}
+
+func (e *ErrSameIdentity) Error() string {
+	return "dtdiff: same identity: " + e.Identity
 }
 
 // File where current status of the tree is stored.
@@ -117,7 +124,11 @@ func ScanTree(fs tree.LocalFileTree, recvOptionsChan, sendOptionsChan chan *tree
 	replica.addScanOptions(options)
 	sendOptionsChan <- options
 
-	replica.addScanOptions(<-recvOptionsChan)
+	recvOptions := <-recvOptionsChan
+	if recvOptions.Replica == options.Replica {
+		return nil, &ErrSameIdentity{options.Replica}
+	}
+	replica.addScanOptions(recvOptions)
 
 	err = replica.scan(fs, nil)
 	if err != nil {
@@ -677,6 +688,7 @@ func (r *Replica) scanOptions() *tree.ScanOptions {
 		r.options["Include"],
 		r.options["Follow"],
 		optionPerms,
+		r.identity,
 	}
 }
 

@@ -66,6 +66,7 @@ message ScanOptions {
 	repeated string include = 2;
 	repeated string follow  = 3;
 	optional uint32 perms   = 5;
+	optional string replica = 6;
 }
 
 message Error {

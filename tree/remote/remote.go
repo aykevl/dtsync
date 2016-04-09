@@ -219,6 +219,7 @@ func parseScanOptions(data []byte) (*tree.ScanOptions, error) {
 		options.Include,
 		options.Follow,
 		perms,
+		options.GetReplica(),
 	}, nil
 }
 
@@ -230,6 +231,7 @@ func serializeScanOptions(options *tree.ScanOptions) []byte {
 		Include: options.Include,
 		Follow:  options.Follow,
 		Perms:   &perms,
+		Replica: &options.Replica,
 	})
 	if err != nil {
 		// programming error?

@@ -90,6 +90,10 @@ func Scan(fs1, fs2 tree.Tree) (*ReplicaSet, error) {
 					scanErrors[i] <- nil
 					return
 				}
+				if otherOptions.Replica == myOptions.Replica {
+					scanErrors[i] <- &ErrSameIdentity{otherOptions.Replica}
+					return
+				}
 				replica.addScanOptions(otherOptions)
 
 				// Now we can start.
