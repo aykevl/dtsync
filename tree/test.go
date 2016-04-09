@@ -620,7 +620,7 @@ func getFile(parent Entry, name string) Entry {
 }
 
 func testEqual(t Tester, file1, file2 Entry) bool {
-	equal, err := Equal(file1, file2, false)
+	equal, err := Equal(file1, file2)
 	if err != nil {
 		t.Fatalf("could not compare files %s and %s: %s", file1, file2, err)
 	}
@@ -628,19 +628,10 @@ func testEqual(t Tester, file1, file2 Entry) bool {
 }
 
 // Equal compares two entries, only returning true when this file and possible
-// children (for directories) are exactly equal.
-func Equal(file1, file2 Entry, includeDirModTime bool) (bool, error) {
+// children (for directories) are exactly equal. Do not compare modification time.
+func Equal(file1, file2 Entry) (bool, error) {
 	if file1.Name() != file2.Name() || file1.Type() != file2.Type() {
 		return false, nil
-	}
-	if !file1.ModTime().Equal(file2.ModTime()) {
-		if file1.Type() == TYPE_DIRECTORY {
-			if includeDirModTime {
-				return false, nil
-			}
-		} else {
-			return false, nil
-		}
 	}
 	switch file1.Type() {
 	case TYPE_REGULAR:
@@ -672,7 +663,7 @@ func Equal(file1, file2 Entry, includeDirModTime bool) (bool, error) {
 			return false, nil
 		}
 		for i := 0; i < len(list1); i++ {
-			if equal, err := Equal(list1[i], list2[i], includeDirModTime); !equal || err != nil {
+			if equal, err := Equal(list1[i], list2[i]); !equal || err != nil {
 				return equal, err
 			}
 		}

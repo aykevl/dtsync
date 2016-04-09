@@ -132,6 +132,7 @@ func syncRoots(t *testing.T, scheme1, scheme2 string) {
 		// basic copy/update/remove
 		{"file1.txt", ACTION_COPY, "f The quick brown fox...", 2},
 		{"file1.txt", ACTION_UPDATE, "f The quick brown fox jumps over the lazy dog.", 2},
+		{"file1.txt", ACTION_UPDATE, "f The quick brown fox jumps over the lazy dog.", -1},
 		{"file1.txt", ACTION_CHMOD, 0606, 2},
 		{"file1.txt", ACTION_REMOVE, nil, 1},
 		// insert a file before and after an existing file
@@ -660,7 +661,7 @@ func fsEqual(fs1, fs2 tree.TestTree) bool {
 	}
 
 	for i, _ := range list1 {
-		equal, err := tree.Equal(list1[i], list2[i], false)
+		equal, err := tree.Equal(list1[i], list2[i])
 		if err != nil {
 			// IO errors shouldn't happen while testing
 			panic(err)
