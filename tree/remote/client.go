@@ -132,6 +132,7 @@ func (c *Client) run(r *bufio.Reader, w *bufio.Writer) {
 		select {
 		case req := <-c.sendRequest:
 			if pipeErr != nil {
+				req.idChan <- 0 // signal error
 				// Make sure the next request will get the error message.
 				if req.replyChan != nil {
 					req.replyChan <- roundtripResponse{nil, pipeErr}
@@ -139,7 +140,7 @@ func (c *Client) run(r *bufio.Reader, w *bufio.Writer) {
 				continue
 			}
 
-			nextId++
+			nextId++ // start at 1
 			id := nextId
 			req.req.RequestId = &id
 			if req.replyChan != nil {
@@ -300,9 +301,12 @@ func (c *Client) Close() error {
 func (c *Client) RemoteScan(sendOptions, recvOptions chan *tree.ScanOptions) (io.Reader, error) {
 	debugLog("\nC: RemoteScan")
 	commandScan := Command_SCAN
-	stream, _ := c.recvFile(&Request{
+	stream, err := c.recvFile(&Request{
 		Command: &commandScan,
 	})
+	if err != nil {
+		return nil, err
+	}
 
 	go func() {
 		// Send excluded files from the other replica to the remote replica.
@@ -362,7 +366,10 @@ func (c *Client) returnsFileInfo(command Command, name *string, file, source tre
 }
 
 func (c *Client) requestReturnsFileInfo(request *Request) (tree.FileInfo, error) {
-	ch := c.handleReply(request, nil, nil)
+	ch, err := c.handleReply(request, nil, nil)
+	if err != nil {
+		return nil, err
+	}
 	respData := <-ch
 	resp, err := respData.resp, respData.err
 	if err != nil {
@@ -391,7 +398,10 @@ func (c *Client) SetFile(name string) (io.WriteCloser, error) {
 		Name:    &name,
 	}
 	reader, writer := io.Pipe()
-	ch := c.handleReply(request, reader, nil)
+	ch, err := c.handleReply(request, reader, nil)
+	if err != nil {
+		return nil, err
+	}
 	finish := make(chan struct{})
 	stream := &streamWriter{
 		writer: writer,
@@ -437,7 +447,10 @@ func (c *Client) UpdateFile(file, source tree.FileInfo) (tree.Copier, error) {
 
 func (c *Client) handleFileSend(request *Request) (tree.Copier, error) {
 	reader, writer := io.Pipe()
-	ch := c.handleReply(request, reader, nil)
+	ch, err := c.handleReply(request, reader, nil)
+	if err != nil {
+		return nil, err
+	}
 
 	cp := &copier{
 		w:    writer,
@@ -469,7 +482,10 @@ func (c *Client) CreateSymlink(name string, parentInfo, sourceInfo tree.FileInfo
 		FileInfo2: serializeFileInfo(sourceInfo),
 		Data:      []byte(contents),
 	}
-	ch := c.handleReply(request, nil, nil)
+	ch, err := c.handleReply(request, nil, nil)
+	if err != nil {
+		return nil, nil, err
+	}
 	respData := <-ch
 	resp, err := respData.resp, respData.err
 	if err != nil {
@@ -488,7 +504,10 @@ func (c *Client) UpdateSymlink(file, source tree.FileInfo, contents string) (tre
 		FileInfo2: serializeFileInfo(source),
 		Data:      []byte(contents),
 	}
-	ch := c.handleReply(request, nil, nil)
+	ch, err := c.handleReply(request, nil, nil)
+	if err != nil {
+		return nil, nil, err
+	}
 	respData := <-ch
 	resp, err := respData.resp, respData.err
 	if err != nil {
@@ -505,7 +524,10 @@ func (c *Client) ReadSymlink(file tree.FileInfo) (string, error) {
 		Command:   &command,
 		FileInfo1: serializeFileInfo(file),
 	}
-	ch := c.handleReply(request, nil, nil)
+	ch, err := c.handleReply(request, nil, nil)
+	if err != nil {
+		return "", err
+	}
 	respData := <-ch
 	resp, err := respData.resp, respData.err
 	if err != nil {
@@ -526,12 +548,14 @@ func (c *Client) CopySource(info tree.FileInfo) (io.ReadCloser, error) {
 	})
 }
 
-// recvFile sends a request and returns a stream to receive a file. It never
-// returns an error.
+// recvFile sends a request and returns a stream to receive a file.
 func (c *Client) recvFile(request *Request) (*streamReader, error) {
 	reader, writer := io.Pipe()
 	stream := &streamReader{reader: reader}
-	ch := c.handleReply(request, nil, writer)
+	ch, err := c.handleReply(request, nil, writer)
+	if err != nil {
+		return nil, err
+	}
 	go func() {
 		respData := <-ch
 		if respData.err != nil {
@@ -554,7 +578,10 @@ func (c *Client) PutFile(path []string, contents []byte) (tree.FileInfo, error) 
 		},
 		Data: contents,
 	}
-	ch := c.handleReply(request, nil, nil)
+	ch, err := c.handleReply(request, nil, nil)
+	if err != nil {
+		return nil, err
+	}
 	respData := <-ch
 	resp, err := respData.resp, respData.err
 	if err != nil {
@@ -576,7 +603,10 @@ func (c *Client) ReadInfo(path []string) (tree.FileInfo, error) {
 			Path: path,
 		},
 	}
-	ch := c.handleReply(request, nil, nil)
+	ch, err := c.handleReply(request, nil, nil)
+	if err != nil {
+		return nil, err
+	}
 	respData := <-ch
 	resp, err := respData.resp, respData.err
 	if err != nil {
@@ -588,7 +618,7 @@ func (c *Client) ReadInfo(path []string) (tree.FileInfo, error) {
 	return parseFileInfo(resp.FileInfo), nil
 }
 
-func (c *Client) handleReply(request *Request, sendStream *io.PipeReader, recvStream *io.PipeWriter) chan roundtripResponse {
+func (c *Client) handleReply(request *Request, sendStream *io.PipeReader, recvStream *io.PipeWriter) (chan roundtripResponse, error) {
 	replyChan := make(chan roundtripResponse, 1)
 	idChan := make(chan uint64)
 	var recvBlocks chan recvBlock
@@ -598,6 +628,14 @@ func (c *Client) handleReply(request *Request, sendStream *io.PipeReader, recvSt
 
 	c.sendRequest <- roundtripRequest{request, idChan, replyChan, recvBlocks}
 	id := <-idChan // also makes sure the request is being sent
+	if id == 0 {
+		// there is an error
+		respData := <-replyChan
+		if respData.err == nil {
+			panic("error expected")
+		}
+		return nil, respData.err
+	}
 
 	var sendCancel chan struct{}
 	var sendFinished, recvFinished chan error
@@ -700,5 +738,5 @@ func (c *Client) handleReply(request *Request, sendStream *io.PipeReader, recvSt
 			}
 		}
 	}()
-	return returnChan
+	return returnChan, nil
 }
