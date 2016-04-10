@@ -112,6 +112,42 @@ func (e *Entry) Size() int64 {
 	return e.size
 }
 
+func (e *Entry) isRoot() bool {
+	return e.parent == nil
+}
+
+func (e *Entry) exists() bool {
+	return e != nil && e.removed.IsZero()
+}
+
+func (e *Entry) isRemoved() bool {
+	if !e.removed.IsZero() {
+		return true
+	}
+	if e.isRoot() {
+		return false
+	}
+	return e.parent.isRemoved()
+}
+
+func (e *Entry) countAll() uint64 {
+	if e.isRemoved() {
+		return 0
+	}
+	return e.countRecursive()
+}
+
+func (e *Entry) countRecursive() uint64 {
+	var count uint64
+	count++
+	for _, child := range e.children {
+		if child.removed.IsZero() {
+			count += child.countRecursive()
+		}
+	}
+	return count
+}
+
 // Add new entry by recursively finding the parent
 func (e *Entry) addRecursive(path []string, rev revision, fingerprint string, mode tree.Mode, hash tree.Hash, options string) (*Entry, error) {
 	if path[0] == "" {
@@ -157,6 +193,9 @@ func (e *Entry) addChild(name string, rev revision, fileInfo fingerprintInfo, mo
 		if err != nil {
 			return nil, &ParseError{"could not parse options for " + strings.Join(child.RelativePath(), "/"), 0, err}
 		}
+	}
+	if !child.isRemoved() {
+		e.replica.total++
 	}
 	e.children[child.name] = child
 	return child, nil
@@ -249,14 +288,6 @@ func (e *Entry) Includes(e2 *Entry) bool {
 	return true
 }
 
-func (e *Entry) isRoot() bool {
-	return e.parent == nil
-}
-
-func (e *Entry) exists() bool {
-	return e != nil && e.removed.IsZero()
-}
-
 func (e *Entry) List() []*Entry {
 	list := e.rawList()
 
@@ -324,6 +355,7 @@ func (e *Entry) Update(info tree.FileInfo, hash tree.Hash, source *Entry) {
 		}
 	}
 	if e.fileType != tree.TYPE_DIRECTORY {
+		e.replica.total -= e.countAll() - 1
 		e.children = nil
 	}
 
@@ -369,6 +401,7 @@ func (e *Entry) UpdateHash(hash tree.Hash, source *Entry) {
 // Remove this entry.
 // It will mark this entry as removed, and remove it once it's getting old.
 func (e *Entry) Remove() {
+	e.replica.total -= e.countAll()
 	if e.removed.IsZero() {
 		// This is an old status entry: the file has been removed. Keep it
 		// around in case it is needed again (e.g. it is moved back or a disk is

@@ -104,6 +104,8 @@ type Replica struct {
 	follow             []string // paths that should not be treated as symlinks
 	perms              tree.Mode
 	startScan          time.Time
+	scanned            uint64
+	total              uint64
 }
 
 func ScanTree(fs tree.LocalFileTree, recvOptionsChan, sendOptionsChan chan *tree.ScanOptions) (*Replica, error) {
@@ -564,8 +566,13 @@ func writeKeyValue(out *bufio.Writer, key, value string) error {
 }
 
 func (r *Replica) scan(fs tree.LocalFileTree, cancel chan struct{}) error {
+	r.scanned = 0
 	r.Root().hasMode = fs.Root().Info().HasMode()
-	return r.scanDir(fs.Root(), r.Root(), cancel)
+	err := r.scanDir(fs.Root(), r.Root(), cancel)
+	if r.scanned != r.total {
+		panic("scanned != total???")
+	}
+	return err
 }
 
 // scanDir scans one side of the tree, updating the status tree to the current
@@ -604,6 +611,8 @@ func (r *Replica) scanDir(dir tree.Entry, statusDir *Entry, cancel chan struct{}
 		if file == nil {
 			status.Remove()
 			continue
+		} else {
+			r.scanned++
 		}
 
 		if !status.exists() {
