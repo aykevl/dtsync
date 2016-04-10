@@ -369,7 +369,7 @@ func (r *Replica) load(file io.Reader) error {
 		path := strings.Split(fields[TSV_PATH], "/")
 
 		// now add this entry
-		child, err := r.rootEntry.addRecursive(path, revision{revReplica, revGeneration}, fingerprint, tree.Mode(mode), hash)
+		child, err := r.rootEntry.addRecursive(path, revision{revReplica, revGeneration}, fingerprint, tree.Mode(mode), hash, fields[TSV_OPTIONS])
 		if err != nil {
 			return &ParseError{"could not add row", row, err}
 		}
@@ -380,12 +380,6 @@ func (r *Replica) load(file io.Reader) error {
 			child.hasMode = 0
 		}
 
-		if len(fields[TSV_OPTIONS]) > 0 {
-			err = child.parseOptions(fields[TSV_OPTIONS])
-			if err != nil {
-				return &ParseError{"could not parse options", row, err}
-			}
-		}
 	}
 
 	// Put all headers that start with Option- in the option list.

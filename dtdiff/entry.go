@@ -113,7 +113,7 @@ func (e *Entry) Size() int64 {
 }
 
 // Add new entry by recursively finding the parent
-func (e *Entry) addRecursive(path []string, rev revision, fingerprint string, mode tree.Mode, hash tree.Hash) (*Entry, error) {
+func (e *Entry) addRecursive(path []string, rev revision, fingerprint string, mode tree.Mode, hash tree.Hash, options string) (*Entry, error) {
 	if path[0] == "" {
 		return nil, errInvalidPath
 	}
@@ -124,17 +124,17 @@ func (e *Entry) addRecursive(path []string, rev revision, fingerprint string, mo
 			// or: the path has a parent that hasn't yet been scanned
 			return nil, errInvalidPath
 		}
-		return child.addRecursive(path[1:], rev, fingerprint, mode, hash)
+		return child.addRecursive(path[1:], rev, fingerprint, mode, hash, options)
 	} else {
 		fileInfo, err := parseFingerprint(fingerprint)
 		if err != nil {
 			return nil, err
 		}
-		return e.addChild(path[0], rev, fileInfo, mode, hash)
+		return e.addChild(path[0], rev, fileInfo, mode, hash, options)
 	}
 }
 
-func (e *Entry) addChild(name string, rev revision, fileInfo fingerprintInfo, mode tree.Mode, hash tree.Hash) (*Entry, error) {
+func (e *Entry) addChild(name string, rev revision, fileInfo fingerprintInfo, mode tree.Mode, hash tree.Hash, options string) (*Entry, error) {
 	if e.children[name].exists() {
 		// duplicate path
 		return nil, ErrExists
@@ -151,6 +151,12 @@ func (e *Entry) addChild(name string, rev revision, fileInfo fingerprintInfo, mo
 		children: make(map[string]*Entry),
 		parent:   e,
 		replica:  e.replica,
+	}
+	if len(options) > 0 {
+		err := child.parseOptions(options)
+		if err != nil {
+			return nil, &ParseError{"could not parse options for " + strings.Join(child.RelativePath(), "/"), 0, err}
+		}
 	}
 	e.children[child.name] = child
 	return child, nil
@@ -289,7 +295,7 @@ func (e *Entry) add(info tree.FileInfo, rev revision) (*Entry, error) {
 		// Maybe not necessary, but just to be safe...
 		fileInfo.size = 0
 	}
-	return e.addChild(info.Name(), rev, fileInfo, info.Mode(), info.Hash())
+	return e.addChild(info.Name(), rev, fileInfo, info.Mode(), info.Hash(), "")
 }
 
 // Update updates the revision if the file was changed. The file is not changed
