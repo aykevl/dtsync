@@ -32,6 +32,7 @@ import (
 	"bufio"
 	"io"
 	"strings"
+	"sync"
 
 	"github.com/aykevl/dtsync/tree"
 	"github.com/aykevl/dtsync/version"
@@ -67,15 +68,20 @@ type recvBlock struct {
 	err    error
 }
 
+type scanJob struct {
+	scanOptions chan []byte
+}
+
 // Client implements the command issuing side of a dtsync connection. Requests
 // may be done in parallel, but they must not affect the same file (or parent
 // directory).
 type Client struct {
 	sendRequest chan roundtripRequest
 	sendBlocks  chan sendBlock
-	scanOptions chan []byte
 	w           io.WriteCloser
 	closeWait   chan struct{}
+	*scanJob
+	scanJobMutex sync.Mutex
 }
 
 // NewClient writes the connection header and returns a new *Client. It also
@@ -84,7 +90,6 @@ func NewClient(r io.ReadCloser, w io.WriteCloser) (*Client, error) {
 	c := &Client{
 		sendRequest: make(chan roundtripRequest),
 		sendBlocks:  make(chan sendBlock),
-		scanOptions: make(chan []byte),
 		w:           w,
 		closeWait:   make(chan struct{}),
 	}
@@ -116,6 +121,20 @@ func (c *Client) String() string {
 	return "remote.Client{...}"
 }
 
+func (c *Client) getScanJob() *scanJob {
+	c.scanJobMutex.Lock()
+	defer c.scanJobMutex.Unlock()
+	return c.scanJob
+}
+
+func (c *Client) setScanJob(j *scanJob) bool {
+	c.scanJobMutex.Lock()
+	defer c.scanJobMutex.Unlock()
+	ok := c.scanJob == nil
+	c.scanJob = j
+	return ok
+}
+
 // This is the background goroutine, to synchronize concurrent access. It
 // listens to new requests and received responses.
 func (c *Client) run(r *bufio.Reader, w *bufio.Writer) {
@@ -124,7 +143,6 @@ func (c *Client) run(r *bufio.Reader, w *bufio.Writer) {
 
 	inflight := make(map[uint64]chan roundtripResponse)
 	recvStreams := make(map[uint64]chan recvBlock)
-	scanIsRunning := false
 	var nextId uint64
 	var pipeErr error
 
@@ -149,14 +167,6 @@ func (c *Client) run(r *bufio.Reader, w *bufio.Writer) {
 			req.idChan <- id
 
 			debugLog("C: send command", *req.req.RequestId, Command_name[int32(*req.req.Command)])
-
-			if *req.req.Command == Command_SCAN {
-				if scanIsRunning {
-					req.replyChan <- roundtripResponse{nil, ErrConcurrentScan}
-					continue
-				}
-				scanIsRunning = true
-			}
 
 			buf, err := proto.Marshal(req.req)
 			if err != nil {
@@ -245,12 +255,18 @@ func (c *Client) run(r *bufio.Reader, w *bufio.Writer) {
 					streamChan <- recvBlock{*msg.RequestId, msg.Data, nil}
 				case Command_SCANOPTS:
 					debugLog("C: recv reply  ", *msg.RequestId, "SCANOPTS")
-					if !scanIsRunning {
+					job := c.getScanJob()
+					if job == nil {
 						pipeErr = ErrInvalidResponse("SCANOPTS: no scan running")
 						continue
 					}
-					c.scanOptions <- msg.Data
-					scanIsRunning = false // not entirely true
+					// Do not send when one is being processed currently
+					// already.
+					select {
+					case job.scanOptions <- msg.Data:
+					default:
+						pipeErr = ErrInvalidResponse("SCANOPTS: no scan running")
+					}
 				default:
 					pipeErr = ErrInvalidResponse("unknown command " + Command_name[int32(*msg.Command)])
 					continue
@@ -300,13 +316,32 @@ func (c *Client) Close() error {
 // status file.
 func (c *Client) RemoteScan(sendOptions, recvOptions chan *tree.ScanOptions) (io.Reader, error) {
 	debugLog("\nC: RemoteScan")
+
+	job := &scanJob{
+		scanOptions:  make(chan []byte, 1),
+	}
+	if !c.setScanJob(job) {
+		// a scan job is already set
+		return nil, ErrConcurrentScan
+	}
+
 	commandScan := Command_SCAN
-	stream, err := c.recvFile(&Request{
+	request := &Request{
 		Command: &commandScan,
-	})
+	}
+	reader, writer := io.Pipe()
+	stream := &streamReader{reader: reader}
+	ch, err := c.handleReply(request, nil, writer)
 	if err != nil {
 		return nil, err
 	}
+	go func() {
+		respData := <-ch
+		c.setScanJob(nil)
+		if respData.err != nil {
+			stream.setError(respData.err)
+		}
+	}()
 
 	go func() {
 		// Send excluded files from the other replica to the remote replica.
@@ -320,7 +355,7 @@ func (c *Client) RemoteScan(sendOptions, recvOptions chan *tree.ScanOptions) (io
 	}()
 
 	go func() {
-		options, err := parseScanOptions(<-c.scanOptions)
+		options, err := parseScanOptions(<-job.scanOptions)
 		if err != nil {
 			stream.setError(err)
 			recvOptions <- nil
