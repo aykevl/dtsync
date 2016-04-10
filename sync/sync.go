@@ -54,20 +54,31 @@ type Result struct {
 	jobs       []*Job
 	countTotal int
 	countError int
+	progress   chan<- dtdiff.ScanProgress
+}
+
+func Progress() (chan dtdiff.ScanProgress, func(*Result)) {
+	progress := make(chan dtdiff.ScanProgress)
+	return progress, func(r *Result) {
+		r.progress = progress
+	}
 }
 
 // Scan the two filesystem roots for changes, and return results with a list of
 // sync jobs.
-func Scan(fs1, fs2 tree.Tree) (*Result, error) {
-	rs, err := dtdiff.Scan(fs1, fs2)
-	if err != nil {
-		return nil, err
-	}
-
+func Scan(fs1, fs2 tree.Tree, options ...func(*Result)) (*Result, error) {
 	r := &Result{
-		rs:  rs,
 		fs1: fs1,
 		fs2: fs2,
+	}
+	for _, option := range options {
+		option(r)
+	}
+
+	var err error
+	r.rs, err = dtdiff.Scan(fs1, fs2, dtdiff.Progress(r.progress))
+	if err != nil {
+		return nil, err
 	}
 
 	// Reconcile changes

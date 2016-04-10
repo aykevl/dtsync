@@ -176,7 +176,7 @@ type RemoteTree interface {
 	// The sendOptions are sent to the remote scanner (scan will start once
 	// received), and recvOptions is a channel from which the options sent by
 	// the remote can be read.
-	RemoteScan(sendOptions, recvOptions chan *ScanOptions) (io.Reader, error)
+	RemoteScan(sendOptions, recvOptions chan *ScanOptions, progress chan<- *ScanProgress) (io.Reader, error)
 }
 
 type LocalTree interface {
@@ -485,6 +485,27 @@ type ScanOptions struct {
 	Follow  []string
 	Perms   Mode
 	Replica string
+}
+
+// ScanProgress holds the current progress (total estimated number and current
+// position) to send from the scanner to the UI.
+type ScanProgress struct {
+	Total uint64
+	Done  uint64
+	Path  []string
+}
+
+func (p1 *ScanProgress) After(p2 *ScanProgress) bool {
+	path1 := strings.Join(p1.Path, "\x00")
+	path2 := strings.Join(p2.Path, "\x00")
+	return path1 > path2
+}
+
+func (p *ScanProgress) Percent() float64 {
+	if p == nil {
+		return 0
+	}
+	return float64(p.Done) / float64(p.Total)
 }
 
 type ListOptions struct {

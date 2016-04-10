@@ -91,6 +91,25 @@ func (e *ErrSameIdentity) Error() string {
 // File where current status of the tree is stored.
 const STATUS_FILE = ".dtsync"
 
+type ScanProgress [2]*tree.ScanProgress
+
+func (p ScanProgress) Percent() float64 {
+	p1 := p[0].Percent()
+	p2 := p[1].Percent()
+	return (p1 + p2) / 2.0
+}
+
+func (p ScanProgress) Behind() *tree.ScanProgress {
+	if p[0] == nil || p[1] == nil {
+		return nil
+	}
+	if p[0].After(p[1]) {
+		return p[1]
+	} else {
+		return p[0]
+	}
+}
+
 type Replica struct {
 	revision
 	isChanged          bool // true if there was a change in generation (any file added/deleted/updated)
@@ -106,9 +125,10 @@ type Replica struct {
 	startScan          time.Time
 	scanned            uint64
 	total              uint64
+	progressSent       time.Time
 }
 
-func ScanTree(fs tree.LocalFileTree, recvOptionsChan, sendOptionsChan chan *tree.ScanOptions) (*Replica, error) {
+func ScanTree(fs tree.LocalFileTree, recvOptionsChan, sendOptionsChan chan *tree.ScanOptions, progress chan<- *tree.ScanProgress) (*Replica, error) {
 	var replica *Replica
 	file, err := fs.GetFile(STATUS_FILE)
 	if tree.IsNotExist(err) {
@@ -132,7 +152,7 @@ func ScanTree(fs tree.LocalFileTree, recvOptionsChan, sendOptionsChan chan *tree
 	}
 	replica.addScanOptions(recvOptions)
 
-	err = replica.scan(fs, nil)
+	err = replica.scan(fs, nil, progress)
 	if err != nil {
 		return nil, err
 	}
@@ -141,7 +161,6 @@ func ScanTree(fs tree.LocalFileTree, recvOptionsChan, sendOptionsChan chan *tree
 
 func loadReplica(file io.Reader) (*Replica, error) {
 	r := &Replica{
-		startScan: time.Now(),
 		rootEntry: &Entry{
 			children: make(map[string]*Entry),
 			fileType: tree.TYPE_DIRECTORY,
@@ -565,19 +584,22 @@ func writeKeyValue(out *bufio.Writer, key, value string) error {
 	return err
 }
 
-func (r *Replica) scan(fs tree.LocalFileTree, cancel chan struct{}) error {
+func (r *Replica) scan(fs tree.LocalFileTree, cancel chan struct{}, progress chan<- *tree.ScanProgress) error {
+	r.startScan = time.Now()
 	r.scanned = 0
+	r.progressSent = time.Time{}
 	r.Root().hasMode = fs.Root().Info().HasMode()
-	err := r.scanDir(fs.Root(), r.Root(), cancel)
+	err := r.scanDir(fs.Root(), r.Root(), cancel, progress)
 	if r.scanned != r.total {
 		panic("scanned != total???")
 	}
+	close(progress)
 	return err
 }
 
 // scanDir scans one side of the tree, updating the status tree to the current
 // status.
-func (r *Replica) scanDir(dir tree.Entry, statusDir *Entry, cancel chan struct{}) error {
+func (r *Replica) scanDir(dir tree.Entry, statusDir *Entry, cancel chan struct{}, progress chan<- *tree.ScanProgress) error {
 	fileList, err := dir.List(tree.ListOptions{
 		Follow: func(parts []string) bool {
 			return r.matchPatterns(parts[len(parts)-1], path.Join(parts...), r.follow)
@@ -611,9 +633,23 @@ func (r *Replica) scanDir(dir tree.Entry, statusDir *Entry, cancel chan struct{}
 		if file == nil {
 			status.Remove()
 			continue
-		} else {
-			r.scanned++
 		}
+
+		now := time.Now()
+		if now.Sub(r.progressSent) > 100*time.Millisecond {
+			// Send progress without blocking (if it blocks, don't send it).
+			select {
+			case progress <- &tree.ScanProgress{
+				Total: r.total,
+				Done:  r.scanned,
+				Path:  file.RelativePath(),
+			}:
+				r.progressSent = now
+			default:
+			}
+		}
+
+		r.scanned++
 
 		if !status.exists() {
 			// add status
@@ -644,7 +680,7 @@ func (r *Replica) scanDir(dir tree.Entry, statusDir *Entry, cancel chan struct{}
 		}
 
 		if file.Type() == tree.TYPE_DIRECTORY {
-			err := r.scanDir(file, status, cancel)
+			err := r.scanDir(file, status, cancel, progress)
 			if err != nil {
 				return err
 			}

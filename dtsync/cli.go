@@ -49,6 +49,8 @@ var cpuprofile = flag.String("cpuprofile", "", "write CPU profile to file")
 var editorCommand = flag.String("editor", "/usr/bin/editor", "Editor to use for editing jobs")
 var isServer = flag.Bool("server", false, "Run as server side process")
 
+const ERASE_SOL = "\033[2K\r"
+
 func editJobs(result *sync.Result, root1, root2 string) bool {
 	jobs := result.Jobs()
 
@@ -253,7 +255,31 @@ func main() {
 		return
 	}
 
-	result, err := sync.Scan(fs1, fs2)
+	progress, optionProgress := sync.Progress()
+	go func() {
+		for p := range progress {
+			finished := p[0] != nil && p[1] != nil && p[0].Done == p[0].Total && p[1].Done == p[1].Total
+			path := ""
+			behind := p.Behind()
+
+			if behind != nil {
+				path = strings.Join(p.Behind().Path, "/")
+				width := terminalWidth() - len("progress: 99% ")
+				if len(path) > width {
+					path = path[:width-1] + "…"
+				}
+			}
+			if finished {
+				fmt.Printf(ERASE_SOL + "progress: finished")
+			} else {
+				fmt.Printf(ERASE_SOL+"progress: %2d%% %s", int(p.Percent()*100), path)
+			}
+		}
+		fmt.Print(ERASE_SOL + "progress: scan finished")
+	}()
+
+	result, err := sync.Scan(fs1, fs2, optionProgress)
+	fmt.Print(ERASE_SOL)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Could not scan roots:", err)
 		return

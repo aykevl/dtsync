@@ -516,6 +516,7 @@ func (s *Server) replyInfo2(requestId uint64, file, parent tree.FileInfo, err er
 func (s *Server) scan(requestId uint64, scanOptions chan []byte) {
 	recvOptions := make(chan *tree.ScanOptions)
 	sendOptions := make(chan *tree.ScanOptions)
+	progressChan := make(chan *tree.ScanProgress)
 
 	go func() {
 		options, err := parseScanOptions(<-scanOptions)
@@ -535,7 +536,28 @@ func (s *Server) scan(requestId uint64, scanOptions chan []byte) {
 		}, nil}
 	}()
 
-	replica, err := dtdiff.ScanTree(s.fs, recvOptions, sendOptions)
+	progressDone := make(chan struct{})
+	go func() {
+		defer close(progressDone)
+		for progress := range progressChan {
+			data, err := proto.Marshal(&ScanProgress{
+				Total: &progress.Total,
+				Done:  &progress.Done,
+				Path:  progress.Path,
+			})
+			if err != nil {
+				panic(err) // programming error?
+			}
+			command := Command_SCANPROG
+			s.replyChan <- replyResponse{requestId, &Response{
+				Command: &command,
+				Data:    data,
+			}, nil}
+		}
+	}()
+
+	replica, err := dtdiff.ScanTree(s.fs, recvOptions, sendOptions, progressChan)
+	<-progressDone
 	if err != nil {
 		s.replyError(requestId, err)
 		return

@@ -69,7 +69,8 @@ type recvBlock struct {
 }
 
 type scanJob struct {
-	scanOptions chan []byte
+	scanOptions  chan []byte
+	scanProgress chan []byte
 }
 
 // Client implements the command issuing side of a dtsync connection. Requests
@@ -267,6 +268,14 @@ func (c *Client) run(r *bufio.Reader, w *bufio.Writer) {
 					default:
 						pipeErr = ErrInvalidResponse("SCANOPTS: no scan running")
 					}
+				case Command_SCANPROG:
+					debugLog("C: recv reply  ", *msg.RequestId, "SCANPROG")
+					job := c.getScanJob()
+					if job == nil {
+						pipeErr = ErrInvalidResponse("SCANPROG: no scan running")
+						continue
+					}
+					job.scanProgress <- msg.Data
 				default:
 					pipeErr = ErrInvalidResponse("unknown command " + Command_name[int32(*msg.Command)])
 					continue
@@ -314,11 +323,12 @@ func (c *Client) Close() error {
 
 // RemoteScan runs a remote scan command and returns an io.Reader with the new
 // status file.
-func (c *Client) RemoteScan(sendOptions, recvOptions chan *tree.ScanOptions) (io.Reader, error) {
+func (c *Client) RemoteScan(sendOptions, recvOptions chan *tree.ScanOptions, recvProgress chan<- *tree.ScanProgress) (io.Reader, error) {
 	debugLog("\nC: RemoteScan")
 
 	job := &scanJob{
 		scanOptions:  make(chan []byte, 1),
+		scanProgress: make(chan []byte, 1),
 	}
 	if !c.setScanJob(job) {
 		// a scan job is already set
@@ -338,6 +348,7 @@ func (c *Client) RemoteScan(sendOptions, recvOptions chan *tree.ScanOptions) (io
 	go func() {
 		respData := <-ch
 		c.setScanJob(nil)
+		close(job.scanProgress)
 		if respData.err != nil {
 			stream.setError(respData.err)
 		}
@@ -362,6 +373,29 @@ func (c *Client) RemoteScan(sendOptions, recvOptions chan *tree.ScanOptions) (io
 			return
 		}
 		recvOptions <- options
+	}()
+
+	go func() {
+		for data := range job.scanProgress {
+			progress := &ScanProgress{}
+			err := proto.Unmarshal(data, progress)
+			if err != nil {
+				stream.setError(err)
+				return
+			}
+
+			// Non-blocking send, in case the receiver has already stopped
+			// listening.
+			select {
+			case recvProgress <- &tree.ScanProgress{
+				Total: progress.GetTotal(),
+				Done:  progress.GetDone(),
+				Path:  progress.Path,
+			}:
+			default:
+			}
+		}
+		close(recvProgress)
 	}()
 
 	return stream, nil

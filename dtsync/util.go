@@ -29,7 +29,10 @@
 package main
 
 import (
+	"os"
 	"unicode"
+
+	"golang.org/x/crypto/ssh/terminal"
 )
 
 func FieldsN(s string, n int) []string {
@@ -54,4 +57,14 @@ func FieldsN(s string, n int) []string {
 		fields = append(fields, s[fieldStart:])
 	}
 	return fields
+}
+
+// terminalWidth returns the width of the current terminal on stdout, falling
+// back to 80 if it cannot be obtained.
+func terminalWidth() int {
+	width, _, err := terminal.GetSize(int(os.Stdout.Fd()))
+	if err != nil {
+		return 80
+	}
+	return width
 }

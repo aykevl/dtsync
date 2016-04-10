@@ -34,25 +34,41 @@ import (
 
 // ReplicaSet is a combination of two replicas
 type ReplicaSet struct {
-	set [2]*Replica
+	set      [2]*Replica
+	progress chan<- ScanProgress
 }
 
-func Scan(fs1, fs2 tree.Tree) (*ReplicaSet, error) {
+func Progress(progress chan<- ScanProgress) func(*ReplicaSet) {
+	return func(rs *ReplicaSet) {
+		rs.progress = progress
+	}
+}
+
+func Scan(fs1, fs2 tree.Tree, options ...func(*ReplicaSet)) (*ReplicaSet, error) {
 	if fs1 == fs2 {
 		return nil, ErrSameRoot
 	}
 
 	rs := &ReplicaSet{}
+	for _, option := range options {
+		option(rs)
+	}
+
+	if rs.progress != nil {
+		defer close(rs.progress)
+	}
 
 	// Load and scan replica status.
 	var sendOptions [2]chan *tree.ScanOptions // start scan on receive
 	var scanErrors [2]chan error
 	var scanCancel [2]chan struct{}
+	var scanProgress [2]chan *tree.ScanProgress
 	trees := []tree.Tree{fs1, fs2}
 	for i := range trees {
 		sendOptions[i] = make(chan *tree.ScanOptions, 1)
 		scanErrors[i] = make(chan error)
 		scanCancel[i] = make(chan struct{}, 1)
+		scanProgress[i] = make(chan *tree.ScanProgress)
 	}
 	for i := range trees {
 		go func(i int) {
@@ -97,10 +113,10 @@ func Scan(fs1, fs2 tree.Tree) (*ReplicaSet, error) {
 				replica.addScanOptions(otherOptions)
 
 				// Now we can start.
-				scanErrors[i] <- replica.scan(fs, scanCancel[i])
+				scanErrors[i] <- replica.scan(fs, scanCancel[i], scanProgress[i])
 
 			case tree.RemoteTree:
-				reader, err := fs.RemoteScan(sendOptions[i], sendOptions[(i+1)%2])
+				reader, err := fs.RemoteScan(sendOptions[i], sendOptions[(i+1)%2], scanProgress[i])
 				if err != nil {
 					scanErrors[i] <- err
 				}
@@ -118,32 +134,58 @@ func Scan(fs1, fs2 tree.Tree) (*ReplicaSet, error) {
 		}(i)
 	}
 
-	select {
-	case err := <-scanErrors[0]:
-		if err != nil {
-			close(sendOptions[1])
-			scanCancel[1] <- struct{}{}
-			<-scanErrors[1]
-			return nil, err
+	var progress ScanProgress
+
+	addProgress := func(index int, newProgress *tree.ScanProgress) {
+		if rs.progress == nil {
+			return
 		}
-		err = <-scanErrors[1]
-		if err != nil {
-			return nil, err
-		}
-	case err := <-scanErrors[1]:
-		if err != nil {
-			close(sendOptions[0])
-			scanCancel[0] <- struct{}{}
-			<-scanErrors[0]
-			return nil, err
-		}
-		err = <-scanErrors[0]
-		if err != nil {
-			return nil, err
-		}
+		progress[index] = newProgress
+		rs.progress <- progress
 	}
 
-	return rs, nil
+	done1 := false
+	done2 := false
+	for {
+		select {
+		case err := <-scanErrors[0]:
+			done1 = true
+			if err != nil {
+				if !done2 {
+					close(sendOptions[1])
+					scanCancel[1] <- struct{}{}
+					<-scanErrors[1]
+				}
+				return nil, err
+			}
+		case err := <-scanErrors[1]:
+			done2 = true
+			if err != nil {
+				if !done1 {
+					close(sendOptions[0])
+					scanCancel[0] <- struct{}{}
+					<-scanErrors[0]
+				}
+				return nil, err
+			}
+		case newProgress, ok := <-scanProgress[0]:
+			if !ok {
+				scanProgress[0] = nil
+			} else {
+				addProgress(0, newProgress)
+			}
+		case newProgress, ok := <-scanProgress[1]:
+			if !ok {
+				scanProgress[1] = nil
+			} else {
+				addProgress(1, newProgress)
+			}
+		}
+
+		if done1 && done2 {
+			return rs, nil
+		}
+	}
 }
 
 // Get returns the replica by index

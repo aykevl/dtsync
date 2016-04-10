@@ -5,7 +5,8 @@ enum Command {
 	CLOSE       = 1; // unused
 	DATA        = 2;
 	SCAN        = 3;
-	SCANOPTS    = 4;
+	SCANOPTS    = 4; // scan options (before scan)
+	SCANPROG    = 5; // scan progress (during scan)
 
 	MKDIR       = 10;
 	REMOVE      = 11;
@@ -67,6 +68,12 @@ message ScanOptions {
 	repeated string follow  = 3;
 	optional uint32 perms   = 5;
 	optional string replica = 6;
+}
+
+message ScanProgress {
+	optional uint64 total = 1;
+	optional uint64 done  = 2;
+	repeated string path  = 3;
 }
 
 message Error {
