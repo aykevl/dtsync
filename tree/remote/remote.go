@@ -44,15 +44,20 @@ import (
 
 // Errors defined by the remote package.
 var (
-	ErrNoClient        = errors.New("remote: this is not a dtsync client")
-	ErrNoServer        = errors.New("remote: this is not a dtsync server")
-	ErrInvalidId       = errors.New("remote: invalid request ID")
-	ErrInvalidPath     = errors.New("remote: invalid path")
-	ErrInvalidResponse = errors.New("remote: invalid response")
-	ErrInvalidError    = errors.New("remote: remote sent an invalid error message")
-	ErrNoTests         = errors.New("remote: this is not a test tree")
-	ErrConcurrentScan  = errors.New("remote: Scan() during scan")
+	ErrNoClient       = errors.New("remote: this is not a dtsync client")
+	ErrNoServer       = errors.New("remote: this is not a dtsync server")
+	ErrInvalidId      = errors.New("remote: invalid request ID")
+	ErrInvalidPath    = errors.New("remote: invalid path")
+	ErrInvalidError   = errors.New("remote: remote sent an invalid error message")
+	ErrNoTests        = errors.New("remote: this is not a test tree")
+	ErrConcurrentScan = errors.New("remote: Scan() during scan")
 )
+
+type ErrInvalidResponse string
+
+func (e ErrInvalidResponse) Error() string {
+	return "remote: invalid response: " + string(e)
+}
 
 type RemoteError struct {
 	message string

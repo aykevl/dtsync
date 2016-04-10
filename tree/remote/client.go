@@ -229,7 +229,7 @@ func (c *Client) run(r *bufio.Reader, w *bufio.Writer) {
 				continue
 			}
 			if msg.RequestId == nil {
-				pipeErr = ErrInvalidResponse
+				pipeErr = ErrInvalidResponse("no requestId")
 				continue
 			}
 			if msg.Command != nil {
@@ -238,20 +238,20 @@ func (c *Client) run(r *bufio.Reader, w *bufio.Writer) {
 					debugLog("C: recv        ", *msg.RequestId, "DATA")
 					streamChan, ok := recvStreams[*msg.RequestId]
 					if !ok {
-						pipeErr = ErrInvalidResponse
+						pipeErr = ErrInvalidResponse("DATA: unknown stream ID")
 						continue
 					}
 					streamChan <- recvBlock{*msg.RequestId, msg.Data, nil}
 				case Command_SCANOPTS:
 					debugLog("C: recv reply  ", *msg.RequestId, "SCANOPTS")
 					if !scanIsRunning {
-						pipeErr = ErrInvalidResponse
+						pipeErr = ErrInvalidResponse("SCANOPTS: no scan running")
 						continue
 					}
 					c.scanOptions <- msg.Data
 					scanIsRunning = false // not entirely true
 				default:
-					pipeErr = ErrInvalidResponse
+					pipeErr = ErrInvalidResponse("unknown command " + Command_name[int32(*msg.Command)])
 					continue
 				}
 			} else {
@@ -369,7 +369,7 @@ func (c *Client) requestReturnsFileInfo(request *Request) (tree.FileInfo, error)
 		return nil, err
 	}
 	if resp.FileInfo == nil || resp.FileInfo.Type == nil || resp.FileInfo.ModTime == nil {
-		return nil, ErrInvalidResponse
+		return nil, ErrInvalidResponse("missing fileInfo with type and modTime")
 	}
 	return parseFileInfo(resp.FileInfo), nil
 }
@@ -512,7 +512,7 @@ func (c *Client) ReadSymlink(file tree.FileInfo) (string, error) {
 		return "", err
 	}
 	if resp.Data == nil {
-		return "", ErrInvalidResponse
+		return "", ErrInvalidResponse("reading symlink with no data")
 	}
 	return string(respData.resp.Data), nil
 }
@@ -561,7 +561,7 @@ func (c *Client) PutFile(path []string, contents []byte) (tree.FileInfo, error) 
 		return nil, err
 	}
 	if resp.FileInfo == nil || resp.FileInfo.Type == nil || resp.FileInfo.ModTime == nil || resp.FileInfo.Size == nil {
-		return nil, ErrInvalidResponse
+		return nil, ErrInvalidResponse("PUTFILE: no fileInfo with type, modTime and size")
 	}
 	return parseFileInfo(resp.FileInfo), nil
 }
@@ -583,7 +583,7 @@ func (c *Client) ReadInfo(path []string) (tree.FileInfo, error) {
 		return nil, err
 	}
 	if resp.FileInfo == nil || resp.FileInfo.Type == nil || resp.FileInfo.ModTime == nil || resp.FileInfo.Size == nil {
-		return nil, ErrInvalidResponse
+		return nil, ErrInvalidResponse("ReadInfo: no fileInfo with type, modTime and size")
 	}
 	return parseFileInfo(resp.FileInfo), nil
 }
