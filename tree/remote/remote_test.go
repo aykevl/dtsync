@@ -50,9 +50,9 @@ func TestRemote(t *testing.T) {
 	fs2 := fsList[1]
 	fsCheck := memory.NewRoot()
 
-	// Wait for a short while (0.1ms, or 100µs) to let the number of goroutines
-	// settle down. This may be machine-dependent, and may need to be updated.
-	time.Sleep(100 * time.Microsecond)
+	// Wait for a short while (1ms) to let the number of goroutines settle down.
+	// This may be machine-dependent, and may need to be updated.
+	time.Sleep(time.Millisecond)
 
 	numRoutines := runtime.NumGoroutine()
 	for i, tc := range [][2]tree.TestTree{
