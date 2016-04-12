@@ -189,6 +189,9 @@ func syncRoots(t *testing.T, scheme1, scheme2 string) {
 		}},
 	}
 
+	assert(fs1.Close())
+	assert(fs2.Close())
+
 	fs1 = newTestRoot(t, scheme1)
 	fs2 = newTestRoot(t, scheme2)
 	fsCheck := newTestRoot(t, scheme2)
@@ -231,6 +234,9 @@ path	fingerprint	revision
 		}
 	}
 
+	assert(fs1.Close())
+	assert(fs2.Close())
+
 	for _, schemes := range [][]string{{scheme1, scheme2}, {scheme2, scheme1}} {
 		fs1 = newTestRoot(t, schemes[0])
 		fs2 = newTestRoot(t, schemes[1])
@@ -239,6 +245,9 @@ path	fingerprint	revision
 		if schemes[0] == schemes[1] {
 			break
 		}
+
+		assert(fs1.Close())
+		assert(fs2.Close())
 	}
 
 	if t.Failed() {
