@@ -63,6 +63,9 @@ const PERMS_DEFAULT = 0777
 // disappeared, in case they reappear (e.g. a disk is mounted again).
 const STATUS_RETAIN = time.Hour * 24 * 30
 
+// MAGIC is a string constant that can be used to identify the filetype.
+const MAGIC = "dtsync-status-file"
+
 type ParseError struct {
 	Message string
 	Row     int
@@ -245,6 +248,17 @@ func (r *Replica) load(file io.Reader) error {
 	header, err := textproto.NewReader(reader).ReadMIMEHeader()
 	if err != nil {
 		return &ParseError{"cannot parse status file", 0, err}
+	}
+
+	if header.Get("Magic") != MAGIC {
+		if header.Get("Magic") == "" {
+			return &ParseError{"file does not have magic", 0, nil}
+		} else {
+			return &ParseError{"file has wrong magic: " + header.Get("Magic") + "'", 0, nil}
+		}
+	}
+	if header.Get("Version") != "1" {
+		return &ParseError{"unknown file version: '" + header.Get("Version") + "'", 0, nil}
 	}
 
 	contentType := header.Get("Content-Type")
@@ -470,7 +484,9 @@ func (r *Replica) Serialize(out io.Writer) error {
 
 	writer := bufio.NewWriter(out)
 	// Don't look at the error return values, errors will be caught in .Flush().
-	writeKeyValue(writer, "Version", version.VERSION)
+	writeKeyValue(writer, "Magic", MAGIC)
+	writeKeyValue(writer, "Version", "1")
+	writeKeyValue(writer, "Created-By", version.VERSION)
 	writeKeyValue(writer, "Content-Type", "text/tab-separated-values; charset=utf-8")
 	writeKeyValue(writer, "Identity", r.identity)
 	writeKeyValue(writer, "Generation", strconv.Itoa(r.generation))

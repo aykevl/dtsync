@@ -205,7 +205,9 @@ func syncRoots(t *testing.T, scheme1, scheme2 string) {
 		{"fsCheck", fsCheck},
 	}
 	for _, fs := range fsNames {
-		fs.fs.PutFile([]string{dtdiff.STATUS_FILE}, []byte(`Content-Type: text/tab-separated-values; charset=utf-8
+		fs.fs.PutFile([]string{dtdiff.STATUS_FILE}, []byte(`Magic: dtsync-status-file
+Version: 1
+Content-Type: text/tab-separated-values; charset=utf-8
 Identity: `+fs.name+`
 Generation: 1
 
@@ -326,7 +328,9 @@ func runPatternTest(t *testing.T, fs1, fs2 tree.TestTree) {
 		}
 	}
 
-	fs1.PutFile([]string{dtdiff.STATUS_FILE}, []byte(`Content-Type: text/tab-separated-values; charset=utf-8
+	fs1.PutFile([]string{dtdiff.STATUS_FILE}, []byte(`Magic: dtsync-status-file
+Version: 1
+Content-Type: text/tab-separated-values; charset=utf-8
 Identity: fs1
 Generation: 1
 Option-Follow: link1-*
@@ -335,7 +339,9 @@ Option-Include: ignore1-not*
 
 path	fingerprint	revision
 `))
-	fs2.PutFile([]string{dtdiff.STATUS_FILE}, []byte(`Content-Type: text/tab-separated-values; charset=utf-8
+	fs2.PutFile([]string{dtdiff.STATUS_FILE}, []byte(`Magic: dtsync-status-file
+Version: 1
+Content-Type: text/tab-separated-values; charset=utf-8
 Identity: fs2
 Generation: 1
 Option-Follow: link2-*

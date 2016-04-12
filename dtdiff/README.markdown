@@ -22,7 +22,9 @@ format.
 
 Example file:
 
-    Version: dtsync 0.1
+    Magic: dtsync-status-file
+    Created-By: dtsync 0.1
+    Version: 1
     Content-Type: text/tab-separated-values; charset=utf-8
     Identity: first
     Generation: 2
@@ -36,8 +38,17 @@ Example file:
 The whole file is in MIME format, and must be parsed with an appropriate
 library.
 
-`Version`: a more-or-less free format identifier for the software that wrote the
-file. Currently it is in a `<name> <version>` format.
+`Magic`: a magic string that can be used to identify the file type. The first
+line of the file must be exactly like this.
+
+`Created-By`: a more-or-less free format identifier for the software that wrote
+the file. Currently it is in a `<name> <version>` format.
+
+`Version`: the current version of this file format. Can be increased in the
+future for backwards-incompatible changes so older versions of dtsync can still
+work with the file. Changes should, if possible, be additions that still work on
+older versions in most cases. This version header can be used when old programs
+can interpret the file the wrong way.
 
 `Content-Type`: always the same value. Can be changed in the future so other
 formats (binary?) can be used. The only supported charset is utf-8.

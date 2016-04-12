@@ -33,7 +33,9 @@ import (
 	"testing"
 )
 
-const status1 = `Version: dtsync 0.1
+const status1 = `Magic: dtsync-status-file
+Version: 1
+Created-By: dtsync 0.1
 Content-Type: text/tab-separated-values; charset=utf-8
 Identity: first
 Generation: 2
@@ -51,7 +53,9 @@ file3.jpeg	f/2012-12-18T20:25:21.099852001Z/0	644		1:1
 new.txt	f/2016-02-14T16:30:26.719348761Z/0	664		0:2	
 `
 
-const status2 = `Version: dtsync 0.1
+const status2 = `Magic: dtsync-status-file
+Version: 1
+Created-By: dtsync 0.1
 Content-Type: text/tab-separated-values; charset=utf-8
 Identity: second
 Generation: 5
