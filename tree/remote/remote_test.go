@@ -29,7 +29,9 @@
 package remote
 
 import (
+	"runtime"
 	"testing"
+	"time"
 
 	"github.com/aykevl/dtsync/tree"
 	"github.com/aykevl/dtsync/tree/memory"
@@ -43,28 +45,28 @@ func TestRemote(t *testing.T) {
 		if err != nil {
 			t.Fatal("could not make test client:", err)
 		}
-		defer func(i int) {
-			fs := fsList[i]
-			if fs == nil {
-				// already closed
-				return
-			}
-			err := fs.Close()
-			if err != nil {
-				t.Fatal("could not close test client:", err)
-			} else {
-				t.Log("closed server")
-			}
-		}(i)
 	}
 	fs1 := fsList[0]
 	fs2 := fsList[1]
 	fsCheck := memory.NewRoot()
 
-	tree.TreeTest(t, fs1, fsCheck)
-	tree.TreeTest(t, fsCheck, fs1)
-	tree.TreeTest(t, fs1, fs2)
-	tree.TreeTest(t, fs2, fs1)
+	// Wait for a short while (0.1ms, or 100µs) to let the number of goroutines
+	// settle down. This may be machine-dependent, and may need to be updated.
+	time.Sleep(100 * time.Microsecond)
+
+	numRoutines := runtime.NumGoroutine()
+	for i, tc := range [][2]tree.TestTree{
+		{fs1, fsCheck},
+		{fsCheck, fs1},
+		{fs1, fs2},
+		{fs2, fs1},
+	} {
+		tree.TreeTest(t, tc[0], tc[1])
+		if num := runtime.NumGoroutine(); num != numRoutines {
+			t.Errorf("remote test #%d: number of goroutines changed from %d to %d", i+1, numRoutines, num)
+			numRoutines = num
+		}
+	}
 
 	for i, fs := range fsList {
 		err := fs.Close()

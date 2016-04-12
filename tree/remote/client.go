@@ -756,6 +756,7 @@ func (c *Client) handleReply(request *Request, sendStream *io.PipeReader, recvSt
 			for block := range recvBlocks {
 				if block.err != nil {
 					recvStream.CloseWithError(block.err)
+					recvFinished <- block.err
 					return
 				}
 				_, err := recvStream.Write(block.data)
