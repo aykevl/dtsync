@@ -208,18 +208,15 @@ func (s *Server) handleRequest(msg *Request, recvStreams map[uint64]chan []byte)
 		dataChan := make(chan []byte, 1)
 		go s.setFile(*msg.RequestId, *msg.Name, dataChan)
 		recvStreams[*msg.RequestId] = dataChan
-	case Command_CREATE, Command_UPDATE:
+	case Command_COPY_DST:
 		// Client wants to write a file.
 		if msg.FileInfo1 == nil || msg.FileInfo2 == nil {
-			return invalidRequest{"CREATE/UPDATE expects fileInfo1 and fileInfo2"}
-		}
-		if *msg.Command == Command_CREATE && msg.Name == nil {
-			return invalidRequest{"CREATE expects name to be set"}
+			return invalidRequest{"COPY_SRC expects fileInfo1 and fileInfo2"}
 		}
 		dataChan := make(chan []byte, 1)
 		recvStreams[*msg.RequestId] = dataChan
-		if *msg.Command == Command_CREATE {
-			go s.create(*msg.RequestId, *msg.Name, parseFileInfo(msg.FileInfo1), parseFileInfo(msg.FileInfo2), dataChan)
+		if msg.GetName() != "" {
+			go s.create(*msg.RequestId, msg.GetName(), parseFileInfo(msg.FileInfo1), parseFileInfo(msg.FileInfo2), dataChan)
 		} else {
 			go s.update(*msg.RequestId, parseFileInfo(msg.FileInfo1), parseFileInfo(msg.FileInfo2), dataChan)
 		}
@@ -242,7 +239,7 @@ func (s *Server) handleRequest(msg *Request, recvStreams map[uint64]chan []byte)
 			return invalidRequest{"READLINK expects fileInfo1 to be set"}
 		}
 		go s.readSymlink(*msg.RequestId, parseFileInfo(msg.FileInfo1))
-	case Command_COPYSRC:
+	case Command_COPY_SRC:
 		// Client requests a file.
 		if msg.FileInfo1 == nil || msg.FileInfo1.Type == nil || msg.FileInfo1.Path == nil ||
 			msg.FileInfo1.ModTime == nil || msg.FileInfo1.Size == nil {

@@ -10,13 +10,12 @@ enum Command {
 
 	MKDIR       = 10;
 	REMOVE      = 11;
-	CREATE      = 12;
-	UPDATE      = 13;
-	COPYSRC     = 14;
-	CREATELINK  = 15; // create symlink
-	UPDATELINK  = 16; // update symlink
-	READLINK    = 17; // remove symlink
-	CHMOD       = 18; // change permissions
+	COPY_SRC    = 12;
+	COPY_DST    = 13;
+	CREATELINK  = 14; // create symlink
+	UPDATELINK  = 15; // update symlink
+	READLINK    = 16; // remove symlink
+	CHMOD       = 17; // change permissions
 
 	// testing commands
 	PUTFILE     = 30;

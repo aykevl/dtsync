@@ -491,30 +491,25 @@ func (c *Client) SetFile(name string) (io.WriteCloser, error) {
 
 func (c *Client) CreateFile(name string, parent, source tree.FileInfo) (tree.Copier, error) {
 	debugLog("\nC: CreateFile")
-	command := Command_CREATE
-	request := &Request{
-		Command:   &command,
-		Name:      &name,
-		FileInfo1: serializeFileInfo(parent),
-		FileInfo2: serializeFileInfo(source),
-	}
-
-	return c.handleFileSend(request)
+	return c.sendFile(name, parent, source)
 }
 
 func (c *Client) UpdateFile(file, source tree.FileInfo) (tree.Copier, error) {
 	debugLog("\nC: UpdateFile")
-	command := Command_UPDATE
-	request := &Request{
-		Command:   &command,
-		FileInfo1: serializeFileInfo(file),
-		FileInfo2: serializeFileInfo(source),
-	}
-
-	return c.handleFileSend(request)
+	return c.sendFile("", file, source)
 }
 
-func (c *Client) handleFileSend(request *Request) (tree.Copier, error) {
+func (c *Client) sendFile(name string, fileInfo1, fileInfo2 tree.FileInfo) (tree.Copier, error) {
+	command := Command_COPY_DST
+	request := &Request{
+		Command:   &command,
+		FileInfo1: serializeFileInfo(fileInfo1),
+		FileInfo2: serializeFileInfo(fileInfo2),
+	}
+	if name != "" {
+		request.Name = &name
+	}
+
 	reader, writer := io.Pipe()
 	ch, err := c.handleReply(request, reader, nil)
 	if err != nil {
@@ -610,7 +605,7 @@ func (c *Client) ReadSymlink(file tree.FileInfo) (string, error) {
 
 func (c *Client) CopySource(info tree.FileInfo) (io.ReadCloser, error) {
 	debugLog("\nC: CopySource")
-	command := Command_COPYSRC
+	command := Command_COPY_SRC
 	return c.recvFile(&Request{
 		Command:   &command,
 		FileInfo1: serializeFileInfo(info),
