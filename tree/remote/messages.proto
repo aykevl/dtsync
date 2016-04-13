@@ -18,12 +18,13 @@ enum Command {
 	READLINK    = 17; // remove symlink
 	CHMOD       = 18; // change permissions
 
-	GETFILE     = 20;
-	SETFILE     = 21;
-
 	// testing commands
 	PUTFILE     = 30;
 	INFO        = 31;
+
+	// get and set status (to be removed)
+	GETFILE     = 40;
+	SETFILE     = 41;
 }
 
 // See TYPE_* constants in tree/tree.go
