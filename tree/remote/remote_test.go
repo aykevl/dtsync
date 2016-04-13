@@ -46,6 +46,9 @@ func TestRemote(t *testing.T) {
 			t.Fatal("could not make test client:", err)
 		}
 	}
+
+	_ = tree.RemoteTree(fsList[0])
+
 	fs1 := fsList[0]
 	fs2 := fsList[1]
 	fsCheck := memory.NewRoot()
