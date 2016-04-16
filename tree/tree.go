@@ -39,6 +39,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/aykevl/golibrsync/librsync"
 )
 
 // The type used for TYPE_* constants
@@ -135,6 +137,12 @@ type Tree interface {
 	SetFile(name string) (io.WriteCloser, error)
 }
 
+type RsyncBasis interface {
+	io.Reader
+	io.ReaderAt
+	io.Closer
+}
+
 // FileTree is a filesystem (like) tree, with normal mkdir and open calls, and
 // objects containing data blobs.
 type FileTree interface {
@@ -177,6 +185,11 @@ type RemoteTree interface {
 	// received), and recvOptions is a channel from which the options sent by
 	// the remote can be read.
 	RemoteScan(sendOptions, recvOptions chan *ScanOptions, progress chan<- *ScanProgress) (io.Reader, error)
+
+	// Use the rsync algorithm (librsync) to send only small changes in files.
+	// RsyncSrc receives a signature and sends the binary delta.
+	RsyncSrc(file FileInfo, signature io.Reader) (delta io.ReadCloser, err error)
+	//RsyncDst(file FileInfo, signature io.Reader)
 }
 
 type LocalTree interface {
@@ -187,6 +200,10 @@ type LocalTree interface {
 type LocalFileTree interface {
 	LocalTree
 	FileTree
+
+	// UpdateRsync returns a source file and a file to write, for use by the
+	// rsync algorithm.
+	UpdateRsync(info, source FileInfo) (RsyncBasis, Copier, error)
 }
 
 // Entry is one object tree, e.g. a file or directory. It can also be something
@@ -295,23 +312,63 @@ func Update(this, other Tree, source, target FileInfo) (FileInfo, FileInfo, erro
 			// Update().
 			return nil, nil, ErrNotImplemented("source and target are equal - I don't know what to do")
 		}
-		inf, err := thisFileTree.CopySource(source)
-		if err != nil {
-			return nil, nil, err
-		}
-		defer inf.Close()
+		_, sourceRemote := this.(RemoteTree)
+		_, targetRemote := other.(RemoteTree)
+		if sourceRemote && !targetRemote {
+			sourceTree := this.(RemoteTree)
+			targetTree := other.(LocalFileTree)
 
-		outf, err := otherFileTree.UpdateFile(target, source)
-		if err != nil {
-			return nil, nil, err
-		}
+			// destination file
+			basis, copier, err := targetTree.UpdateRsync(target, source)
+			if err != nil {
+				return nil, nil, err
+			}
+			defer basis.Close()
 
-		_, err = io.Copy(outf, inf)
-		if err != nil {
-			return nil, nil, err
-		}
+			sigJob, err := librsync.NewDefaultSignatureGen(basis)
+			if err != nil {
+				copier.Cancel()
+				return nil, nil, err
+			}
+			defer sigJob.Close()
 
-		return outf.Finish()
+			delta, err := sourceTree.RsyncSrc(source, sigJob)
+			if err != nil {
+				copier.Cancel()
+				return nil, nil, err
+			}
+			defer delta.Close()
+
+			patchJob, err := librsync.NewPatcher(delta, basis)
+
+			_, err = io.Copy(copier, patchJob)
+			if err != nil {
+				copier.Cancel()
+				return nil, nil, err
+			}
+
+			return copier.Finish()
+
+		} else {
+			inf, err := thisFileTree.CopySource(source)
+			if err != nil {
+				return nil, nil, err
+			}
+			defer inf.Close()
+
+			outf, err := otherFileTree.UpdateFile(target, source)
+			if err != nil {
+				return nil, nil, err
+			}
+
+			_, err = io.Copy(outf, inf)
+			if err != nil {
+				outf.Cancel()
+				return nil, nil, err
+			}
+
+			return outf.Finish()
+		}
 
 	case TYPE_SYMLINK:
 		link, err := thisFileTree.ReadSymlink(source)

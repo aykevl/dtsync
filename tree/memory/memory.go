@@ -477,6 +477,30 @@ func (e *Entry) UpdateFile(file, source tree.FileInfo) (tree.Copier, error) {
 	}), nil
 }
 
+// UpdateRsync opens the existing file to generate a signature for, and creates
+// a new file where the new data is written, from the base file and from the
+// patch data.
+func (e *Entry) UpdateRsync(file, source tree.FileInfo) (tree.RsyncBasis, tree.Copier, error) {
+	child := e.get(file.RelativePath())
+	if child == nil {
+		return nil, nil, tree.ErrNotFound(file.RelativePath())
+	}
+	if child.fileType != tree.TYPE_REGULAR {
+		return nil, nil, tree.ErrNoRegular(child.RelativePath())
+	}
+	if !tree.MatchFingerprint(file, child.Info()) {
+		return nil, nil, tree.ErrChanged(child.RelativePath())
+	}
+	base := newReadCloseBuffer(child.contents)
+	copier := newFileCopier(func(buffer *bytes.Buffer) (tree.FileInfo, tree.FileInfo, error) {
+		child.modTime = source.ModTime()
+		child.contents = buffer.Bytes()
+		child.mode = source.Mode().Calc(source.HasMode(), DEFAULT_MODE) & child.hasMode
+		return child.fullInfo(), child.parent.Info(), nil
+	})
+	return base, copier, nil
+}
+
 // CreateSymlink creates an Entry with type link and the contents.
 func (e *Entry) CreateSymlink(name string, parentInfo, sourceInfo tree.FileInfo, contents string) (tree.FileInfo, tree.FileInfo, error) {
 	parent := e.get(parentInfo.RelativePath())

@@ -36,6 +36,7 @@ import (
 	"github.com/aykevl/dtsync/dtdiff"
 	"github.com/aykevl/dtsync/tree"
 	"github.com/aykevl/dtsync/version"
+	"github.com/aykevl/golibrsync/librsync"
 	"github.com/golang/protobuf/proto"
 )
 
@@ -254,6 +255,13 @@ func (s *Server) handleRequest(msg *Request, recvStreams map[uint64]chan []byte)
 			return invalidRequest{"CHMOD expects fileInfo1 with type, path, modTime, size, mode and hasMode fields, and fileInfo2 with mode and hasMode fields"}
 		}
 		go s.chmod(*msg.RequestId, parseFileInfo(msg.FileInfo1), parseFileInfo(msg.FileInfo2))
+	case Command_RSYNC_SRC:
+		if msg.FileInfo1 == nil {
+			return invalidRequest{"RSYNC_SRC expects fileInfo1"}
+		}
+		dataChan := make(chan []byte, 1)
+		recvStreams[*msg.RequestId] = dataChan
+		go s.rsyncSource(*msg.RequestId, parseFileInfo(msg.FileInfo1), dataChan)
 	case Command_PUTFILE:
 		if msg.FileInfo1 == nil || msg.FileInfo1.Path == nil || msg.Data == nil {
 			return invalidRequest{"PUTFILE expects fileInfo1 with path and data"}
@@ -387,6 +395,51 @@ func (s *Server) getFile(requestId uint64, name string) {
 		s.replyError(requestId, err)
 	} else {
 		s.streamSendData(requestId, reader)
+	}
+}
+
+func (s *Server) rsyncSource(requestId uint64, info tree.FileInfo, sigChan chan []byte) {
+	// Drain channel when there are errors.
+	defer func() {
+		for _ = range sigChan {
+		}
+	}()
+
+	sigReader, sigWriter := io.Pipe()
+	go func() {
+		for block := range sigChan {
+			_, err := sigWriter.Write(block)
+			if err != nil {
+				// This only happens when the other end is closed (possibly
+				// with an error), so it should never happen.
+				panic(err)
+			}
+		}
+		sigWriter.Close()
+	}()
+	sig, err := librsync.LoadSignature(sigReader)
+	if err != nil {
+		s.replyError(requestId, err)
+		return
+	}
+
+	switch info.Type() {
+	case tree.TYPE_REGULAR:
+		reader, err := s.fs.CopySource(info)
+		if err != nil {
+			s.replyError(requestId, err)
+			return
+		}
+
+		patchJob, err := librsync.NewDeltaGen(sig, reader)
+		if err != nil {
+			s.replyError(requestId, err)
+			return
+		}
+
+		s.streamSendData(requestId, patchJob)
+	default:
+		s.replyError(requestId, tree.ErrNoRegular(info.RelativePath()))
 	}
 }
 

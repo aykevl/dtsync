@@ -16,6 +16,8 @@ enum Command {
 	UPDATELINK  = 15; // update symlink
 	READLINK    = 16; // remove symlink
 	CHMOD       = 17; // change permissions
+	RSYNC_SRC   = 18; // librsync protocol (sender, reader)
+	RSYNC_DST   = 19; // librsync protocol (receiver, writer)
 
 	// testing commands
 	PUTFILE     = 30;
@@ -32,7 +34,7 @@ enum FileType {
 	REGULAR   = 1;
 	DIRECTORY = 2;
 	SYMLINK   = 3;
-	NOTFOUND  = 4;
+	NOTFOUND  = 4; // TODO
 }
 
 enum DataStatus {

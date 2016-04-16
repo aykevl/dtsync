@@ -38,6 +38,12 @@ import (
 )
 
 func TestRemote(t *testing.T) {
+	// Wait for a short while (1ms) to let the number of goroutines settle down.
+	// This may be machine-dependent, and may need to be updated.
+	time.Sleep(time.Millisecond)
+
+	numRoutinesStart := runtime.NumGoroutine()
+
 	var fsList [2]*Client
 	for i, _ := range fsList {
 		var err error
@@ -53,11 +59,9 @@ func TestRemote(t *testing.T) {
 	fs2 := fsList[1]
 	fsCheck := memory.NewRoot()
 
-	// Wait for a short while (1ms) to let the number of goroutines settle down.
-	// This may be machine-dependent, and may need to be updated.
 	time.Sleep(time.Millisecond)
-
 	numRoutines := runtime.NumGoroutine()
+
 	for i, tc := range [][2]tree.TestTree{
 		{fs1, fsCheck},
 		{fsCheck, fs1},
@@ -77,5 +81,9 @@ func TestRemote(t *testing.T) {
 		if err != nil {
 			t.Error("could not close test client:", err)
 		}
+	}
+
+	if num := runtime.NumGoroutine(); num != numRoutinesStart {
+		t.Errorf("number of goroutines changed from %d to %d after close", numRoutinesStart, num)
 	}
 }

@@ -629,6 +629,29 @@ func (c *Client) recvFile(request *Request) (*streamReader, error) {
 	return stream, nil
 }
 
+// RsyncSrc sends a signature to the server and receives a patch file, to
+// update a local file using the rsync algorithm.
+func (c *Client) RsyncSrc(file tree.FileInfo, signature io.Reader) (io.ReadCloser, error) {
+	debugLog("\nC: RsyncSrc")
+	command := Command_RSYNC_SRC
+	request := &Request{
+		Command:   &command,
+		FileInfo1: serializeFileInfo(file),
+	}
+	deltaReader, deltaWriter := io.Pipe()
+	ch, err := c.handleReply(request, signature, deltaWriter)
+	if err != nil {
+		return nil, err
+	}
+	go func() {
+		respData := <-ch
+		if respData.err != nil {
+			deltaWriter.CloseWithError(respData.err)
+		}
+	}()
+	return deltaReader, nil
+}
+
 func (c *Client) PutFile(path []string, contents []byte) (tree.FileInfo, error) {
 	debugLog("\nC: PutFile")
 	if contents == nil {
@@ -682,7 +705,7 @@ func (c *Client) ReadInfo(path []string) (tree.FileInfo, error) {
 	return parseFileInfo(resp.FileInfo), nil
 }
 
-func (c *Client) handleReply(request *Request, sendStream *io.PipeReader, recvStream *io.PipeWriter) (chan roundtripResponse, error) {
+func (c *Client) handleReply(request *Request, sendStream io.Reader, recvStream *io.PipeWriter) (chan roundtripResponse, error) {
 	replyChan := make(chan roundtripResponse, 1)
 	idChan := make(chan uint64)
 	var recvBlocks chan recvBlock
@@ -764,7 +787,7 @@ func (c *Client) handleReply(request *Request, sendStream *io.PipeReader, recvSt
 		}()
 	}
 
-	returnChan := make(chan roundtripResponse)
+	returnChan := make(chan roundtripResponse, 2)
 	go func() {
 		for {
 			select {

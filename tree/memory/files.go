@@ -81,23 +81,28 @@ func (fc *fileCloser) Close() error {
 	return nil
 }
 
-// readCloseBuffer wraps a bytes.Buffer, only exposing Read, and adding a Close
+// readCloseBuffer wraps a bytes.Reader, only exposing Read, and adding a Close
 // function (that doesn't do anything)
 type readCloseBuffer struct {
-	buf *bytes.Buffer
+	buf *bytes.Reader
 }
 
 func newReadCloseBuffer(data []byte) *readCloseBuffer {
-	return &readCloseBuffer{bytes.NewBuffer(data)}
+	return &readCloseBuffer{bytes.NewReader(data)}
 }
 
-// Read is just a pass-through function for Buffer.Read()
+// Read is just a pass-through function for Reader.Read()
 func (b *readCloseBuffer) Read(p []byte) (int, error) {
 	return b.buf.Read(p)
 }
 
+// Read is just a pass-through function for Reader.ReadAt()
+func (b *readCloseBuffer) ReadAt(p []byte, off int64) (int, error) {
+	return b.buf.ReadAt(p, off)
+}
+
 // Close doesn't do anything (returns nil), just to implement io.ReadCloser (we
-// don't need to actually close a bytes.Buffer object).
+// don't need to actually close a bytes.Reader object).
 func (b *readCloseBuffer) Close() error {
 	return nil
 }
