@@ -149,6 +149,10 @@ func (r *Tree) CreateDir(name string, parent, source tree.FileInfo) (tree.FileIn
 }
 
 func (r *Tree) CopySource(source tree.FileInfo) (io.ReadCloser, error) {
+	if source.Type() != tree.TYPE_REGULAR {
+		return nil, tree.ErrNoRegular(source.RelativePath())
+	}
+
 	e := r.entryFromPath(source.RelativePath())
 
 	in, err := os.Open(e.fullPath())
