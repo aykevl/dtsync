@@ -289,16 +289,23 @@ func Copy(this, other Tree, source, targetParent FileInfo) (info FileInfo, paren
 	}
 }
 
+type UpdateStats struct {
+	ToSource int64
+	ToTarget int64
+}
+
 // Update replaces this file with the contents and modtime of the other file.
 // It is very similar to Copy.
-func Update(this, other Tree, source, target FileInfo) (FileInfo, FileInfo, error) {
+func Update(this, other Tree, source, target FileInfo) (FileInfo, FileInfo, UpdateStats, error) {
+	stats := UpdateStats{}
+
 	thisFileTree, ok := this.(FileTree)
 	if !ok {
-		return nil, nil, ErrNotImplemented("source in Update not a FileTree")
+		return nil, nil, stats, ErrNotImplemented("source in Update not a FileTree")
 	}
 	otherFileTree, ok := other.(FileTree)
 	if !ok {
-		return nil, nil, ErrNotImplemented("target in Update not a FileTree")
+		return nil, nil, stats, ErrNotImplemented("target in Update not a FileTree")
 	}
 
 	switch source.Type() {
@@ -306,7 +313,7 @@ func Update(this, other Tree, source, target FileInfo) (FileInfo, FileInfo, erro
 		if MatchFingerprint(source, target) {
 			// A check that fingerprint updates are not done via the regular
 			// Update().
-			return nil, nil, ErrNotImplemented("source and target are equal - I don't know what to do")
+			return nil, nil, stats, ErrNotImplemented("source and target are equal - I don't know what to do")
 		}
 		_, sourceRemote := this.(RemoteTree)
 		_, targetRemote := other.(RemoteTree)
@@ -317,59 +324,62 @@ func Update(this, other Tree, source, target FileInfo) (FileInfo, FileInfo, erro
 			// destination file
 			basis, copier, err := targetTree.UpdateRsync(target, source)
 			if err != nil {
-				return nil, nil, err
+				return nil, nil, stats, err
 			}
 			defer basis.Close()
 			defer copier.Cancel()
 
 			sigJob, err := librsync.NewDefaultSignatureGen(basis)
 			if err != nil {
-				return nil, nil, err
+				return nil, nil, stats, err
 			}
 			defer sigJob.Close()
 
-			delta, err := sourceTree.RsyncSrc(source, sigJob)
+			delta, err := sourceTree.RsyncSrc(source, &countReadCloser{sigJob, &stats.ToSource})
 			if err != nil {
-				return nil, nil, err
+				return nil, nil, stats, err
 			}
 			defer delta.Close()
 
-			patchJob, err := librsync.NewPatcher(delta, basis)
+			patchJob, err := librsync.NewPatcher(&countReadCloser{delta, &stats.ToTarget}, basis)
 			if err != nil {
-				return nil, nil, err
+				return nil, nil, stats, err
 			}
 
-			return copyFile(copier, patchJob, source)
+			info, parentInfo, err := copyFile(copier, patchJob, source)
+			return info, parentInfo, stats, err
 
 		} else {
 			inf, err := thisFileTree.CopySource(source)
 			if err != nil {
-				return nil, nil, err
+				return nil, nil, stats, err
 			}
 			defer inf.Close()
 
 			outf, err := otherFileTree.UpdateFile(target, source)
 			if err != nil {
-				return nil, nil, err
+				return nil, nil, stats, err
 			}
 			defer outf.Cancel()
 
-			return copyFile(outf, inf, source)
+			info, parentInfo, err := copyFile(outf, &countReadCloser{inf, &stats.ToTarget}, source)
+			return info, parentInfo, stats, err
 		}
 
 	case TYPE_SYMLINK:
 		link, err := thisFileTree.ReadSymlink(source)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, stats, err
 		}
 
-		return otherFileTree.UpdateSymlink(target, source, link)
+		info, parentInfo, err := otherFileTree.UpdateSymlink(target, source, link)
+		return info, parentInfo, stats, err
 
 	case TYPE_UNKNOWN:
-		return nil, nil, ErrNotImplemented("Update: file type is TYPE_UNKNOWN")
+		return nil, nil, stats, ErrNotImplemented("Update: file type is TYPE_UNKNOWN")
 
 	default:
-		return nil, nil, ErrNotImplemented("Update: unknown file type")
+		return nil, nil, stats, ErrNotImplemented("Update: unknown file type")
 	}
 }
 
@@ -410,6 +420,17 @@ func copyFile(outf Copier, inf io.Reader, source FileInfo) (FileInfo, FileInfo, 
 		fullInfo.hash = hashResult
 	}
 	return fullInfo, parentInfo, err
+}
+
+type countReadCloser struct {
+	r io.ReadCloser
+	n *int64
+}
+
+func (c *countReadCloser) Read(b []byte) (int, error) {
+	n, err := c.r.Read(b)
+	*c.n += int64(n)
+	return n, err
 }
 
 // FileInfo is like os.FileInfo, but specific for the Tree interface.

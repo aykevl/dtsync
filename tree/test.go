@@ -261,7 +261,7 @@ func TreeTest(t Tester, fs1, fs2 TestTree) {
 		t.Errorf("expected to get %#v but instead got %#v when reading from %s", quickBrowFox, string(buf), info1)
 	}
 
-	info2, _, err = Update(fs1, fs2, info1, info2)
+	info2, _, _, err = Update(fs1, fs2, info1, info2)
 	if err != nil {
 		t.Fatal("failed to update file:", err)
 	}
@@ -303,6 +303,8 @@ func TreeTest(t Tester, fs1, fs2 TestTree) {
 	for i := 0; i < 20*1000; i++ {
 		copy(bigBuffer[i*50:], []byte("This is a line of text...........................\n")) // 50 chars
 	}
+
+	/*** Test big files ***/
 
 	// test creating big file
 	copier, err = fs1.CreateFile("big.txt", &FileInfoStruct{}, &FileInfoStruct{mode: 0644})
@@ -351,12 +353,20 @@ func TreeTest(t Tester, fs1, fs2 TestTree) {
 	big1, _ = fs1.ReadInfo(big1.RelativePath())
 
 	// test updating big file
-	big2, _, err = Update(fs1, fs2, big1, big2)
+	big2, _, stats, err := Update(fs1, fs2, big1, big2)
 	if err != nil {
 		t.Fatal("could not Update big.txt:", err)
 	}
 	if !sameInfo(big1, big2) {
 		t.Errorf("did not update big file in Update:\n%s\n%s", big1, big2)
+	}
+	if root1 == nil || root2 == nil {
+		// using rsync
+	} else {
+		// using local file copy
+		if stats.ToSource != 0 || stats.ToTarget != int64(len(bigBuffer)) {
+			t.Errorf("unexpected stats while copying big.txt: %#v", stats)
+		}
 	}
 
 	/*** Test symlinks ***/
@@ -387,7 +397,7 @@ func TreeTest(t Tester, fs1, fs2 TestTree) {
 
 	// try to update symlink (must fail)
 	link2 := NewFileInfo(link1.RelativePath(), TYPE_SYMLINK, 0666, 0666, time.Time{}, 0, Hash{})
-	_, _, err = Update(fs1, fs2, link1, link2)
+	_, _, _, err = Update(fs1, fs2, link1, link2)
 	if !IsNotExist(err) {
 		t.Error("Update link was not 'not found':", err)
 	}
@@ -445,13 +455,13 @@ func TreeTest(t Tester, fs1, fs2 TestTree) {
 	}
 
 	// try updating with 'changed' source symlink
-	_, _, err = Update(fs1, fs2, link1Wrong, link2)
+	_, _, _, err = Update(fs1, fs2, link1Wrong, link2)
 	if !IsChanged(err) {
 		t.Error("no ErrChanged in Update (source changed), err:", err)
 	}
 
 	// try updating with 'changed' target symlink
-	_, _, err = Update(fs1, fs2, link1, link1Wrong) // link1Wrong can be re-used here
+	_, _, _, err = Update(fs1, fs2, link1, link1Wrong) // link1Wrong can be re-used here
 	if !IsChanged(err) {
 		t.Error("no ErrChanged in Update (source changed), err:", err)
 	}
@@ -465,7 +475,7 @@ func TreeTest(t Tester, fs1, fs2 TestTree) {
 	}
 
 	// update symlink
-	link2, _, err = Update(fs1, fs2, link1, link2)
+	link2, _, _, err = Update(fs1, fs2, link1, link2)
 	if err != nil {
 		t.Error("cannot update link:", err)
 	}
