@@ -31,10 +31,10 @@ package remote
 import (
 	"testing"
 
-	"github.com/aykevl/gocount"
 	"github.com/aykevl/dtsync/tree"
 	"github.com/aykevl/dtsync/tree/file"
 	"github.com/aykevl/dtsync/tree/memory"
+	"github.com/aykevl/gocount"
 )
 
 func TestRemote(t *testing.T) {
