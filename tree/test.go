@@ -31,6 +31,7 @@ package tree
 import (
 	"bytes"
 	"encoding/hex"
+	"io"
 	"io/ioutil"
 	"strings"
 	"time"
@@ -297,6 +298,35 @@ func TreeTest(t Tester, fs1, fs2 TestTree) {
 		t.Errorf("did not fully chmod:\n%s\n%s", info1, info2)
 	}
 
+	// create big buffer (of 1mb)
+	bigBuffer := &bytes.Buffer{}
+	for i := 0; i < 20*1000; i++ {
+		bigBuffer.WriteString("This is a line of text...........................\n") // 50 chars
+	}
+
+	// test creating big file
+	copier, err = fs1.CreateFile("big.txt", &FileInfoStruct{}, &FileInfoStruct{mode: 0644})
+	if err != nil {
+		t.Fatal("could not CreateFile big.txt:", err)
+	}
+	_, err = io.Copy(copier, bigBuffer)
+	if err != nil {
+		t.Error("could not copy data to big.txt:", err)
+	}
+	big1, _, err := copier.Finish()
+	if err != nil {
+		t.Fatal("could not Finish() copying big.txt:", err)
+	}
+
+	// test copying big file
+	big2, _, err := Copy(fs1, fs2, big1, &FileInfoStruct{})
+	if err != nil {
+		t.Fatal("could not Copy big.txt:", err)
+	}
+	if !sameInfo(big1, big2) {
+		t.Errorf("did not update big file:\n%s\n%s", big1, big2)
+	}
+
 	/*** Test symlinks ***/
 
 	// create symlink
@@ -433,7 +463,7 @@ func TreeTest(t Tester, fs1, fs2 TestTree) {
 		if !sameInfoEntry(t, infoDir1, dir1) {
 			t.Errorf("FileInfo of %s does not match the return value of CreateDir", dir1)
 		}
-		checkFile(t, root1, dir1, 0, 3, "dir")
+		checkFile(t, root1, dir1, 1, 4, "dir")
 	}
 
 	infoDir2, err := fs2.CreateDir("dir", &FileInfoStruct{}, infoDir1)
@@ -445,7 +475,7 @@ func TreeTest(t Tester, fs1, fs2 TestTree) {
 		if !sameInfoEntry(t, infoDir2, dir2) {
 			t.Errorf("FileInfo of %s does not match the return value of CreateDir", dir2)
 		}
-		checkFile(t, root2, dir2, 0, 3, "dir")
+		checkFile(t, root2, dir2, 1, 4, "dir")
 	}
 
 	if root1 != nil && root2 != nil && !testEqual(t, root1, root2) {
@@ -477,6 +507,8 @@ func TreeTest(t Tester, fs1, fs2 TestTree) {
 		child      FileInfo
 		sizeBefore int
 	}{
+		{fs1, big1, 4},
+		{fs2, big2, 4},
 		{fs1, link1, 3},
 		{fs2, link2, 3},
 		{fs1, info1, 2},

@@ -413,11 +413,16 @@ func (e *Entry) CreateFile(name string, parent, source tree.FileInfo) (tree.Copi
 		return nil, tree.ErrFound(p.childRelativePath(name))
 	}
 
+	modTime := source.ModTime()
+	if modTime.IsZero() {
+		modTime = time.Now()
+	}
+
 	child := &Entry{
 		fileType: tree.TYPE_REGULAR,
 		mode:     source.Mode() & p.hasMode,
 		hasMode:  p.hasMode,
-		modTime:  source.ModTime(),
+		modTime:  modTime,
 		name:     name,
 		parent:   p,
 	}
