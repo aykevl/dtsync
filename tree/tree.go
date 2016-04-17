@@ -400,7 +400,7 @@ func copyFile(outf Copier, inf io.Reader, source FileInfo) (FileInfo, FileInfo, 
 	hashResult := Hash{HASH_DEFAULT, hash.Sum(nil)}
 	if source != nil && !source.Hash().Equal(hashResult) {
 		outf.Cancel()
-		return nil, nil, ErrChanged(source.RelativePath())
+		return nil, nil, ErrChangedHash(source.RelativePath())
 	}
 
 	info, parentInfo, err := outf.Finish()

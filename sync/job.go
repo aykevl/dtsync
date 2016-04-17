@@ -186,12 +186,14 @@ func (j *Job) Apply() error {
 	case ACTION_UPDATE:
 		info, parentInfo, err := tree.Update(fs1, fs2, status1, status2)
 		if err != nil {
+			if tree.IsChanged(err) {
+				status1.UpdateHash(tree.Hash{}, nil)
+			}
 			return err
 		}
 		if !info.Hash().Equal(status1.Hash()) {
-			// The first file got updated between the scan and update.
-			// TODO Should we report this as an error?
-			status1.UpdateHash(info.Hash(), nil)
+			// This should have been checked in the Update() function.
+			panic("hash change wasn't detected")
 		}
 		status2.Update(info, info.Hash(), status1)
 		statusParent2.Update(parentInfo, tree.Hash{}, statusParent1)

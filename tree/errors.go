@@ -70,9 +70,16 @@ func ErrFound(path []string) *pathError {
 	return &pathError{"found", path}
 }
 
-// ErrChanged is returned when a file's fingerprint changed between scan and sync.
+// ErrChanged is returned when a file's fingerprint changed between scan and
+// sync.
 func ErrChanged(path []string) *pathError {
 	return &pathError{"changed", path}
+}
+
+// ErrChangedHash is returned when a file's fingerprint changed when the hash
+// turns out to be different during copy.
+func ErrChangedHash(path []string) *pathError {
+	return &pathError{"changed hash", path}
 }
 
 // ErrNoDirectory is returned when a directory was expected.
@@ -135,7 +142,7 @@ func IsChanged(err error) bool {
 		return false
 	}
 	pe, ok := err.(*pathError)
-	return ok && pe.message == "changed"
+	return ok && (pe.message == "changed" || pe.message == "changed hash")
 }
 
 // IsNoDirectory returns true if this is an error like ErrNoDirectory.

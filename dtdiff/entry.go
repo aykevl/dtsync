@@ -387,7 +387,10 @@ func (e *Entry) Update(info tree.FileInfo, hash tree.Hash, source *Entry) {
 // UpdateHash sets the new hash from the parameter, marking this file as changed
 // if it is different from the existing one.
 func (e *Entry) UpdateHash(hash tree.Hash, source *Entry) {
-	if !e.hash.Equal(hash) {
+	if hash.IsZero() {
+		// mark 'to be hashed'
+		e.hash = hash
+	} else if !e.hash.Equal(hash) {
 		if source != nil {
 			e.replica.markMetaChanged()
 			e.revision = source.revision
