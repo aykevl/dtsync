@@ -29,20 +29,15 @@
 package remote
 
 import (
-	"runtime"
 	"testing"
-	"time"
 
+	"github.com/aykevl/gocount"
 	"github.com/aykevl/dtsync/tree"
 	"github.com/aykevl/dtsync/tree/memory"
 )
 
 func TestRemote(t *testing.T) {
-	// Wait for a short while (1ms) to let the number of goroutines settle down.
-	// This may be machine-dependent, and may need to be updated.
-	time.Sleep(time.Millisecond)
-
-	numRoutinesStart := runtime.NumGoroutine()
+	numRoutinesStart := gocount.Number()
 
 	var fsList [2]*Client
 	for i, _ := range fsList {
@@ -59,8 +54,7 @@ func TestRemote(t *testing.T) {
 	fs2 := fsList[1]
 	fsCheck := memory.NewRoot()
 
-	time.Sleep(time.Millisecond)
-	numRoutines := runtime.NumGoroutine()
+	numRoutines := gocount.Number()
 
 	for i, tc := range [][2]tree.TestTree{
 		{fs1, fsCheck},
@@ -69,7 +63,7 @@ func TestRemote(t *testing.T) {
 		{fs2, fs1},
 	} {
 		tree.TreeTest(t, tc[0], tc[1])
-		if num := runtime.NumGoroutine(); num != numRoutines {
+		if num := gocount.Number(); num != numRoutines {
 			t.Errorf("remote test #%d: number of goroutines changed from %d to %d", i+1, numRoutines, num)
 			numRoutines = num
 		}
@@ -83,7 +77,7 @@ func TestRemote(t *testing.T) {
 		}
 	}
 
-	if num := runtime.NumGoroutine(); num != numRoutinesStart {
+	if num := gocount.Number(); num != numRoutinesStart {
 		t.Errorf("number of goroutines changed from %d to %d after close", numRoutinesStart, num)
 	}
 }
