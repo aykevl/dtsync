@@ -269,6 +269,7 @@ func Copy(this, other Tree, source, targetParent FileInfo) (info FileInfo, paren
 		if err != nil {
 			return nil, nil, err
 		}
+		defer outf.Cancel()
 
 		return copyFile(outf, inf, nil)
 
@@ -399,7 +400,6 @@ func copyFile(outf Copier, inf io.Reader, source FileInfo) (FileInfo, FileInfo, 
 
 	hashResult := Hash{HASH_DEFAULT, hash.Sum(nil)}
 	if source != nil && !source.Hash().Equal(hashResult) {
-		outf.Cancel()
 		return nil, nil, ErrChangedHash(source.RelativePath())
 	}
 
