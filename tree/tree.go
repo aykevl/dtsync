@@ -269,13 +269,8 @@ func Copy(this, other Tree, source, targetParent FileInfo) (info FileInfo, paren
 		if err != nil {
 			return nil, nil, err
 		}
-		_, err = io.Copy(outf, inf)
-		if err != nil {
-			// TODO outf.Revert()?
-			return nil, nil, err
-		}
-		// outf.Finish() usually does an fsync and rename (and closes the file)
-		return outf.Finish()
+
+		return copyFile(outf, inf, nil)
 
 	case TYPE_SYMLINK:
 		link, err := thisFileTree.ReadSymlink(source)
@@ -324,30 +319,26 @@ func Update(this, other Tree, source, target FileInfo) (FileInfo, FileInfo, erro
 				return nil, nil, err
 			}
 			defer basis.Close()
+			defer copier.Cancel()
 
 			sigJob, err := librsync.NewDefaultSignatureGen(basis)
 			if err != nil {
-				copier.Cancel()
 				return nil, nil, err
 			}
 			defer sigJob.Close()
 
 			delta, err := sourceTree.RsyncSrc(source, sigJob)
 			if err != nil {
-				copier.Cancel()
 				return nil, nil, err
 			}
 			defer delta.Close()
 
 			patchJob, err := librsync.NewPatcher(delta, basis)
-
-			_, err = io.Copy(copier, patchJob)
 			if err != nil {
-				copier.Cancel()
 				return nil, nil, err
 			}
 
-			return copier.Finish()
+			return copyFile(copier, patchJob, source)
 
 		} else {
 			inf, err := thisFileTree.CopySource(source)
@@ -360,14 +351,9 @@ func Update(this, other Tree, source, target FileInfo) (FileInfo, FileInfo, erro
 			if err != nil {
 				return nil, nil, err
 			}
+			defer outf.Cancel()
 
-			_, err = io.Copy(outf, inf)
-			if err != nil {
-				outf.Cancel()
-				return nil, nil, err
-			}
-
-			return outf.Finish()
+			return copyFile(outf, inf, source)
 		}
 
 	case TYPE_SYMLINK:
@@ -384,6 +370,46 @@ func Update(this, other Tree, source, target FileInfo) (FileInfo, FileInfo, erro
 	default:
 		return nil, nil, ErrNotImplemented("Update: unknown file type")
 	}
+}
+
+func copyFile(outf Copier, inf io.Reader, source FileInfo) (FileInfo, FileInfo, error) {
+	hash := NewHash()
+
+	// A lot like io.Copy
+	buf := make([]byte, 32*1024)
+	for {
+		nr, er := inf.Read(buf)
+		if nr > 0 {
+			nw, ew := outf.Write(buf[:nr])
+			if ew != nil {
+				return nil, nil, ew
+			}
+			if nr != nw {
+				return nil, nil, io.ErrShortWrite
+			}
+			hash.Write(buf[:nr])
+		}
+		if er == io.EOF {
+			break
+		}
+		if er != nil {
+			return nil, nil, er
+		}
+	}
+
+	hashResult := Hash{HASH_DEFAULT, hash.Sum(nil)}
+	if source != nil && !source.Hash().Equal(hashResult) {
+		outf.Cancel()
+		return nil, nil, ErrChanged(source.RelativePath())
+	}
+
+	info, parentInfo, err := outf.Finish()
+	var fullInfo *FileInfoStruct
+	if info != nil {
+		fullInfo = cloneFileInfo(info)
+		fullInfo.hash = hashResult
+	}
+	return fullInfo, parentInfo, err
 }
 
 // FileInfo is like os.FileInfo, but specific for the Tree interface.
@@ -532,7 +558,7 @@ func SortEntries(slice []Entry) {
 type Copier interface {
 	Write([]byte) (n int, err error)
 	Finish() (info FileInfo, parentInfo FileInfo, err error)
-	Cancel() error
+	Cancel() error // must not do anything when finished
 }
 
 // ScanOptions holds some options to send to the other replica.

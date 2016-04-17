@@ -428,7 +428,7 @@ func (e *Entry) CreateFile(name string, parent, source tree.FileInfo) (tree.Copi
 			return nil, nil, err
 		}
 		child.contents = buffer.Bytes()
-		return child.fullInfo(), child.parent.Info(), nil
+		return child.Info(), child.parent.Info(), nil
 	})
 
 	return file, nil
@@ -473,7 +473,7 @@ func (e *Entry) UpdateFile(file, source tree.FileInfo) (tree.Copier, error) {
 		child.modTime = source.ModTime()
 		child.contents = buffer.Bytes()
 		child.mode = source.Mode().Calc(source.HasMode(), DEFAULT_MODE) & child.hasMode
-		return child.fullInfo(), child.parent.Info(), nil
+		return child.Info(), child.parent.Info(), nil
 	}), nil
 }
 
@@ -496,7 +496,7 @@ func (e *Entry) UpdateRsync(file, source tree.FileInfo) (tree.RsyncBasis, tree.C
 		child.modTime = source.ModTime()
 		child.contents = buffer.Bytes()
 		child.mode = source.Mode().Calc(source.HasMode(), DEFAULT_MODE) & child.hasMode
-		return child.fullInfo(), child.parent.Info(), nil
+		return child.Info(), child.parent.Info(), nil
 	})
 	return base, copier, nil
 }

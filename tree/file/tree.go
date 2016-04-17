@@ -29,7 +29,6 @@
 package file
 
 import (
-	"hash"
 	"io"
 	"io/ioutil"
 	"os"
@@ -291,7 +290,7 @@ func (r *Tree) CreateFile(name string, parent, source tree.FileInfo) (tree.Copie
 		return nil, err
 	}
 
-	return child.replaceFile(source, tree.NewHash(), false)
+	return child.replaceFile(source, false)
 }
 
 // UpdateFile replaces itself, to implement tree.FileEntry. This function is
@@ -312,7 +311,7 @@ func (r *Tree) UpdateFile(file, source tree.FileInfo) (tree.Copier, error) {
 		return nil, tree.ErrChanged(e.RelativePath())
 	}
 
-	return e.replaceFile(source, tree.NewHash(), true)
+	return e.replaceFile(source, true)
 }
 
 // UpdateRsync opens the existing file to generate a signature for, and creates
@@ -343,7 +342,7 @@ func (r *Tree) UpdateRsync(file, source tree.FileInfo) (tree.RsyncBasis, tree.Co
 		return nil, nil, tree.ErrChanged(e.RelativePath())
 	}
 
-	copier, err := e.replaceFile(source, tree.NewHash(), true)
+	copier, err := e.replaceFile(source, true)
 	if err != nil {
 		in.Close()
 		return nil, nil, err
@@ -354,16 +353,15 @@ func (r *Tree) UpdateRsync(file, source tree.FileInfo) (tree.RsyncBasis, tree.Co
 
 // replaceFile replaces the current file without checking for a type. Used by
 // CreateFile and UpdateFile.
-func (e *Entry) replaceFile(source tree.FileInfo, hash hash.Hash, update bool) (tree.Copier, error) {
+func (e *Entry) replaceFile(source tree.FileInfo, update bool) (tree.Copier, error) {
 	tempPath := filepath.Join(e.parentPath(), TEMPPREFIX+e.Name()+TEMPSUFFIX)
 	fp, err := os.Create(tempPath)
 	if err != nil {
 		return nil, err
 	}
-	return &fileHashWriter{
-		hash: hash,
-		fp:   fp,
-		finished: func(hash []byte) (tree.FileInfo, tree.FileInfo, error) {
+	return &fileCopier{
+		fp: fp,
+		onFinish: func() (tree.FileInfo, tree.FileInfo, error) {
 			defer func() {
 				if fp != nil {
 					os.Remove(tempPath)
@@ -418,9 +416,9 @@ func (e *Entry) replaceFile(source tree.FileInfo, hash hash.Hash, update bool) (
 			}
 
 			fp = nil
-			return e.makeInfo(tree.Hash{tree.HASH_DEFAULT, hash}), parent.Info(), nil
+			return e.Info(), parent.Info(), nil
 		},
-		cancelled: func(hash []byte) error {
+		onCancel: func() error {
 			return os.Remove(tempPath)
 		},
 	}, nil

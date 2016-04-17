@@ -29,53 +29,55 @@
 package file
 
 import (
-	"hash"
 	"os"
 
 	"github.com/aykevl/dtsync/tree"
 )
 
-// fileHashWriter wraps an os.File, but takes some special care to provide some
-// atomicity. It also calculates a hash of the data written.
-type fileHashWriter struct {
-	fp        *os.File
-	hash      hash.Hash
-	finished  func([]byte) (tree.FileInfo, tree.FileInfo, error)
-	cancelled func([]byte) error
+// fileCopier wraps an os.File, but takes some special care to provide some
+// atomicity.
+type fileCopier struct {
+	fp       *os.File
+	finished bool
+	onFinish func() (tree.FileInfo, tree.FileInfo, error)
+	onCancel func() error
 }
 
-// Write calls Write on the underlying File object, and also adds the data to
-// the hash.
-func (w *fileHashWriter) Write(b []byte) (int, error) {
-	w.hash.Write(b) // must not return an error
+// Write calls Write on the underlying File object.
+func (w *fileCopier) Write(b []byte) (int, error) {
 	return w.fp.Write(b)
 }
 
 // Finish syncs and closes the file, and calls the finish callback.
-func (w *fileHashWriter) Finish() (tree.FileInfo, tree.FileInfo, error) {
+func (w *fileCopier) Finish() (tree.FileInfo, tree.FileInfo, error) {
 	err := w.fp.Sync()
 	if err != nil {
 		return nil, nil, err
 	}
-	info, parentInfo, err2 := w.finished(w.hash.Sum(nil))
+	info, parentInfo, err2 := w.onFinish()
 	err = w.fp.Close()
 	if err != nil {
 		return nil, nil, err
 	}
+	w.finished = true
 	return info, parentInfo, err2
 }
 
 // Cancel removes the temporary file, and calls the cancel callback.
-func (w *fileHashWriter) Cancel() error {
+func (w *fileCopier) Cancel() error {
+	if w.finished {
+		// already finished
+		return nil
+	}
 	err := w.fp.Close()
 	if err != nil {
 		return err
 	}
-	return w.cancelled(w.hash.Sum(nil))
+	return w.onCancel()
 }
 
 // fileWriter wraps an os.File, without any special things like FileInfo or
-// calculating the hash.
+// atomicity.
 type fileWriter struct {
 	fp        *os.File
 	closeCall func() error

@@ -36,7 +36,8 @@ import (
 	"github.com/codahale/blake2"
 )
 
-// NewHash returns the hashing function used by interfaces implementing Entry.
+// NewHash returns the hashing function used by interfaces implementing Entry
+// and by Copy and Update.
 func NewHash() hash.Hash {
 	return blake2.New(&blake2.Config{Size: 32})
 }

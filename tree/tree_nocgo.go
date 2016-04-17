@@ -36,7 +36,8 @@ import (
 	"github.com/dchest/blake2b"
 )
 
-// NewHash returns the hashing function used by interfaces implementing Entry.
+// NewHash returns the hashing function used by interfaces implementing Entry
+// and by Copy and Update.
 func NewHash() hash.Hash {
 	return blake2b.New256()
 }
