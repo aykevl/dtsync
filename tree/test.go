@@ -301,12 +301,18 @@ func TreeTest(t Tester, fs1, fs2 TestTree) {
 
 	// create symlink
 	linkTarget := "file.txt"
-	link1, _, err := fs1.CreateSymlink("link", &FileInfoStruct{}, info1, linkTarget)
+	link1Source := &FileInfoStruct{
+		path:     info1.RelativePath(),
+		fileType: TYPE_SYMLINK,
+		mode:     0777,
+		modTime:  time.Now(),
+	}
+	link1, _, err := fs1.CreateSymlink("link", &FileInfoStruct{}, link1Source, linkTarget)
 	if err != nil {
 		t.Fatal("could not create symlink:", err)
 	}
-	if !link1.ModTime().Equal(info1.ModTime()) {
-		t.Error("CreateSymlink did not set ModTime")
+	if !MatchFingerprint(link1, link1Source) {
+		t.Error("CreateSymlink did not set all properties")
 	}
 
 	// read symlink
@@ -348,7 +354,7 @@ func TreeTest(t Tester, fs1, fs2 TestTree) {
 
 	// update symlink
 	linkTarget = "file-does-not-exist"
-	link1Source := &FileInfoStruct{[]string{"link"}, TYPE_SYMLINK, 0666, 0666, time.Now(), 0, Hash{}}
+	link1Source = &FileInfoStruct{[]string{"link"}, TYPE_SYMLINK, 0666, 0666, time.Now(), 0, Hash{}}
 	link1, _, err = fs1.UpdateSymlink(link1, link1Source, linkTarget)
 	if err != nil {
 		t.Fatal("could not update symlink (with mtime):", err)
