@@ -57,6 +57,8 @@ func generateHashes() map[string][]byte {
 	}{
 		{"", "0e5751c026e543b2e8ab2eb06099daa1d1e5df47778f7787faab45cdf12fe3a8"},
 		{"qbf", "3542ad7fd154020a202f8fdf8225ccacae0cb056c1073cf149350806ae58e4d9"},
+		{"big", "25a5f114126caa1a67d30b1e019c96aa0e70fe2041686309df9ed13661631a97"},
+		{"big-update", "913f495f2b70630bb6fb550cc4e8a47104c44023e5202f6a27e9efc37b0ca687"},
 	}
 	hashes := make(map[string][]byte, len(hashList))
 	for _, hash := range hashList {
@@ -298,13 +300,13 @@ func TreeTest(t Tester, fs1, fs2 TestTree) {
 		t.Errorf("did not fully chmod:\n%s\n%s", info1, info2)
 	}
 
+	/*** Test big files ***/
+
 	// create big buffer (of 1mb)
 	bigBuffer := make([]byte, 1000*1000)
 	for i := 0; i < 20*1000; i++ {
 		copy(bigBuffer[i*50:], []byte("This is a line of text...........................\n")) // 50 chars
 	}
-
-	/*** Test big files ***/
 
 	// test creating big file
 	copier, err = fs1.CreateFile("big.txt", &FileInfoStruct{}, &FileInfoStruct{mode: 0644})
@@ -320,13 +322,19 @@ func TreeTest(t Tester, fs1, fs2 TestTree) {
 		t.Fatal("could not Finish() copying big.txt:", err)
 	}
 
+	// CreateFile() doesn't set the hash.
+	big1, _ = fs1.ReadInfo(big1.RelativePath())
+
 	// test copying big file
 	big2, _, err := Copy(fs1, fs2, big1, &FileInfoStruct{})
 	if err != nil {
 		t.Fatal("could not Copy big.txt:", err)
 	}
-	if !sameInfo(big1, big2) {
+	if !sameFullInfo(big1, big2) {
 		t.Errorf("did not update big file in Copy:\n%s\n%s", big1, big2)
+	}
+	if !bytes.Equal(big1.Hash().Data, hashes["big"]) {
+		t.Errorf("Hash mismatch for file %s during Copy:\nexpected %x\ngot      %x", big1, hashes["big"], big1.Hash().Data)
 	}
 
 	// test slightly changing big file
@@ -345,7 +353,7 @@ func TreeTest(t Tester, fs1, fs2 TestTree) {
 	if err != nil {
 		t.Fatal("could not Finish() copying big.txt:", err)
 	}
-	if sameInfo(big1, big2) {
+	if sameFullInfo(big1, big2) {
 		t.Errorf("did not update fingerprint while updating big.txt:\n%s\n%s", big1, big2)
 	}
 
@@ -357,8 +365,11 @@ func TreeTest(t Tester, fs1, fs2 TestTree) {
 	if err != nil {
 		t.Fatal("could not Update big.txt:", err)
 	}
-	if !sameInfo(big1, big2) {
+	if !sameFullInfo(big1, big2) {
 		t.Errorf("did not update big file in Update:\n%s\n%s", big1, big2)
+	}
+	if !bytes.Equal(big1.Hash().Data, hashes["big-update"]) {
+		t.Errorf("Hash mismatch for file %s during Update:\nexpected %x\ngot      %x", big1, hashes["big-update"], big1.Hash().Data)
 	}
 	if root1 == nil || root2 == nil {
 		// using rsync
