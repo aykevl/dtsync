@@ -244,7 +244,7 @@ func (s *Server) handleRequest(msg *Request, recvStreams map[uint64]chan []byte)
 		// Client requests a file.
 		if msg.FileInfo1 == nil || msg.FileInfo1.Type == nil || msg.FileInfo1.Path == nil ||
 			msg.FileInfo1.ModTime == nil || msg.FileInfo1.Size == nil {
-			return invalidRequest{"COPYSRC expects fileInfo1 with type, path, modTime and size fields"}
+			return invalidRequest{"COPY_SRC expects fileInfo1 with type, path, modTime and size fields"}
 		}
 		go s.copySource(*msg.RequestId, parseFileInfo(msg.FileInfo1))
 	case Command_CHMOD:
