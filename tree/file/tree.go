@@ -315,6 +315,43 @@ func (r *Tree) UpdateFile(file, source tree.FileInfo) (tree.Copier, error) {
 	return e.replaceFile(source, tree.NewHash(), true)
 }
 
+// UpdateRsync opens the existing file to generate a signature for, and creates
+// a new file where the new data is written, from the base file and from the
+// patch data.
+func (r *Tree) UpdateRsync(file, source tree.FileInfo) (tree.RsyncBasis, tree.Copier, error) {
+	if file.Type() != tree.TYPE_REGULAR {
+		return nil, nil, tree.ErrNoRegular(file.RelativePath())
+	}
+
+	e := r.entryFromPath(file.RelativePath())
+
+	in, err := os.Open(e.fullPath())
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// Make sure the file is still the same.
+	st, err := in.Stat()
+	if err != nil {
+		in.Close()
+		return nil, nil, err
+	}
+	e.st = st
+
+	if !tree.MatchFingerprint(e.Info(), file) {
+		in.Close()
+		return nil, nil, tree.ErrChanged(e.RelativePath())
+	}
+
+	copier, err := e.replaceFile(source, tree.NewHash(), true)
+	if err != nil {
+		in.Close()
+		return nil, nil, err
+	}
+
+	return in, copier, nil
+}
+
 // replaceFile replaces the current file without checking for a type. Used by
 // CreateFile and UpdateFile.
 func (e *Entry) replaceFile(source tree.FileInfo, hash hash.Hash, update bool) (tree.Copier, error) {

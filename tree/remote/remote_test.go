@@ -33,6 +33,7 @@ import (
 
 	"github.com/aykevl/gocount"
 	"github.com/aykevl/dtsync/tree"
+	"github.com/aykevl/dtsync/tree/file"
 	"github.com/aykevl/dtsync/tree/memory"
 )
 
@@ -53,6 +54,11 @@ func TestRemote(t *testing.T) {
 	fs1 := fsList[0]
 	fs2 := fsList[1]
 	fsCheck := memory.NewRoot()
+	fsFile, err := file.NewTestRoot()
+	if err != nil {
+		t.Fatal("could not open test file tree")
+	}
+	_ = fsFile
 
 	numRoutines := gocount.Number()
 
@@ -61,6 +67,10 @@ func TestRemote(t *testing.T) {
 		{fsCheck, fs1},
 		{fs1, fs2},
 		{fs2, fs1},
+		{fs1, fsFile},
+		{fsFile, fs1},
+		{fsCheck, fsFile},
+		{fsFile, fsCheck},
 	} {
 		tree.TreeTest(t, tc[0], tc[1])
 		if num := gocount.Number(); num != numRoutines {
