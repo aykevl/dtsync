@@ -299,9 +299,9 @@ func TreeTest(t Tester, fs1, fs2 TestTree) {
 	}
 
 	// create big buffer (of 1mb)
-	bigBuffer := &bytes.Buffer{}
+	bigBuffer := make([]byte, 1000*1000)
 	for i := 0; i < 20*1000; i++ {
-		bigBuffer.WriteString("This is a line of text...........................\n") // 50 chars
+		copy(bigBuffer[i*50:], []byte("This is a line of text...........................\n")) // 50 chars
 	}
 
 	// test creating big file
@@ -309,7 +309,7 @@ func TreeTest(t Tester, fs1, fs2 TestTree) {
 	if err != nil {
 		t.Fatal("could not CreateFile big.txt:", err)
 	}
-	_, err = io.Copy(copier, bigBuffer)
+	_, err = io.Copy(copier, bytes.NewReader(bigBuffer))
 	if err != nil {
 		t.Error("could not copy data to big.txt:", err)
 	}
@@ -324,7 +324,39 @@ func TreeTest(t Tester, fs1, fs2 TestTree) {
 		t.Fatal("could not Copy big.txt:", err)
 	}
 	if !sameInfo(big1, big2) {
-		t.Errorf("did not update big file:\n%s\n%s", big1, big2)
+		t.Errorf("did not update big file in Copy:\n%s\n%s", big1, big2)
+	}
+
+	// test slightly changing big file
+	bigBuffer[3045] = 'x' // replace one dot with an x
+	big1Update := cloneFileInfo(big1)
+	big1Update.modTime = time.Now()
+	copier, err = fs1.UpdateFile(big1, big1Update)
+	if err != nil {
+		t.Fatal("could not UpdateFile big.txt:", err)
+	}
+	_, err = io.Copy(copier, bytes.NewReader(bigBuffer))
+	if err != nil {
+		t.Error("could not copy data to big.txt:", err)
+	}
+	big1, _, err = copier.Finish()
+	if err != nil {
+		t.Fatal("could not Finish() copying big.txt:", err)
+	}
+	if sameInfo(big1, big2) {
+		t.Errorf("did not update fingerprint while updating big.txt:\n%s\n%s", big1, big2)
+	}
+
+	// UpdateFile() doesn't set the hash, we'll get it this way.
+	big1, _ = fs1.ReadInfo(big1.RelativePath())
+
+	// test updating big file
+	big2, _, err = Update(fs1, fs2, big1, big2)
+	if err != nil {
+		t.Fatal("could not Update big.txt:", err)
+	}
+	if !sameInfo(big1, big2) {
+		t.Errorf("did not update big file in Update:\n%s\n%s", big1, big2)
 	}
 
 	/*** Test symlinks ***/
