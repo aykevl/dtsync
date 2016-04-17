@@ -732,8 +732,10 @@ func (c *Client) handleReply(request *Request, sendStream io.Reader, recvStream 
 		sendCancel = make(chan struct{}, 1)
 		sendFinished = make(chan error, 1)
 		go func() {
-			buf := make([]byte, 32*1024)
-			for {
+			bigbuf := make([]byte, 32*1024)
+			bufs := [2][]byte{bigbuf[:16*1024], bigbuf[16*1024:]}
+			for i := 0; ; i++ {
+				buf := bufs[i%2]
 				n, err := sendStream.Read(buf)
 				if err != nil && err != io.EOF {
 					c.sendBlocks <- sendBlock{id, nil, DataStatus_CANCEL}
