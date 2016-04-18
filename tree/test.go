@@ -373,6 +373,9 @@ func TreeTest(t Tester, fs1, fs2 TestTree) {
 	}
 	if root1 == nil || root2 == nil {
 		// using rsync
+		if stats.ToSource == 0 || stats.ToTarget >= int64(len(bigBuffer)) {
+			t.Errorf("unexpected stats while copying big.txt: %#v", stats)
+		}
 	} else {
 		// using local file copy
 		if stats.ToSource != 0 || stats.ToTarget != int64(len(bigBuffer)) {
