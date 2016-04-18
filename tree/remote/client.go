@@ -253,7 +253,24 @@ func (c *Client) run(r *bufio.Reader, w *bufio.Writer) {
 						pipeErr = ErrInvalidResponse("DATA: unknown stream ID")
 						continue
 					}
-					streamChan <- recvBlock{*msg.RequestId, msg.Data, nil}
+					if msg.Data != nil {
+						streamChan <- recvBlock{*msg.RequestId, msg.Data, nil}
+					}
+					if msg.GetStatus() != DataStatus_NORMAL {
+						switch msg.GetStatus() {
+						case DataStatus_FINISH:
+							// do nothing
+						case DataStatus_CANCEL:
+							// send error status
+							streamChan <- recvBlock{*msg.RequestId, nil, tree.ErrCancelled}
+						default:
+							// Might happen when messages.proto is extended.
+							pipeErr = ErrInvalidResponse("DataStatus is outside range NORMAL-CANCEL")
+							continue
+						}
+						close(streamChan)
+						delete(recvStreams, *msg.RequestId)
+					}
 				case Command_SCANOPTS:
 					debugLog("C: recv reply  ", *msg.RequestId, "SCANOPTS")
 					job := c.getScanJob()
@@ -650,6 +667,43 @@ func (c *Client) RsyncSrc(file tree.FileInfo, signature io.Reader) (io.ReadClose
 		}
 	}()
 	return deltaReader, nil
+}
+
+// RsyncDst requests a signature from the server and sends a patch file, to
+// update a remote file using the rsync algorithm.
+func (c *Client) RsyncDst(file, source tree.FileInfo) (io.Reader, tree.Copier, error) {
+	debugLog("\nC: RsyncDst")
+	command := Command_RSYNC_DST
+	request := &Request{
+		Command:   &command,
+		FileInfo1: serializeFileInfo(file),
+		FileInfo2: serializeFileInfo(source),
+	}
+
+	deltaReader, deltaWriter := io.Pipe()
+	sigReader, sigWriter := io.Pipe()
+	ch, err := c.handleReply(request, deltaReader, sigWriter)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	cp := &copier{
+		w:    deltaWriter,
+		done: make(chan struct{}),
+	}
+
+	go func() {
+		defer close(cp.done)
+		respData := <-ch
+		resp, err := respData.resp, respData.err
+		if err != nil {
+			cp.setError(err)
+			return
+		}
+		cp.fileInfo = parseFileInfo(resp.FileInfo)
+		cp.parentInfo = parseFileInfo(resp.ParentInfo)
+	}()
+	return sigReader, cp, nil
 }
 
 func (c *Client) PutFile(path []string, contents []byte) (tree.FileInfo, error) {

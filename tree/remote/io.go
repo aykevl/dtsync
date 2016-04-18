@@ -43,6 +43,7 @@ type copier struct {
 	fileInfo   tree.FileInfo
 	parentInfo tree.FileInfo
 	done       chan struct{}
+	finished   bool
 }
 
 func (c *copier) Write(p []byte) (int, error) {
@@ -59,6 +60,7 @@ func (c *copier) Finish() (tree.FileInfo, tree.FileInfo, error) {
 	_ = c.w.Close() // io.PipeWriter does not return errors on close
 
 	<-c.done
+	c.finished = true
 
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
@@ -73,6 +75,10 @@ func (c *copier) Cancel() error {
 	_ = c.w.CloseWithError(tree.ErrCancelled)
 
 	<-c.done
+	if c.finished {
+		return nil
+	}
+	c.finished = true
 
 	c.mutex.Lock()
 	defer c.mutex.Unlock()

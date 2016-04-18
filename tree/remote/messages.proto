@@ -94,10 +94,11 @@ message Request {
 }
 
 message Response {
-	optional Command  command    = 1; // optional, DATA if set
-	optional uint64   requestId  = 2; // required
-	optional Error    error      = 3; // set on errors
-	optional FileInfo fileInfo   = 4;
-	optional FileInfo parentInfo = 5;
-	optional bytes    data       = 6;
+	optional Command    command    = 1; // optional, DATA if set
+	optional uint64     requestId  = 2; // required
+	optional Error      error      = 3; // set on errors
+	optional FileInfo   fileInfo   = 4;
+	optional FileInfo   parentInfo = 5;
+	optional bytes      data       = 6;
+	optional DataStatus status     = 7;
 }

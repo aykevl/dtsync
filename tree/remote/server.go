@@ -261,7 +261,14 @@ func (s *Server) handleRequest(msg *Request, recvStreams map[uint64]chan []byte)
 		}
 		dataChan := make(chan []byte, 1)
 		recvStreams[*msg.RequestId] = dataChan
-		go s.rsyncSource(*msg.RequestId, parseFileInfo(msg.FileInfo1), dataChan)
+		go s.rsyncSrc(*msg.RequestId, parseFileInfo(msg.FileInfo1), dataChan)
+	case Command_RSYNC_DST:
+		if msg.FileInfo1 == nil || msg.FileInfo2 == nil {
+			return invalidRequest{"RSYNC_DST expects fileInfo1 and fileInfo2"}
+		}
+		dataChan := make(chan []byte, 1)
+		recvStreams[*msg.RequestId] = dataChan
+		go s.rsyncDst(*msg.RequestId, parseFileInfo(msg.FileInfo1), parseFileInfo(msg.FileInfo2), dataChan)
 	case Command_PUTFILE:
 		if msg.FileInfo1 == nil || msg.FileInfo1.Path == nil || msg.Data == nil {
 			return invalidRequest{"PUTFILE expects fileInfo1 with path and data"}
@@ -383,7 +390,7 @@ func (s *Server) copySource(requestId uint64, info tree.FileInfo) {
 			s.replyError(requestId, err)
 			return
 		}
-		s.streamSendData(requestId, reader)
+		s.streamSendData(requestId, reader, true)
 	default:
 		s.replyError(requestId, tree.ErrNoRegular(info.RelativePath()))
 	}
@@ -394,11 +401,11 @@ func (s *Server) getFile(requestId uint64, name string) {
 	if err != nil {
 		s.replyError(requestId, err)
 	} else {
-		s.streamSendData(requestId, reader)
+		s.streamSendData(requestId, reader, true)
 	}
 }
 
-func (s *Server) rsyncSource(requestId uint64, info tree.FileInfo, sigChan chan []byte) {
+func (s *Server) rsyncSrc(requestId uint64, info tree.FileInfo, sigChan chan []byte) {
 	// Drain channel when there are errors.
 	defer func() {
 		for _ = range sigChan {
@@ -437,9 +444,80 @@ func (s *Server) rsyncSource(requestId uint64, info tree.FileInfo, sigChan chan 
 			return
 		}
 
-		s.streamSendData(requestId, patchJob)
+		s.streamSendData(requestId, patchJob, true)
 	default:
 		s.replyError(requestId, tree.ErrNoRegular(info.RelativePath()))
+	}
+}
+
+func (s *Server) rsyncDst(requestId uint64, info, source tree.FileInfo, deltaChan chan []byte) {
+	// Drain channel when there are errors.
+	defer func() {
+		for _ = range deltaChan {
+		}
+	}()
+
+	basis, copier, err := s.fs.UpdateRsync(info, source)
+	if err != nil {
+		s.replyError(requestId, err)
+		return
+	}
+	defer basis.Close()
+	defer copier.Cancel()
+
+	sigJob, err := librsync.NewDefaultSignatureGen(basis)
+	if err != nil {
+		s.replyError(requestId, err)
+		return
+	}
+	defer sigJob.Close()
+
+	if !s.streamSendData(requestId, sigJob, false) {
+		// an error occured (which was sent back)
+		return
+	}
+
+	deltaReader, deltaWriter := io.Pipe()
+
+	patchJob, err := librsync.NewPatcher(deltaReader, basis)
+	if err != nil {
+		s.replyError(requestId, err)
+		return
+	}
+
+	go func() {
+		for block := range deltaChan {
+			if block == nil {
+				deltaWriter.CloseWithError(tree.ErrCancelled)
+				return
+			}
+			_, err := deltaWriter.Write(block)
+			if err != nil {
+				// This only happens when the other end is closed (possibly
+				// with an error), so it should never happen.
+				panic(err)
+			}
+		}
+		deltaWriter.Close()
+	}()
+
+	newFileInfo, newParentInfo, err := tree.CopyFile(copier, patchJob, source)
+	if err != nil {
+		s.replyError(requestId, err)
+		return
+	}
+
+	if err != nil {
+		s.replyError(requestId, err)
+	} else {
+		s.replyChan <- replyResponse{
+			requestId,
+			&Response{
+				FileInfo:   serializeFileInfo(newFileInfo),
+				ParentInfo: serializeFileInfo(newParentInfo),
+			},
+			nil,
+		}
 	}
 }
 
@@ -635,10 +713,10 @@ func (s *Server) scan(requestId uint64, scanOptions chan []byte) {
 		writer2.Close()
 	}()
 
-	s.streamSendData(requestId, reader)
+	s.streamSendData(requestId, reader, true)
 }
 
-func (s *Server) streamSendData(requestId uint64, reader io.Reader) {
+func (s *Server) streamSendData(requestId uint64, reader io.Reader, finish bool) bool {
 	// TODO: what if the client cancels?
 	buf1 := make([]byte, 16*1024)
 	var buf2 []byte
@@ -662,13 +740,24 @@ func (s *Server) streamSendData(requestId uint64, reader io.Reader) {
 				nil,
 			}
 			if err == io.EOF {
-				// Send empty message (reply with success).
-				s.replyChan <- replyResponse{requestId, nil, nil}
-				return
+				status := DataStatus_FINISH
+				s.replyChan <- replyResponse{
+					requestId,
+					&Response{
+						Command: &commandDATA,
+						Status:  &status,
+					},
+					nil,
+				}
+				if finish {
+					// Send empty message (reply with success).
+					s.replyChan <- replyResponse{requestId, nil, nil}
+				}
+				return true
 			}
 			if err != nil {
 				s.replyError(requestId, err)
-				return
+				return false
 			}
 		}
 	}

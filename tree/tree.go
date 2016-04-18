@@ -187,9 +187,10 @@ type RemoteTree interface {
 	RemoteScan(sendOptions, recvOptions chan *ScanOptions, progress chan<- *ScanProgress) (io.Reader, error)
 
 	// Use the rsync algorithm (librsync) to send only small changes in files.
-	// RsyncSrc receives a signature and sends the binary delta.
+	// RsyncSrc sends a signature and receives the binary delta.
 	RsyncSrc(file FileInfo, signature io.Reader) (delta io.ReadCloser, err error)
-	//RsyncDst(file FileInfo, signature io.Reader)
+	// RsyncDst receives a signature and sends the binary delta.
+	RsyncDst(file, source FileInfo) (signature io.Reader, delta Copier, err error)
 }
 
 type LocalTree interface {
@@ -271,7 +272,7 @@ func Copy(this, other Tree, source, targetParent FileInfo) (info FileInfo, paren
 		}
 		defer outf.Cancel()
 
-		return copyFile(outf, inf, nil)
+		return CopyFile(outf, inf, nil)
 
 	case TYPE_SYMLINK:
 		link, err := thisFileTree.ReadSymlink(source)
@@ -318,6 +319,8 @@ func Update(this, other Tree, source, target FileInfo) (FileInfo, FileInfo, Upda
 		_, sourceRemote := this.(RemoteTree)
 		_, targetRemote := other.(RemoteTree)
 		if sourceRemote && !targetRemote {
+			// copy from remote to local
+
 			sourceTree := this.(RemoteTree)
 			targetTree := other.(LocalFileTree)
 
@@ -335,21 +338,59 @@ func Update(this, other Tree, source, target FileInfo) (FileInfo, FileInfo, Upda
 			}
 			defer sigJob.Close()
 
-			delta, err := sourceTree.RsyncSrc(source, &countReadCloser{sigJob, &stats.ToSource})
+			delta, err := sourceTree.RsyncSrc(source, &countReader{sigJob, &stats.ToSource})
 			if err != nil {
 				return nil, nil, stats, err
 			}
 			defer delta.Close()
 
-			patchJob, err := librsync.NewPatcher(&countReadCloser{delta, &stats.ToTarget}, basis)
+			patchJob, err := librsync.NewPatcher(&countReader{delta, &stats.ToTarget}, basis)
 			if err != nil {
 				return nil, nil, stats, err
 			}
 
-			info, parentInfo, err := copyFile(copier, patchJob, source)
+			info, parentInfo, err := CopyFile(copier, patchJob, source)
+			return info, parentInfo, stats, err
+
+		} else if !sourceRemote && targetRemote {
+			// copy from local to remote
+
+			sourceTree := this.(LocalFileTree)
+			targetTree := other.(RemoteTree)
+
+			sigReader, deltaCopier, err := targetTree.RsyncDst(target, source)
+			if err != nil {
+				return nil, nil, stats, err
+			}
+			defer deltaCopier.Cancel()
+
+			sourceFile, err := sourceTree.CopySource(source)
+			if err != nil {
+				return nil, nil, stats, err
+			}
+			defer sourceFile.Close()
+
+			sig, err := librsync.LoadSignature(&countReader{sigReader, &stats.ToSource})
+			if err != nil {
+				return nil, nil, stats, err
+			}
+
+			deltaJob, err := librsync.NewDeltaGen(sig, sourceFile)
+			if err != nil {
+				return nil, nil, stats, err
+			}
+
+			stats.ToTarget, err = io.Copy(deltaCopier, deltaJob)
+			if err != nil {
+				return nil, nil, stats, err
+			}
+
+			info, parentInfo, err := deltaCopier.Finish()
 			return info, parentInfo, stats, err
 
 		} else {
+			// copy from local to local
+
 			inf, err := thisFileTree.CopySource(source)
 			if err != nil {
 				return nil, nil, stats, err
@@ -362,7 +403,7 @@ func Update(this, other Tree, source, target FileInfo) (FileInfo, FileInfo, Upda
 			}
 			defer outf.Cancel()
 
-			info, parentInfo, err := copyFile(outf, &countReadCloser{inf, &stats.ToTarget}, source)
+			info, parentInfo, err := CopyFile(outf, &countReader{inf, &stats.ToTarget}, source)
 			return info, parentInfo, stats, err
 		}
 
@@ -383,7 +424,9 @@ func Update(this, other Tree, source, target FileInfo) (FileInfo, FileInfo, Upda
 	}
 }
 
-func copyFile(outf Copier, inf io.Reader, source FileInfo) (FileInfo, FileInfo, error) {
+// CopyFile acts like io.Copy, but it also hashes the data that passes through.
+// The returned FileInfo has this hash.
+func CopyFile(outf Copier, inf io.Reader, source FileInfo) (FileInfo, FileInfo, error) {
 	hash := NewHash()
 
 	// A lot like io.Copy
@@ -422,12 +465,12 @@ func copyFile(outf Copier, inf io.Reader, source FileInfo) (FileInfo, FileInfo, 
 	return fullInfo, parentInfo, err
 }
 
-type countReadCloser struct {
-	r io.ReadCloser
+type countReader struct {
+	r io.Reader
 	n *int64
 }
 
-func (c *countReadCloser) Read(b []byte) (int, error) {
+func (c *countReader) Read(b []byte) (int, error) {
 	n, err := c.r.Read(b)
 	*c.n += int64(n)
 	return n, err
