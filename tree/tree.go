@@ -318,7 +318,36 @@ func Update(this, other Tree, source, target FileInfo) (FileInfo, FileInfo, Upda
 		}
 		_, sourceRemote := this.(RemoteTree)
 		_, targetRemote := other.(RemoteTree)
-		if sourceRemote && !targetRemote {
+		if sourceRemote && targetRemote {
+			// copy between two remote hosts
+			// Note: it may be possible (and would certainly be more performant)
+			// to copy directly between those hosts, instead of merely acting
+			// like a proxy.
+
+			sourceTree := this.(RemoteTree)
+			targetTree := other.(RemoteTree)
+
+			signature, deltaWriter, err := targetTree.RsyncDst(target, source)
+			if err != nil {
+				return nil, nil, stats, err
+			}
+			defer deltaWriter.Cancel()
+
+			deltaReader, err := sourceTree.RsyncSrc(source, &countReader{signature, &stats.ToSource})
+			if err != nil {
+				return nil, nil, stats, err
+			}
+			defer deltaReader.Close()
+
+			stats.ToTarget, err = io.Copy(deltaWriter, deltaReader)
+			if err != nil {
+				return nil, nil, stats, err
+			}
+
+			info, parentInfo, err := deltaWriter.Finish()
+			return info, parentInfo, stats, err
+
+		} else if sourceRemote {
 			// copy from remote to local
 
 			sourceTree := this.(RemoteTree)
@@ -352,7 +381,7 @@ func Update(this, other Tree, source, target FileInfo) (FileInfo, FileInfo, Upda
 			info, parentInfo, err := CopyFile(copier, patchJob, source)
 			return info, parentInfo, stats, err
 
-		} else if !sourceRemote && targetRemote {
+		} else if targetRemote {
 			// copy from local to remote
 
 			sourceTree := this.(LocalFileTree)
