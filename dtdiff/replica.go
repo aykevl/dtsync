@@ -66,6 +66,10 @@ const STATUS_RETAIN = time.Hour * 24 * 30
 // MAGIC is a string constant that can be used to identify the filetype.
 const MAGIC = "dtsync-status-file"
 
+// HASH_ID is the identifier for the hash function in use. The last part is the
+// number of bits for this version (256 bits or 32 bytes).
+const HASH_ID = "blake2b-256"
+
 type ParseError struct {
 	Message string
 	Row     int
@@ -259,6 +263,11 @@ func (r *Replica) load(file io.Reader) error {
 	}
 	if header.Get("Version") != "1" {
 		return &ParseError{"unknown file version: '" + header.Get("Version") + "'", 0, nil}
+	}
+
+	hash := header.Get("Hash")
+	if !(hash == "" || hash == HASH_ID) {
+		return &ParseError{"unknown hash type: '" + hash + "'", 0, nil}
 	}
 
 	contentType := header.Get("Content-Type")
@@ -491,6 +500,7 @@ func (r *Replica) Serialize(out io.Writer) error {
 	writeKeyValue(writer, "Identity", r.identity)
 	writeKeyValue(writer, "Generation", strconv.Itoa(r.generation))
 	writeKeyValue(writer, "Knowledge", strings.Join(knowledgeList, ","))
+	writeKeyValue(writer, "Hash", HASH_ID)
 	if rootOptions != "" {
 		writeKeyValue(writer, "Root-Options", rootOptions)
 	}

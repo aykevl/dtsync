@@ -40,6 +40,7 @@ Content-Type: text/tab-separated-values; charset=utf-8
 Identity: first
 Generation: 2
 Knowledge: second:1
+Hash: blake2b-256
 Root-Options: hasmode=777
 Option-Test: abc
 
@@ -60,6 +61,7 @@ Content-Type: text/tab-separated-values; charset=utf-8
 Identity: second
 Generation: 5
 Knowledge: first:1,other:0
+Hash: blake2b-256
 Root-Options: hasmode=757
 
 path	fingerprint	mode	hash	revision	options
