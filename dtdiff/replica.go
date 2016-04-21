@@ -181,7 +181,6 @@ func ScanTree(fs tree.LocalFileTree, recvOptionsChan, sendOptionsChan chan *tree
 func loadReplica(file io.Reader) (*Replica, error) {
 	r := &Replica{
 		rootEntry: &Entry{
-			children: make(map[string]*Entry),
 			fileType: tree.TYPE_DIRECTORY,
 		},
 		perms: PERMS_DEFAULT,

@@ -171,7 +171,9 @@ func (e *Entry) addRecursive(path []string, rev revision, fingerprint string, mo
 }
 
 func (e *Entry) addChild(name string, rev revision, fileInfo fingerprintInfo, mode tree.Mode, hash tree.Hash, options string) (*Entry, error) {
-	if e.children[name].exists() {
+	if e.children == nil {
+		e.children = make(map[string]*Entry)
+	} else if e.children[name].exists() {
 		// duplicate path
 		return nil, ErrExists
 	}
@@ -184,7 +186,6 @@ func (e *Entry) addChild(name string, rev revision, fileInfo fingerprintInfo, mo
 		mode:     mode,
 		hasMode:  e.hasMode,
 		hash:     hash,
-		children: make(map[string]*Entry),
 		parent:   e,
 		replica:  e.replica,
 	}
