@@ -1,0 +1,27 @@
+package dtdiff;
+
+message ProtoReplica {
+	optional uint32 version         = 1;
+	optional string createdBy       = 2;
+	optional string identity        = 3;
+	optional uint64 generation      = 4;
+	repeated string knowledgeKeys   = 5; // knowledge: map[identity]generation
+	repeated uint64 knowledgeValues = 6;
+	repeated string optionKeys      = 7;
+	repeated string optionValues    = 8;
+	optional string hash            = 9;
+}
+
+message ProtoEntry {
+	optional string name       =  1;
+	optional uint32 type       =  2;
+	optional sint64 modTime    =  3; // mtime in ns from Unix epoch
+	optional uint64 size       =  4;
+	optional uint32 identity   =  5; // index in ProtoReplica.knowledgeKeys
+	optional uint64 generation =  6;
+	optional uint32 mode       =  7;
+	optional uint32 hasMode    =  8;
+	optional uint32 hashType   =  9; // see tree.HASH_* constants
+	optional bytes  hashData   = 10; // e.g. 32-byte blake2b-256 hash (defined in ProtoReplica.hash)
+	optional sint64 removed    = 11; // removed time, unset if not removed
+}

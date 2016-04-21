@@ -46,7 +46,7 @@ import (
 // The type used for TYPE_* constants
 type Type int
 
-// Constants used as Type() return values.
+// Constants used as Type() return values. These must be kept stable.
 //
 // See also: tree/remote/messages.proto
 const (

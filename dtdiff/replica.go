@@ -63,8 +63,13 @@ const PERMS_DEFAULT = 0777
 // disappeared, in case they reappear (e.g. a disk is mounted again).
 const STATUS_RETAIN = time.Hour * 24 * 30
 
-// MAGIC is a string constant that can be used to identify the filetype.
-const MAGIC = "dtsync-status-file"
+// These string constants are used in the header to determine serialization
+// format and can be used to identify the filetype (e.g. by the file(1)
+// command).
+const (
+	MAGIC_TEXT  = "dtsync-status-file"
+	MAGIC_PROTO = "dtsync-status-file-proto"
+)
 
 // HASH_ID is the identifier for the hash function in use. The last part is the
 // number of bits for this version (256 bits or 32 bytes).
@@ -74,6 +79,13 @@ type ParseError struct {
 	Message string
 	Row     int
 	Err     error
+}
+
+func parseBinError(message string, err error) error {
+	return &ParseError{
+		Message: message,
+		Err:     err,
+	}
 }
 
 func (e *ParseError) Error() string {
@@ -177,7 +189,7 @@ func loadReplica(file io.Reader) (*Replica, error) {
 	r.rootEntry.replica = r
 
 	if file == nil {
-		// This is a blank replica, create initial data
+		// This is a blank replica, create initial data.
 		r.isChanged = true
 		r.revision = revision{
 			generation: 1,
@@ -241,7 +253,6 @@ func (r *Replica) mergeKnowledge(other *Replica) {
 	}
 }
 
-// load assumes this replica hasn't yet been loaded
 func (r *Replica) load(file io.Reader) error {
 	if r.identity != "" {
 		panic("replica already loaded")
@@ -249,18 +260,30 @@ func (r *Replica) load(file io.Reader) error {
 
 	reader := bufio.NewReader(file)
 
+	// Check header magic string.
+	line, err := reader.ReadString('\n')
+	if err != nil {
+		return parseBinError("could not read magic", err)
+	}
+	line = strings.TrimRight(line, "\n")
+
+	switch line {
+	case "Magic: " + MAGIC_TEXT:
+		return r.loadText(reader)
+	case MAGIC_PROTO:
+		return r.loadProto(reader)
+	default:
+		return parseBinError("unexpected magic: "+line, nil)
+	}
+}
+
+// loadText assumes this replica hasn't yet been loaded
+func (r *Replica) loadText(reader *bufio.Reader) error {
 	header, err := textproto.NewReader(reader).ReadMIMEHeader()
 	if err != nil {
 		return &ParseError{"cannot parse status file", 0, err}
 	}
 
-	if header.Get("Magic") != MAGIC {
-		if header.Get("Magic") == "" {
-			return &ParseError{"file does not have magic", 0, nil}
-		} else {
-			return &ParseError{"file has wrong magic: " + header.Get("Magic") + "'", 0, nil}
-		}
-	}
 	if header.Get("Version") != "1" {
 		return &ParseError{"unknown file version: '" + header.Get("Version") + "'", 0, nil}
 	}
@@ -469,7 +492,7 @@ func (e *Entry) parseOptions(s string) error {
 	return nil
 }
 
-func (r *Replica) Serialize(out io.Writer) error {
+func (r *Replica) SerializeText(out io.Writer) error {
 	// Get a sorted list of peer identities
 	peerIds := make([]string, 0, len(r.knowledge)-1)
 	for id, _ := range r.knowledge {
@@ -493,7 +516,7 @@ func (r *Replica) Serialize(out io.Writer) error {
 
 	writer := bufio.NewWriter(out)
 	// Don't look at the error return values, errors will be caught in .Flush().
-	writeKeyValue(writer, "Magic", MAGIC)
+	writeKeyValue(writer, "Magic", MAGIC_TEXT)
 	writeKeyValue(writer, "Version", "1")
 	writeKeyValue(writer, "Created-By", version.VERSION)
 	writeKeyValue(writer, "Content-Type", "text/tab-separated-values; charset=utf-8")
@@ -521,7 +544,7 @@ func (r *Replica) Serialize(out io.Writer) error {
 		return err
 	}
 
-	err = r.rootEntry.serializeChildren(tsvWriter, peerIndex, "")
+	err = r.rootEntry.serializeTextChildren(tsvWriter, peerIndex, "")
 	if err != nil {
 		return err
 	}
@@ -541,7 +564,7 @@ func (r *Replica) Serialize(out io.Writer) error {
 // It has this odd way of functioning (writing the children without writing
 // itself) because that makes it easier to write the root entry without copying
 // (DRY).
-func (e *Entry) serializeChildren(tsvWriter *unitsv.Writer, peerIndex map[string]int, path string) error {
+func (e *Entry) serializeTextChildren(tsvWriter *unitsv.Writer, peerIndex map[string]int, path string) error {
 	// Put this function in replica.go as it is most closely related to the
 	// parsing and serializing code here.
 
@@ -583,7 +606,7 @@ func (e *Entry) serializeChildren(tsvWriter *unitsv.Writer, peerIndex map[string
 		if err != nil {
 			return err
 		}
-		err = e.children[name].serializeChildren(tsvWriter, peerIndex, childpath)
+		err = e.children[name].serializeTextChildren(tsvWriter, peerIndex, childpath)
 		if err != nil {
 			return err
 		}

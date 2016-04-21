@@ -705,7 +705,7 @@ func (s *Server) scan(requestId uint64, scanOptions chan []byte) {
 	writer := io.MultiWriter(writer1, writer2)
 
 	go func() {
-		err = replica.Serialize(writer)
+		err = replica.SerializeText(writer)
 		if err != nil {
 			s.replyError(requestId, err)
 		}

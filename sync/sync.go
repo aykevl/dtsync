@@ -274,7 +274,7 @@ func (r *Result) serializeStatus(replica *dtdiff.Replica, fs tree.Tree) error {
 	if err != nil {
 		return err
 	}
-	err = replica.Serialize(outstatus)
+	err = replica.SerializeText(outstatus)
 	if err != nil {
 		// TODO: cancel?
 		outstatus.Close()

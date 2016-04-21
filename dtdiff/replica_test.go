@@ -148,10 +148,51 @@ func TestReplica(t *testing.T) {
 
 	for _, tc := range saveTests {
 		buf := &bytes.Buffer{}
-		tc.replica.Serialize(buf)
+		tc.replica.SerializeText(buf)
 		output := buf.Bytes()
 		if !bytes.Equal(output, []byte(tc.output)) {
 			t.Errorf("replica %s does not have the expected output.\n\n*** Expected:\n%s\n\n*** Actual:\n%s", tc.replica, tc.output, string(output))
+		}
+	}
+}
+
+func TestProto(t *testing.T) {
+	for i, statusString := range []string{status1, status2} {
+		// Load text serialization into memory
+		fileText := bytes.NewBufferString(statusString)
+		replicaText, err := loadReplica(fileText)
+		if err != nil {
+			t.Errorf("failed to load text replica %d: %s", i+1, err)
+			continue
+		}
+
+		// Write out binary serialization
+		fileProto := &bytes.Buffer{}
+		err = replicaText.SerializeProto(fileProto)
+		if err != nil {
+			t.Errorf("failed to serialize protobuf replica %d: %s", i+1, err)
+			continue
+		}
+
+		// Read back binary serialization
+		protoData := fileProto.Bytes()
+		replicaProto, err := loadReplica(bytes.NewReader(protoData))
+		if err != nil {
+			t.Errorf("failed to load protobuf replica %d: %s", i+1, err)
+			continue
+		}
+
+		// Write out text, and compare with original
+		fileText2 := &bytes.Buffer{}
+		err = replicaProto.SerializeText(fileText2)
+		if err != nil {
+			t.Errorf("failed to serialize text replica %d after loading via protobuf: %s", i+1, err)
+			continue
+		}
+
+		statusString2 := string(fileText2.Bytes())
+		if statusString != statusString2 {
+			t.Errorf("replica %d does not have the expected output after protobuf encoding and decoding.\n\n*** Expected:\n%s\n\n*** Actual:\n%s", i+1, statusString, statusString2)
 		}
 	}
 }
