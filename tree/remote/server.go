@@ -691,29 +691,36 @@ func (s *Server) scan(requestId uint64, scanOptions chan []byte) {
 		return
 	}
 
-	// Write to a file and to the client at the same time.
-	writer1, err := s.fs.SetFile(dtdiff.STATUS_FILE)
-	if err != nil {
-		// TODO: writer1.Revert()
-		if writer1 != nil {
-			writer1.Close()
-		}
-		s.replyError(requestId, err)
-		return
-	}
-	reader, writer2 := io.Pipe()
-	writer := io.MultiWriter(writer1, writer2)
-
+	fileDone := make(chan error)
 	go func() {
-		err = replica.SerializeText(writer)
+		saveWriter, err := s.fs.SetFile(dtdiff.STATUS_FILE)
 		if err != nil {
-			s.replyError(requestId, err)
+			fileDone <- err
+			return
 		}
-		writer1.Close()
-		writer2.Close()
+		defer saveWriter.Close() // TODO: Revert()
+		err = replica.SerializeText(saveWriter)
+		fileDone <- err
 	}()
 
-	s.streamSendData(requestId, reader, true)
+	sendReader, sendWriter := io.Pipe()
+	sendDone := make(chan error)
+	go func() {
+		err := replica.SerializeProto(sendWriter)
+		sendWriter.CloseWithError(err)
+		sendDone <- err
+	}()
+
+	s.streamSendData(requestId, sendReader, false)
+	fileErr := <-fileDone
+	sendErr := <-sendDone
+	if fileErr != nil {
+		s.replyError(requestId, fileErr)
+	} else if sendErr != nil {
+		s.replyError(requestId, sendErr)
+	} else {
+		s.replyChan <- replyResponse{requestId, nil, nil}
+	}
 }
 
 func (s *Server) streamSendData(requestId uint64, reader io.Reader, finish bool) bool {
