@@ -476,7 +476,7 @@ func (c *Client) GetFile(name string) (io.ReadCloser, error) {
 	})
 }
 
-func (c *Client) SetFile(name string) (io.WriteCloser, error) {
+func (c *Client) SetFile(name string) (tree.Copier, error) {
 	debugLog("\nC: SetFile")
 	command := Command_SETFILE
 	request := &Request{
@@ -488,22 +488,23 @@ func (c *Client) SetFile(name string) (io.WriteCloser, error) {
 	if err != nil {
 		return nil, err
 	}
-	finish := make(chan struct{})
-	stream := &streamWriter{
-		writer: writer,
-		finish: finish,
+
+	cp := &copier{
+		w:    writer,
+		done: make(chan struct{}),
 	}
+
 	go func() {
+		defer close(cp.done)
 		respData := <-ch
 		_, err := respData.resp, respData.err
 		if err != nil {
-			stream.setError(err)
-		} else {
-			reader.Close()
+			cp.setError(err)
+			return
 		}
-		finish <- struct{}{}
 	}()
-	return stream, nil
+
+	return cp, nil
 }
 
 func (c *Client) CreateFile(name string, parent, source tree.FileInfo) (tree.Copier, error) {

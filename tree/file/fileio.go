@@ -75,28 +75,3 @@ func (w *fileCopier) Cancel() error {
 	}
 	return w.onCancel()
 }
-
-// fileWriter wraps an os.File, without any special things like FileInfo or
-// atomicity.
-type fileWriter struct {
-	fp        *os.File
-	closeCall func() error
-}
-
-// Write is a pass-through function for the underlying os.File object.
-func (w *fileWriter) Write(b []byte) (int, error) {
-	return w.fp.Write(b)
-}
-
-// Close syncs and closes the file, and calls the callback.
-func (w *fileWriter) Close() error {
-	err := w.fp.Sync()
-	if err != nil {
-		return err
-	}
-	err = w.fp.Close()
-	if err != nil {
-		return err
-	}
-	return w.closeCall()
-}

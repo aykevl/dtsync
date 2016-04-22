@@ -331,14 +331,22 @@ func (s *Server) setFile(requestId uint64, name string, dataChan chan []byte) {
 		s.replyError(requestId, err)
 		return
 	}
+	defer writer.Cancel()
+
 	for buf := range dataChan {
+		if buf == nil {
+			// cancel
+			s.replyError(requestId, tree.ErrCancelled)
+			return
+		}
 		_, err := writer.Write(buf)
 		if err != nil {
 			s.replyError(requestId, err)
 			return
 		}
 	}
-	err = writer.Close()
+
+	_, _, err = writer.Finish()
 	if err != nil {
 		s.replyError(requestId, err)
 		return
@@ -698,8 +706,12 @@ func (s *Server) scan(requestId uint64, scanOptions chan []byte) {
 			fileDone <- err
 			return
 		}
-		defer saveWriter.Close() // TODO: Revert()
 		err = replica.SerializeText(saveWriter)
+		if err != nil {
+			saveWriter.Cancel()
+		} else {
+			_, _, err = saveWriter.Finish()
+		}
 		fileDone <- err
 	}()
 

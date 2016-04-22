@@ -276,11 +276,11 @@ func (r *Result) serializeStatus(replica *dtdiff.Replica, fs tree.Tree) error {
 	}
 	err = replica.SerializeText(outstatus)
 	if err != nil {
-		// TODO: cancel?
-		outstatus.Close()
+		outstatus.Cancel()
 		return err
 	}
-	return outstatus.Close()
+	_, _, err = outstatus.Finish()
+	return err
 }
 
 // Stats is returned by SyncAll() and contains the total number and the number

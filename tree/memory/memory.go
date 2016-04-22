@@ -352,15 +352,16 @@ func (e *Entry) GetFile(name string) (io.ReadCloser, error) {
 	}
 }
 
-// SetFile returns a file handle (io.WriteCloser) to a newly created/replaced
+// SetFile returns a file handle (tree.Copier) to a newly created/replaced
 // child file that can be used to save the replica state.
-func (e *Entry) SetFile(name string) (io.WriteCloser, error) {
+func (e *Entry) SetFile(name string) (tree.Copier, error) {
 	if child, ok := e.children[name]; ok {
-		return newFileCloser(func(buf *bytes.Buffer) {
+		return newFileCopier(func(buf *bytes.Buffer) (tree.FileInfo, tree.FileInfo, error) {
 			child.contents = buf.Bytes()
+			return nil, nil, nil
 		}), nil
 	} else {
-		return newFileCloser(func(buf *bytes.Buffer) {
+		return newFileCopier(func(buf *bytes.Buffer) (tree.FileInfo, tree.FileInfo, error) {
 			child := &Entry{
 				fileType: tree.TYPE_REGULAR,
 				mode:     DEFAULT_MODE & e.hasMode,
@@ -371,10 +372,7 @@ func (e *Entry) SetFile(name string) (io.WriteCloser, error) {
 				parent:   e,
 			}
 			err := e.addChild(child)
-			if err != nil {
-				// We can't return an error here.
-				panic("memory: SetFile failed: " + err.Error())
-			}
+			return nil, nil, err
 		}), nil
 	}
 }
