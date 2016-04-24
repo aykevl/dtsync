@@ -646,13 +646,20 @@ func (c *Client) RsyncSrc(file tree.FileInfo, signature io.Reader) (io.ReadClose
 	if err != nil {
 		return nil, err
 	}
+	stream := &streamReader{
+		reader:    deltaReader,
+		done:      make(chan struct{}),
+		mustClose: true,
+	}
 	go func() {
+		defer close(stream.done)
 		respData := <-ch
 		if respData.err != nil {
 			deltaWriter.CloseWithError(respData.err)
+			stream.setError(respData.err)
 		}
 	}()
-	return deltaReader, nil
+	return stream, nil
 }
 
 // RsyncDst requests a signature from the server and sends a patch file, to

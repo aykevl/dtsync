@@ -97,10 +97,11 @@ func (c *copier) setError(err error) {
 
 // streamReader wraps a PipeReader that can be set to an error at any time.
 type streamReader struct {
-	reader *io.PipeReader
-	err    error
-	mutex  sync.Mutex
-	done   chan struct{}
+	reader    *io.PipeReader
+	err       error
+	mutex     sync.Mutex
+	done      chan struct{}
+	mustClose bool
 }
 
 func (r *streamReader) Read(p []byte) (int, error) {
@@ -113,6 +114,15 @@ func (r *streamReader) Read(p []byte) (int, error) {
 }
 
 func (r *streamReader) Close() error {
+	if r.mustClose {
+		err := r.reader.Close()
+		if err != nil {
+			r.mutex.Lock()
+			r.err = err
+			r.mutex.Unlock()
+		}
+	}
+
 	<-r.done
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
