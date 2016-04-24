@@ -32,6 +32,7 @@ import (
 	"bufio"
 	"io"
 	"strings"
+	"sync"
 
 	"github.com/aykevl/dtsync/dtdiff"
 	"github.com/aykevl/dtsync/tree"
@@ -52,11 +53,17 @@ type replyResponse struct {
 // Server is an instance of the server side of a dtsync connection. It receives
 // commands and processes them, but does not initiate anything.
 type Server struct {
-	reader      io.ReadCloser
-	writer      io.WriteCloser
-	fs          tree.LocalFileTree
-	replyChan   chan replyResponse
-	currentScan chan []byte
+	reader    io.ReadCloser
+	writer    io.WriteCloser
+	fs        tree.LocalFileTree
+	replyChan chan replyResponse
+	jobMutex  sync.Mutex
+	job       *serverJob
+}
+
+type serverJob struct {
+	command  Command
+	scanOpts chan []byte
 }
 
 // NewServer returns a *Server for the given reader, writer, and filesystem
@@ -70,6 +77,20 @@ func NewServer(r io.ReadCloser, w io.WriteCloser, fs tree.LocalFileTree) *Server
 		replyChan: make(chan replyResponse), // may not be buffered for synchronisation
 	}
 	return s
+}
+
+func (s *Server) getJob() *serverJob {
+	s.jobMutex.Lock()
+	defer s.jobMutex.Unlock()
+	return s.job
+}
+
+func (s *Server) setJob(j *serverJob) bool {
+	s.jobMutex.Lock()
+	defer s.jobMutex.Unlock()
+	ok := s.job == nil
+	s.job = j
+	return ok
 }
 
 // Run runs in a goroutine, until the server experiences a fatal (connection)
@@ -171,20 +192,35 @@ func (s *Server) handleRequest(msg *Request, recvStreams map[uint64]chan []byte)
 			panic("unknown status")
 		}
 	case Command_SCAN:
-		if s.currentScan != nil {
-			return invalidRequest{"SCAN while a scan is already running"}
+		job := &serverJob{
+			command:  Command_SCAN,
+			scanOpts: make(chan []byte, 1),
 		}
-		s.currentScan = make(chan []byte)
-		go s.scan(*msg.RequestId, s.currentScan)
+		if !s.setJob(job) {
+			return invalidRequest{"SCAN while a job is already running"}
+		}
+		go s.scan(*msg.RequestId, job)
 	case Command_SCANOPTS:
 		if msg.Data == nil {
-			return invalidRequest{"SCANSTATUS expects data field (ScanOptions)"}
+			return invalidRequest{"SCANOPTS expects data field (ScanOptions)"}
 		}
-		if s.currentScan == nil {
-			return invalidRequest{"SCANSTATUS outside running scan or sending SCANSTATUS twice"}
+		job := s.getJob()
+		if job == nil || job.command != Command_SCAN {
+			return invalidRequest{"SCANOPTS outside running scan"}
 		}
-		s.currentScan <- msg.Data
-		s.currentScan = nil
+		// When scanOpts is full, it will block, but that only happens when
+		// sending SCANOPTS for the second or third time.
+		select {
+		case job.scanOpts <- msg.Data:
+		default:
+		}
+	case Command_PUTSTATE:
+		dataChan := make(chan []byte, 1)
+		recvStreams[*msg.RequestId] = dataChan
+		// TODO: locking
+		// TODO: make sure we're not accidentally overwriting another sync that
+		// happened inbetween.
+		go s.putState(*msg.RequestId, dataChan)
 	case Command_MKDIR:
 		// Client wants to create a directory.
 		if msg.FileInfo1 == nil || msg.Name == nil || msg.FileInfo2 == nil {
@@ -423,6 +459,10 @@ func (s *Server) rsyncSrc(requestId uint64, info tree.FileInfo, sigChan chan []b
 	sigReader, sigWriter := io.Pipe()
 	go func() {
 		for block := range sigChan {
+			if block == nil {
+				sigWriter.CloseWithError(tree.ErrCancelled)
+				return
+			}
 			_, err := sigWriter.Write(block)
 			if err != nil {
 				// This only happens when the other end is closed (possibly
@@ -649,13 +689,21 @@ func (s *Server) replyInfo2(requestId uint64, file, parent tree.FileInfo, err er
 	}
 }
 
-func (s *Server) scan(requestId uint64, scanOptions chan []byte) {
+func (s *Server) scan(requestId uint64, job *serverJob) {
 	recvOptions := make(chan *tree.ScanOptions)
 	sendOptions := make(chan *tree.ScanOptions)
 	progressChan := make(chan *tree.ScanProgress)
 
+	cancel := make(chan struct{})
+
 	go func() {
-		options, err := parseScanOptions(<-scanOptions)
+		var optionsBuf []byte
+		select {
+		case optionsBuf = <-job.scanOpts:
+		case <-cancel:
+			return
+		}
+		options, err := parseScanOptions(optionsBuf)
 		if err != nil {
 			s.replyError(requestId, err)
 			return
@@ -692,33 +740,24 @@ func (s *Server) scan(requestId uint64, scanOptions chan []byte) {
 		}
 	}()
 
-	replica, err := dtdiff.ScanTree(s.fs, recvOptions, sendOptions, progressChan)
+	replica, err := dtdiff.ScanTree(s.fs, recvOptions, sendOptions, progressChan, cancel)
 	<-progressDone
 	if err != nil {
+		close(cancel)
+		s.setJob(nil)
 		s.replyError(requestId, err)
 		return
 	}
 
 	fileDone := make(chan error)
 	go func() {
-		saveWriter, err := s.fs.SetFile(dtdiff.STATUS_FILE)
-		if err != nil {
-			fileDone <- err
-			return
-		}
-		err = replica.SerializeText(saveWriter)
-		if err != nil {
-			saveWriter.Cancel()
-		} else {
-			_, _, err = saveWriter.Finish()
-		}
-		fileDone <- err
+		fileDone <- replica.Serialize(s.fs)
 	}()
 
 	sendReader, sendWriter := io.Pipe()
 	sendDone := make(chan error)
 	go func() {
-		err := replica.SerializeProto(sendWriter)
+		err := replica.SerializeStream(sendWriter, dtdiff.FORMAT_PROTO)
 		sendWriter.CloseWithError(err)
 		sendDone <- err
 	}()
@@ -726,9 +765,12 @@ func (s *Server) scan(requestId uint64, scanOptions chan []byte) {
 	s.streamSendData(requestId, sendReader, false)
 	fileErr := <-fileDone
 	sendErr := <-sendDone
+	s.setJob(nil)
 	if fileErr != nil {
+		close(cancel)
 		s.replyError(requestId, fileErr)
 	} else if sendErr != nil {
+		close(cancel)
 		s.replyError(requestId, sendErr)
 	} else {
 		s.replyChan <- replyResponse{requestId, nil, nil}
@@ -780,4 +822,50 @@ func (s *Server) streamSendData(requestId uint64, reader io.Reader, finish bool)
 			}
 		}
 	}
+}
+
+func (s *Server) putState(requestId uint64, dataChan chan []byte) {
+	reader, writer := io.Pipe()
+	go func() {
+		for block := range dataChan {
+			if block == nil {
+				writer.CloseWithError(tree.ErrCancelled)
+				return
+			}
+
+			// Ignore errors, we need to drain this channel anyway.
+			_, _ = writer.Write(block)
+		}
+		writer.Close()
+	}()
+
+	// Load replica first, to convert to a different format on-disk, and to
+	// check for consistency.
+	replica, err := dtdiff.LoadReplica(reader)
+	if err != nil {
+		reader.CloseWithError(err)
+		s.replyError(requestId, err)
+		return
+	}
+
+	copier, err := s.fs.SetFile(dtdiff.STATUS_FILE)
+	if err != nil {
+		s.replyError(requestId, err)
+		return
+	}
+	defer copier.Cancel()
+
+	err = replica.SerializeStream(copier, dtdiff.FORMAT_TEXT)
+	if err != nil {
+		s.replyError(requestId, err)
+		return
+	}
+
+	_, _, err = copier.Finish()
+	if err != nil {
+		s.replyError(requestId, err)
+		return
+	}
+
+	s.replyChan <- replyResponse{requestId, nil, nil}
 }

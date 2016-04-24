@@ -81,7 +81,7 @@ func TestReplica(t *testing.T) {
 
 	rs := &ReplicaSet{}
 	for i, file := range []*bytes.Buffer{file1, file2} {
-		replica, err := loadReplica(file)
+		replica, err := LoadReplica(file)
 		if err != nil {
 			t.Fatal("failed to load replica:", err)
 		}
@@ -148,7 +148,7 @@ func TestReplica(t *testing.T) {
 
 	for _, tc := range saveTests {
 		buf := &bytes.Buffer{}
-		tc.replica.SerializeText(buf)
+		tc.replica.serializeText(buf)
 		output := buf.Bytes()
 		if !bytes.Equal(output, []byte(tc.output)) {
 			t.Errorf("replica %s does not have the expected output.\n\n*** Expected:\n%s\n\n*** Actual:\n%s", tc.replica, tc.output, string(output))
@@ -160,7 +160,7 @@ func TestProto(t *testing.T) {
 	for i, statusString := range []string{status1, status2} {
 		// Load text serialization into memory
 		fileText := bytes.NewBufferString(statusString)
-		replicaText, err := loadReplica(fileText)
+		replicaText, err := LoadReplica(fileText)
 		if err != nil {
 			t.Errorf("failed to load text replica %d: %s", i+1, err)
 			continue
@@ -168,7 +168,7 @@ func TestProto(t *testing.T) {
 
 		// Write out binary serialization
 		fileProto := &bytes.Buffer{}
-		err = replicaText.SerializeProto(fileProto)
+		err = replicaText.serializeProto(fileProto)
 		if err != nil {
 			t.Errorf("failed to serialize protobuf replica %d: %s", i+1, err)
 			continue
@@ -176,7 +176,7 @@ func TestProto(t *testing.T) {
 
 		// Read back binary serialization
 		protoData := fileProto.Bytes()
-		replicaProto, err := loadReplica(bytes.NewReader(protoData))
+		replicaProto, err := LoadReplica(bytes.NewReader(protoData))
 		if err != nil {
 			t.Errorf("failed to load protobuf replica %d: %s", i+1, err)
 			continue
@@ -184,7 +184,7 @@ func TestProto(t *testing.T) {
 
 		// Write out text, and compare with original
 		fileText2 := &bytes.Buffer{}
-		err = replicaProto.SerializeText(fileText2)
+		err = replicaProto.serializeText(fileText2)
 		if err != nil {
 			t.Errorf("failed to serialize text replica %d after loading via protobuf: %s", i+1, err)
 			continue

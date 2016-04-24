@@ -71,67 +71,33 @@ func Scan(fs1, fs2 tree.Tree, options ...func(*ReplicaSet)) (*ReplicaSet, error)
 		scanProgress[i] = make(chan *tree.ScanProgress)
 	}
 	for i := range trees {
-		go func(i int) {
+		i := i
+		go func() {
 			switch fs := trees[i].(type) {
 			case tree.LocalFileTree:
-				file, err := fs.GetFile(STATUS_FILE)
-				if err != nil && !tree.IsNotExist(err) {
-					scanErrors[i] <- err
-					return
+				replica, err := ScanTree(fs, sendOptions[i], sendOptions[(i+1)%2], scanProgress[i], scanCancel[i])
+				if err == nil {
+					rs.set[i] = replica
 				}
-
-				var replica *Replica
-				if tree.IsNotExist(err) {
-					// loadReplica doesn't return errors when creating a new
-					// replica.
-					replica, _ = loadReplica(nil)
-				} else {
-					replica, err = loadReplica(file)
-					if err != nil {
-						scanErrors[i] <- err
-						return
-					}
-				}
-				rs.set[i] = replica
-
-				myOptions := replica.scanOptions()
-				replica.addScanOptions(myOptions)
-				sendOptions[(i+1)%2] <- myOptions
-
-				// Insert options from the other replica.
-				otherOptions, ok := <-sendOptions[i]
-				if !ok {
-					// Something went wrong with the other replica.
-					// Cancel now.
-					scanErrors[i] <- nil
-					return
-				}
-				if otherOptions.Replica == myOptions.Replica {
-					scanErrors[i] <- &ErrSameIdentity{otherOptions.Replica}
-					return
-				}
-				replica.addScanOptions(otherOptions)
-
-				// Now we can start.
-				scanErrors[i] <- replica.scan(fs, scanCancel[i], scanProgress[i])
+				scanErrors[i] <- err
 
 			case tree.RemoteTree:
-				reader, err := fs.RemoteScan(sendOptions[i], sendOptions[(i+1)%2], scanProgress[i])
+				reader, err := fs.RemoteScan(sendOptions[i], sendOptions[(i+1)%2], scanProgress[i], scanCancel[i])
 				if err != nil {
 					scanErrors[i] <- err
+					return
 				}
 
-				replica, err := loadReplica(reader)
-				if err != nil {
-					scanErrors[i] <- err
-				} else {
+				replica, err := LoadReplica(reader)
+				reader.Close()
+				if err == nil {
 					rs.set[i] = replica
-					scanErrors[i] <- nil
 				}
+				scanErrors[i] <- err
 			default:
 				panic("tree does not implement tree.LocalFileTree or tree.RemoteTree")
 			}
-		}(i)
+		}()
 	}
 
 	var progress ScanProgress
@@ -152,8 +118,7 @@ func Scan(fs1, fs2 tree.Tree, options ...func(*ReplicaSet)) (*ReplicaSet, error)
 			done1 = true
 			if err != nil {
 				if !done2 {
-					close(sendOptions[1])
-					scanCancel[1] <- struct{}{}
+					close(scanCancel[1])
 					<-scanErrors[1]
 				}
 				return nil, err
@@ -162,8 +127,7 @@ func Scan(fs1, fs2 tree.Tree, options ...func(*ReplicaSet)) (*ReplicaSet, error)
 			done2 = true
 			if err != nil {
 				if !done1 {
-					close(sendOptions[0])
-					scanCancel[0] <- struct{}{}
+					close(scanCancel[0])
 					<-scanErrors[0]
 				}
 				return nil, err

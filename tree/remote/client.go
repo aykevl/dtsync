@@ -340,7 +340,7 @@ func (c *Client) Close() error {
 
 // RemoteScan runs a remote scan command and returns an io.Reader with the new
 // status file.
-func (c *Client) RemoteScan(sendOptions, recvOptions chan *tree.ScanOptions, recvProgress chan<- *tree.ScanProgress) (io.Reader, error) {
+func (c *Client) RemoteScan(sendOptions, recvOptions chan *tree.ScanOptions, recvProgress chan<- *tree.ScanProgress, cancel chan struct{}) (io.ReadCloser, error) {
 	debugLog("\nC: RemoteScan")
 
 	job := &scanJob{
@@ -357,12 +357,16 @@ func (c *Client) RemoteScan(sendOptions, recvOptions chan *tree.ScanOptions, rec
 		Command: &commandScan,
 	}
 	reader, writer := io.Pipe()
-	stream := &streamReader{reader: reader}
+	stream := &streamReader{
+		reader: reader,
+		done:   make(chan struct{}),
+	}
 	ch, err := c.handleReply(request, nil, writer)
 	if err != nil {
 		return nil, err
 	}
 	go func() {
+		defer close(stream.done)
 		respData := <-ch
 		c.setScanJob(nil)
 		close(job.scanProgress)
@@ -416,6 +420,18 @@ func (c *Client) RemoteScan(sendOptions, recvOptions chan *tree.ScanOptions, rec
 	}()
 
 	return stream, nil
+}
+
+// SendStatus creates a Copier that sends status data (encoded as any format,
+// but probably the protobuf serialization), and the remote writes it to a
+// .dtsync file or similar.
+func (c *Client) SendStatus() (tree.Copier, error) {
+	command := Command_PUTSTATE
+	request := &Request{
+		Command: &command,
+	}
+
+	return c.sendStream(request)
 }
 
 func (c *Client) CreateDir(name string, parent, source tree.FileInfo) (tree.FileInfo, error) {
@@ -528,6 +544,10 @@ func (c *Client) sendFile(name string, fileInfo1, fileInfo2 tree.FileInfo) (tree
 		request.Name = &name
 	}
 
+	return c.sendStream(request)
+}
+
+func (c *Client) sendStream(request *Request) (tree.Copier, error) {
 	reader, writer := io.Pipe()
 	ch, err := c.handleReply(request, reader, nil)
 	if err != nil {
@@ -550,6 +570,7 @@ func (c *Client) sendFile(name string, fileInfo1, fileInfo2 tree.FileInfo) (tree
 		cp.fileInfo = parseFileInfo(resp.FileInfo)
 		cp.parentInfo = parseFileInfo(resp.ParentInfo)
 	}()
+
 	return cp, nil
 }
 
@@ -633,12 +654,16 @@ func (c *Client) CopySource(info tree.FileInfo) (io.ReadCloser, error) {
 // recvFile sends a request and returns a stream to receive a file.
 func (c *Client) recvFile(request *Request) (*streamReader, error) {
 	reader, writer := io.Pipe()
-	stream := &streamReader{reader: reader}
+	stream := &streamReader{
+		reader: reader,
+		done:   make(chan struct{}),
+	}
 	ch, err := c.handleReply(request, nil, writer)
 	if err != nil {
 		return nil, err
 	}
 	go func() {
+		defer close(stream.done)
 		respData := <-ch
 		if respData.err != nil {
 			stream.setError(respData.err)

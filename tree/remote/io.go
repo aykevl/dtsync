@@ -100,6 +100,7 @@ type streamReader struct {
 	reader *io.PipeReader
 	err    error
 	mutex  sync.Mutex
+	done   chan struct{}
 }
 
 func (r *streamReader) Read(p []byte) (int, error) {
@@ -112,6 +113,7 @@ func (r *streamReader) Read(p []byte) (int, error) {
 }
 
 func (r *streamReader) Close() error {
+	<-r.done
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
 	return r.err

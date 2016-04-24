@@ -202,9 +202,9 @@ func (e *Entry) loadProto(reader *bufio.Reader, buffer *proto.Buffer, knowledgeK
 	return nil
 }
 
-// SerializeProto writes a stream of protobuf data to stream out containing
+// serializeProto writes a stream of protobuf data to stream out containing
 // everything that's inside this Replica.
-func (r *Replica) SerializeProto(out io.Writer) error {
+func (r *Replica) serializeProto(out io.Writer) error {
 	writer := bufio.NewWriter(out)
 
 	writer.WriteString(MAGIC_PROTO + "\n")

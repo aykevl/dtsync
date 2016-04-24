@@ -7,6 +7,7 @@ enum Command {
 	SCAN        = 3;
 	SCANOPTS    = 4; // scan options (before scan)
 	SCANPROG    = 5; // scan progress (during scan)
+	PUTSTATE    = 6;
 
 	MKDIR       = 10;
 	REMOVE      = 11;

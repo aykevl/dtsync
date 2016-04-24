@@ -129,12 +129,6 @@ type Tree interface {
 	// Chmod updates the mode (permission) bits of a file. The newly returned
 	// FileInfo contains the new mode.
 	Chmod(target, source FileInfo) (FileInfo, error)
-
-	// Get this file. This only exists to read the status file, not to implement
-	// copying in the syncer!
-	GetFile(name string) (io.ReadCloser, error)
-	// SetFile is analogous to GetFile.
-	SetFile(name string) (Copier, error)
 }
 
 type RsyncBasis interface {
@@ -184,7 +178,11 @@ type RemoteTree interface {
 	// The sendOptions are sent to the remote scanner (scan will start once
 	// received), and recvOptions is a channel from which the options sent by
 	// the remote can be read.
-	RemoteScan(sendOptions, recvOptions chan *ScanOptions, progress chan<- *ScanProgress) (io.Reader, error)
+	RemoteScan(sendOptions, recvOptions chan *ScanOptions, progress chan<- *ScanProgress, cancel chan struct{}) (io.ReadCloser, error)
+
+	// SendStatus is used to overwrite the status file on the remote. Data (in
+	// e.g. protobuf format) can be written to the Copier.
+	SendStatus() (Copier, error)
 
 	// Use the rsync algorithm (librsync) to send only small changes in files.
 	// RsyncSrc sends a signature and receives the binary delta.
@@ -205,6 +203,13 @@ type LocalFileTree interface {
 	// UpdateRsync returns a source file and a file to write, for use by the
 	// rsync algorithm.
 	UpdateRsync(info, source FileInfo) (RsyncBasis, Copier, error)
+
+	// Get this file. This only exists to read the status file, not to implement
+	// copying in the syncer!
+	GetFile(name string) (io.ReadCloser, error)
+
+	// SetFile is analogous to GetFile.
+	SetFile(name string) (Copier, error)
 }
 
 // Entry is one object tree, e.g. a file or directory. It can also be something

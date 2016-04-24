@@ -715,6 +715,7 @@ func readStatuses(t *testing.T, roots ...tree.TestTree) [][]byte {
 			}
 			t.Fatal("could not get status file:", err)
 		}
+		defer statusFile.Close()
 		status, err := ioutil.ReadAll(statusFile)
 		statusData[i] = status
 		assert(err)

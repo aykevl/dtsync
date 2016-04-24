@@ -71,6 +71,13 @@ const (
 	MAGIC_PROTO = "dtsync-status-file-proto"
 )
 
+// Format constants to use for the Replica.Serialize function.
+const (
+	FORMAT_NONE = iota
+	FORMAT_TEXT
+	FORMAT_PROTO
+)
+
 // HASH_ID is the identifier for the hash function in use. The last part is the
 // number of bits for this version (256 bits or 32 bytes).
 const HASH_ID = "blake2b-256"
@@ -147,15 +154,16 @@ type Replica struct {
 	progressSent       time.Time
 }
 
-func ScanTree(fs tree.LocalFileTree, recvOptionsChan, sendOptionsChan chan *tree.ScanOptions, progress chan<- *tree.ScanProgress) (*Replica, error) {
+func ScanTree(fs tree.LocalFileTree, recvOptionsChan, sendOptionsChan chan *tree.ScanOptions, progress chan<- *tree.ScanProgress, cancel chan struct{}) (*Replica, error) {
 	var replica *Replica
 	file, err := fs.GetFile(STATUS_FILE)
 	if tree.IsNotExist(err) {
-		replica, err = loadReplica(nil)
+		replica, err = LoadReplica(nil)
 	} else if err != nil {
 		return nil, err
 	} else {
-		replica, err = loadReplica(file)
+		defer file.Close()
+		replica, err = LoadReplica(file)
 	}
 	if err != nil {
 		return nil, err
@@ -163,22 +171,31 @@ func ScanTree(fs tree.LocalFileTree, recvOptionsChan, sendOptionsChan chan *tree
 
 	options := replica.scanOptions()
 	replica.addScanOptions(options)
-	sendOptionsChan <- options
+	select {
+	case sendOptionsChan <- options:
+	case <-cancel:
+		return nil, tree.ErrCancelled
+	}
 
-	recvOptions := <-recvOptionsChan
+	var recvOptions *tree.ScanOptions
+	select {
+	case recvOptions = <-recvOptionsChan:
+	case <-cancel:
+		return nil, tree.ErrCancelled
+	}
 	if recvOptions.Replica == options.Replica {
 		return nil, &ErrSameIdentity{options.Replica}
 	}
 	replica.addScanOptions(recvOptions)
 
-	err = replica.scan(fs, nil, progress)
+	err = replica.scan(fs, cancel, progress)
 	if err != nil {
 		return nil, err
 	}
 	return replica, nil
 }
 
-func loadReplica(file io.Reader) (*Replica, error) {
+func LoadReplica(file io.Reader) (*Replica, error) {
 	r := &Replica{
 		rootEntry: &Entry{
 			fileType: tree.TYPE_DIRECTORY,
@@ -491,7 +508,48 @@ func (e *Entry) parseOptions(s string) error {
 	return nil
 }
 
-func (r *Replica) SerializeText(out io.Writer) error {
+func (r *Replica) Serialize(fs tree.Tree) error {
+	var out tree.Copier
+	var err error
+
+	format := FORMAT_NONE
+	switch fs := fs.(type) {
+	case tree.LocalFileTree:
+		format = FORMAT_TEXT
+		out, err = fs.SetFile(STATUS_FILE)
+	case tree.RemoteTree:
+		format = FORMAT_PROTO
+		out, err = fs.SendStatus()
+	default:
+		panic("unknown tree type")
+	}
+	if err != nil {
+		return err
+	}
+	defer out.Cancel()
+
+	err = r.SerializeStream(out, format)
+	if err != nil {
+		return err
+	}
+
+	_, _, err = out.Finish()
+	return err
+}
+
+func (r *Replica) SerializeStream(out io.Writer, format int) error {
+	switch format {
+	case FORMAT_TEXT:
+		return r.serializeText(out)
+	case FORMAT_PROTO:
+		return r.serializeProto(out)
+	default:
+		// programmer error
+		panic("unknown format to serialize")
+	}
+}
+
+func (r *Replica) serializeText(out io.Writer) error {
 	// Get a sorted list of peer identities
 	peerIds := make([]string, 0, len(r.knowledge)-1)
 	for id, _ := range r.knowledge {
@@ -555,7 +613,7 @@ func (r *Replica) SerializeText(out io.Writer) error {
 		return err
 	}
 
-	// only now look at the error
+	// only now look at I/0 errors
 	return writer.Flush()
 }
 

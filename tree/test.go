@@ -40,6 +40,10 @@ import (
 type TestTree interface {
 	FileTree
 
+	// Get this file. Redefined here to be able to test it (originally defined
+	// in LocalFileTree).
+	GetFile(name string) (io.ReadCloser, error)
+
 	// PutFile sets the file at the path to the specified contents. The
 	// FileInfo returned does not have to contain the hash.
 	PutFile(path []string, contents []byte) (FileInfo, error)

@@ -230,6 +230,9 @@ func parseScanOptions(data []byte) (*tree.ScanOptions, error) {
 
 // serializeScanOptions packs a tree.ScanOptions in a protobuf *ScanOptions.
 func serializeScanOptions(options *tree.ScanOptions) []byte {
+	if options == nil {
+		return nil
+	}
 	perms := uint32(options.Perms)
 	data, err := proto.Marshal(&ScanOptions{
 		Exclude: options.Exclude,

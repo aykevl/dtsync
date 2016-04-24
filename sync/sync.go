@@ -270,17 +270,7 @@ func (r *Result) SaveStatus() error {
 
 // serializeStatus saves the status for one replica.
 func (r *Result) serializeStatus(replica *dtdiff.Replica, fs tree.Tree) error {
-	outstatus, err := fs.SetFile(dtdiff.STATUS_FILE)
-	if err != nil {
-		return err
-	}
-	err = replica.SerializeText(outstatus)
-	if err != nil {
-		outstatus.Cancel()
-		return err
-	}
-	_, _, err = outstatus.Finish()
-	return err
+	return replica.Serialize(fs)
 }
 
 // Stats is returned by SyncAll() and contains the total number and the number
