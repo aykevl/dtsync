@@ -734,20 +734,13 @@ func (s *Server) streamSendData(requestId uint64, reader io.Reader, finish bool)
 				buf = buf2
 			}
 			n, err := reader.Read(buf)
-			s.replyChan <- replyResponse{
-				requestId,
-				&Response{
-					Command: &commandDATA,
-					Data:    buf[:n],
-				},
-				nil,
-			}
 			if err == io.EOF {
 				status := DataStatus_FINISH
 				s.replyChan <- replyResponse{
 					requestId,
 					&Response{
 						Command: &commandDATA,
+						Data:    buf[:n],
 						Status:  &status,
 					},
 					nil,
@@ -757,6 +750,14 @@ func (s *Server) streamSendData(requestId uint64, reader io.Reader, finish bool)
 					s.replyChan <- replyResponse{requestId, nil, nil}
 				}
 				return true
+			}
+			s.replyChan <- replyResponse{
+				requestId,
+				&Response{
+					Command: &commandDATA,
+					Data:    buf[:n],
+				},
+				nil,
 			}
 			if err != nil {
 				s.replyError(requestId, err)
