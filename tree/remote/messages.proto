@@ -21,12 +21,8 @@ enum Command {
 	RSYNC_DST   = 19; // librsync protocol (receiver, writer)
 
 	// testing commands
-	PUTFILE     = 30;
-	INFO        = 31;
-
-	// get and set status (to be removed)
-	GETFILE     = 40;
-	SETFILE     = 41;
+	PUTFILE_TEST = 30;
+	INFO         = 31;
 }
 
 // See TYPE_* constants in tree/tree.go

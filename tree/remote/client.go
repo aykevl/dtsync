@@ -483,46 +483,6 @@ func (c *Client) requestReturnsFileInfo(request *Request) (tree.FileInfo, error)
 	return parseFileInfo(resp.FileInfo), nil
 }
 
-func (c *Client) GetFile(name string) (io.ReadCloser, error) {
-	debugLog("\nC: GetFile")
-	command := Command_GETFILE
-	return c.recvFile(&Request{
-		Command: &command,
-		Name:    &name,
-	})
-}
-
-func (c *Client) SetFile(name string) (tree.Copier, error) {
-	debugLog("\nC: SetFile")
-	command := Command_SETFILE
-	request := &Request{
-		Command: &command,
-		Name:    &name,
-	}
-	reader, writer := io.Pipe()
-	ch, err := c.handleReply(request, reader, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	cp := &copier{
-		w:    writer,
-		done: make(chan struct{}),
-	}
-
-	go func() {
-		defer close(cp.done)
-		respData := <-ch
-		_, err := respData.resp, respData.err
-		if err != nil {
-			cp.setError(err)
-			return
-		}
-	}()
-
-	return cp, nil
-}
-
 func (c *Client) CreateFile(name string, parent, source tree.FileInfo) (tree.Copier, error) {
 	debugLog("\nC: CreateFile")
 	return c.sendFile(name, parent, source)
@@ -732,12 +692,12 @@ func (c *Client) RsyncDst(file, source tree.FileInfo) (io.Reader, tree.Copier, e
 	return sigReader, cp, nil
 }
 
-func (c *Client) PutFile(path []string, contents []byte) (tree.FileInfo, error) {
-	debugLog("\nC: PutFile")
+func (c *Client) PutFileTest(path []string, contents []byte) (tree.FileInfo, error) {
+	debugLog("\nC: PutFileTest")
 	if contents == nil {
 		contents = []byte{}
 	}
-	command := Command_PUTFILE
+	command := Command_PUTFILE_TEST
 	request := &Request{
 		Command: &command,
 		FileInfo1: &FileInfo{

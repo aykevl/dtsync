@@ -264,7 +264,7 @@ func (r *Tree) GetFile(name string) (io.ReadCloser, error) {
 	return fp, nil
 }
 
-func (r *Tree) SetFile(name string) (tree.Copier, error) {
+func (r *Tree) PutFile(name string) (tree.Copier, error) {
 	e := Entry{
 		root: r,
 		path: []string{name},
@@ -565,9 +565,9 @@ func (r *Tree) Chmod(target, source tree.FileInfo) (tree.FileInfo, error) {
 	return e.Info(), nil
 }
 
-// PutFile implements tree.TestTree by writing a single file with the given
+// PutFileTest implements tree.TestTree by writing a single file with the given
 // name and contents.
-func (r *Tree) PutFile(path []string, contents []byte) (tree.FileInfo, error) {
+func (r *Tree) PutFileTest(path []string, contents []byte) (tree.FileInfo, error) {
 	if len(path) == 0 || !validPath(path) {
 		return nil, tree.ErrInvalidName
 	}

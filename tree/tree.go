@@ -208,8 +208,8 @@ type LocalFileTree interface {
 	// copying in the syncer!
 	GetFile(name string) (io.ReadCloser, error)
 
-	// SetFile is analogous to GetFile.
-	SetFile(name string) (Copier, error)
+	// PutFile is analogous to GetFile.
+	PutFile(name string) (Copier, error)
 }
 
 // Entry is one object tree, e.g. a file or directory. It can also be something

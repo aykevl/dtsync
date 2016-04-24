@@ -176,7 +176,7 @@ func syncRoots(t *testing.T, scheme1, scheme2 string) {
 			if err != nil {
 				return err
 			}
-			_, err = fs.PutFile([]string{"dir", "file.txt"}, []byte("abc"))
+			_, err = fs.PutFileTest([]string{"dir", "file.txt"}, []byte("abc"))
 			return err
 		}},
 		{"dir", ACTION_REMOVE, 1, func(fs tree.TestTree) error {
@@ -205,7 +205,7 @@ func syncRoots(t *testing.T, scheme1, scheme2 string) {
 		{"fsCheck", fsCheck},
 	}
 	for _, fs := range fsNames {
-		fs.fs.PutFile([]string{dtdiff.STATUS_FILE}, []byte(`Magic: dtsync-status-file
+		fs.fs.PutFileTest([]string{dtdiff.STATUS_FILE}, []byte(`Magic: dtsync-status-file
 Version: 1
 Content-Type: text/tab-separated-values; charset=utf-8
 Identity: `+fs.name+`
@@ -328,7 +328,7 @@ func runPatternTest(t *testing.T, fs1, fs2 tree.TestTree) {
 		}
 	}
 
-	fs1.PutFile([]string{dtdiff.STATUS_FILE}, []byte(`Magic: dtsync-status-file
+	fs1.PutFileTest([]string{dtdiff.STATUS_FILE}, []byte(`Magic: dtsync-status-file
 Version: 1
 Content-Type: text/tab-separated-values; charset=utf-8
 Identity: fs1
@@ -339,7 +339,7 @@ Option-Include: ignore1-not*
 
 path	fingerprint	revision
 `))
-	fs2.PutFile([]string{dtdiff.STATUS_FILE}, []byte(`Magic: dtsync-status-file
+	fs2.PutFileTest([]string{dtdiff.STATUS_FILE}, []byte(`Magic: dtsync-status-file
 Version: 1
 Content-Type: text/tab-separated-values; charset=utf-8
 Identity: fs2
@@ -393,7 +393,7 @@ func applyTestCase(t *testing.T, fs tree.TestTree, tc testCase) {
 			source := tree.NewFileInfo(nil, tree.TYPE_DIRECTORY, 0755, 0777, time.Now(), 0, tree.Hash{})
 			_, err = fs.CreateDir(name, parent, source)
 		case 'f':
-			_, err = fs.PutFile(parts, []byte(contents))
+			_, err = fs.PutFileTest(parts, []byte(contents))
 		case 'l':
 			parent := tree.NewFileInfo(parts[:len(parts)-1], tree.TYPE_DIRECTORY, 0755, 0777, time.Time{}, 0, tree.Hash{})
 			source := tree.NewFileInfo(parts, tree.TYPE_SYMLINK, 0777, 0777, time.Now(), 0, tree.Hash{})
@@ -406,7 +406,7 @@ func applyTestCase(t *testing.T, fs tree.TestTree, tc testCase) {
 		contents := tc.contents.(string)[2:]
 		switch action {
 		case 'f':
-			_, err = fs.PutFile(parts, []byte(contents))
+			_, err = fs.PutFileTest(parts, []byte(contents))
 		case 'l':
 			var file tree.FileInfo
 			file, err = fs.ReadInfo(strings.Split(tc.file, "/"))
@@ -705,10 +705,11 @@ func fsEqual(fs1, fs2 tree.TestTree) bool {
 func readStatuses(t *testing.T, roots ...tree.TestTree) [][]byte {
 	statusData := make([][]byte, len(roots))
 	for i, fs := range roots {
-		if fs == nil {
-			continue
+		info, err := fs.ReadInfo([]string{dtdiff.STATUS_FILE})
+		if err != nil {
+			t.Fatal("could not ReadInfo for status file")
 		}
-		statusFile, err := fs.GetFile(dtdiff.STATUS_FILE)
+		statusFile, err := fs.CopySource(info)
 		if err != nil {
 			if tree.IsNotExist(err) {
 				continue

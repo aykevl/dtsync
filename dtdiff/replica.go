@@ -516,7 +516,7 @@ func (r *Replica) Serialize(fs tree.Tree) error {
 	switch fs := fs.(type) {
 	case tree.LocalFileTree:
 		format = FORMAT_TEXT
-		out, err = fs.SetFile(STATUS_FILE)
+		out, err = fs.PutFile(STATUS_FILE)
 	case tree.RemoteTree:
 		format = FORMAT_PROTO
 		out, err = fs.SendStatus()

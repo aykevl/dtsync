@@ -233,18 +233,6 @@ func (s *Server) handleRequest(msg *Request, recvStreams map[uint64]chan []byte)
 			return invalidRequest{"REMOVE expects fileInfo1 with path and type"}
 		}
 		go s.remove(*msg.RequestId, parseFileInfo(msg.FileInfo1))
-	case Command_GETFILE:
-		if msg.Name == nil {
-			return invalidRequest{"GETFILE expects name field"}
-		}
-		go s.getFile(*msg.RequestId, *msg.Name)
-	case Command_SETFILE:
-		if msg.Name == nil {
-			return invalidRequest{"SETFILE expects name field"}
-		}
-		dataChan := make(chan []byte, 1)
-		go s.setFile(*msg.RequestId, *msg.Name, dataChan)
-		recvStreams[*msg.RequestId] = dataChan
 	case Command_COPY_DST:
 		// Client wants to write a file.
 		if msg.FileInfo1 == nil || msg.FileInfo2 == nil {
@@ -305,18 +293,18 @@ func (s *Server) handleRequest(msg *Request, recvStreams map[uint64]chan []byte)
 		dataChan := make(chan []byte, 1)
 		recvStreams[*msg.RequestId] = dataChan
 		go s.rsyncDst(*msg.RequestId, parseFileInfo(msg.FileInfo1), parseFileInfo(msg.FileInfo2), dataChan)
-	case Command_PUTFILE:
+	case Command_PUTFILE_TEST:
 		if msg.FileInfo1 == nil || msg.FileInfo1.Path == nil || msg.Data == nil {
-			return invalidRequest{"PUTFILE expects fileInfo1 with path and data"}
+			return invalidRequest{"PUTFILE_TEST expects fileInfo1 with path and data"}
 		}
-		go s.putFile(*msg.RequestId, msg.FileInfo1.Path, msg.Data)
+		go s.putFileTest(*msg.RequestId, msg.FileInfo1.Path, msg.Data)
 	case Command_INFO:
 		if msg.FileInfo1 == nil || msg.FileInfo1.Path == nil {
 			return invalidRequest{"INFO expects fileInfo1 with path"}
 		}
 		go s.readInfo(*msg.RequestId, msg.FileInfo1.Path)
 	default:
-		return invalidRequest{"unknown command"}
+		return invalidRequest{"unknown command " + Command_name[int32(*msg.Command)]}
 	}
 	return nil
 }
@@ -355,44 +343,7 @@ func (s *Server) replyError(requestId uint64, err error) {
 	s.replyChan <- replyResponse{requestId, nil, err}
 }
 
-func (s *Server) setFile(requestId uint64, name string, dataChan chan []byte) {
-	defer func() {
-		// Drain the dataChan (on errors), so the receiver won't block there.
-		for _ = range dataChan {
-		}
-	}()
-
-	writer, err := s.fs.SetFile(name)
-	if err != nil {
-		s.replyError(requestId, err)
-		return
-	}
-	defer writer.Cancel()
-
-	for buf := range dataChan {
-		if buf == nil {
-			// cancel
-			s.replyError(requestId, tree.ErrCancelled)
-			return
-		}
-		_, err := writer.Write(buf)
-		if err != nil {
-			s.replyError(requestId, err)
-			return
-		}
-	}
-
-	_, _, err = writer.Finish()
-	if err != nil {
-		s.replyError(requestId, err)
-		return
-	}
-
-	// Success!
-	s.replyChan <- replyResponse{requestId, nil, nil}
-}
-
-func (s *Server) putFile(requestId uint64, path []string, data []byte) {
+func (s *Server) putFileTest(requestId uint64, path []string, data []byte) {
 	if len(path) == 0 {
 		s.replyError(requestId, ErrInvalidPath)
 		return
@@ -404,7 +355,7 @@ func (s *Server) putFile(requestId uint64, path []string, data []byte) {
 		return
 	}
 
-	info, err := fs.PutFile(path, data)
+	info, err := fs.PutFileTest(path, data)
 	s.replyInfo(requestId, info, err)
 }
 
@@ -437,15 +388,6 @@ func (s *Server) copySource(requestId uint64, info tree.FileInfo) {
 		s.streamSendData(requestId, reader, true)
 	default:
 		s.replyError(requestId, tree.ErrNoRegular(info.RelativePath()))
-	}
-}
-
-func (s *Server) getFile(requestId uint64, name string) {
-	reader, err := s.fs.GetFile(name)
-	if err != nil {
-		s.replyError(requestId, err)
-	} else {
-		s.streamSendData(requestId, reader, true)
 	}
 }
 
@@ -848,7 +790,7 @@ func (s *Server) putState(requestId uint64, dataChan chan []byte) {
 		return
 	}
 
-	copier, err := s.fs.SetFile(dtdiff.STATUS_FILE)
+	copier, err := s.fs.PutFile(dtdiff.STATUS_FILE)
 	if err != nil {
 		s.replyError(requestId, err)
 		return

@@ -352,9 +352,9 @@ func (e *Entry) GetFile(name string) (io.ReadCloser, error) {
 	}
 }
 
-// SetFile returns a file handle (tree.Copier) to a newly created/replaced
+// PutFile returns a file handle (tree.Copier) to a newly created/replaced
 // child file that can be used to save the replica state.
-func (e *Entry) SetFile(name string) (tree.Copier, error) {
+func (e *Entry) PutFile(name string) (tree.Copier, error) {
 	if child, ok := e.children[name]; ok {
 		return newFileCopier(func(buf *bytes.Buffer) (tree.FileInfo, tree.FileInfo, error) {
 			child.contents = buf.Bytes()
@@ -578,9 +578,9 @@ func (e *Entry) Chmod(target, source tree.FileInfo) (tree.FileInfo, error) {
 	return child.Info(), nil
 }
 
-// PutFile writes the contents to a new or existing file.
+// PutFileTest writes the contents to a new or existing file.
 // This function only exists for testing purposes.
-func (e *Entry) PutFile(path []string, contents []byte) (tree.FileInfo, error) {
+func (e *Entry) PutFileTest(path []string, contents []byte) (tree.FileInfo, error) {
 	parent := e.get(path[:len(path)-1])
 	if parent == nil {
 		return nil, tree.ErrNotFound(path[:len(path)-1])

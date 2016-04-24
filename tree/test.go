@@ -40,16 +40,15 @@ import (
 type TestTree interface {
 	FileTree
 
-	// Get this file. Redefined here to be able to test it (originally defined
-	// in LocalFileTree).
-	GetFile(name string) (io.ReadCloser, error)
-
-	// PutFile sets the file at the path to the specified contents. The
-	// FileInfo returned does not have to contain the hash.
-	PutFile(path []string, contents []byte) (FileInfo, error)
-
-	// Info returns the FileInfo (with hash) for a particular path.
+	// ReadInfo returns the FileInfo (with hash) for a particular path.
 	ReadInfo(path []string) (FileInfo, error)
+
+	// GetFileTest returns the contents of this file.
+	//GetFileTest(name []string) ([]byte, error)
+
+	// PutFileTest sets the file at the path to the specified contents. The
+	// FileInfo returned does not have to contain the hash.
+	PutFileTest(path []string, contents []byte) (FileInfo, error)
 }
 
 // Generate a list of hashes (blake2b) to compare with the output of various
@@ -102,7 +101,7 @@ func TreeTest(t Tester, fs1, fs2 TestTree) {
 
 	/*** Test regular files ***/
 
-	info1, err := fs1.PutFile(pathSplit("file.txt"), nil)
+	info1, err := fs1.PutFileTest(pathSplit("file.txt"), nil)
 	if err != nil {
 		t.Fatal("could not add file:", err)
 	}
@@ -238,7 +237,7 @@ func TreeTest(t Tester, fs1, fs2 TestTree) {
 	}
 
 	quickBrowFox := "The quick brown fox jumps over the lazy dog.\n"
-	info, err = fs1.PutFile(info1.RelativePath(), []byte(quickBrowFox))
+	info, err = fs1.PutFileTest(info1.RelativePath(), []byte(quickBrowFox))
 	if err != nil {
 		t.Fatalf("could not set contents to file %s: %s", info1, err)
 	}
@@ -255,13 +254,13 @@ func TreeTest(t Tester, fs1, fs2 TestTree) {
 		t.Errorf("Hash mismatch for file %s: expected %x, got %x", info1, hashes["qbf"], info1.Hash())
 	}
 
-	f, err := fs1.GetFile("file.txt")
+	f, err := fs1.CopySource(info1)
 	if err != nil {
-		t.Fatalf("failed to get contents of file.txt: %s", err)
+		t.Fatalf("failed to get contents of %s: %s", info1, err)
 	}
 	buf, err := ioutil.ReadAll(f)
 	if err != nil {
-		t.Fatalf("failed to read contents of file %s: %s", info1, err)
+		t.Fatalf("failed to read contents of %s: %s", info1, err)
 	}
 	if string(buf) != quickBrowFox {
 		t.Errorf("expected to get %#v but instead got %#v when reading from %s", quickBrowFox, string(buf), info1)
@@ -502,11 +501,11 @@ func TreeTest(t Tester, fs1, fs2 TestTree) {
 	}
 
 	// try writing to symlink
-	_, err = fs1.PutFile(pathSplit("link"), []byte("impossible"))
+	_, err = fs1.PutFileTest(pathSplit("link"), []byte("impossible"))
 	if err == nil {
-		t.Error("PutFile overwrites link")
+		t.Error("PutFileTest overwrites link")
 	} else if !IsNoRegular(err) {
-		t.Error("PutFile error while overwriting link:", err)
+		t.Error("PutFileTest error while overwriting link:", err)
 	}
 
 	/*** Test directories ***/
@@ -542,7 +541,7 @@ func TreeTest(t Tester, fs1, fs2 TestTree) {
 		t.Error("root1 is not equal to root2 after CreateDir")
 	}
 
-	childinfo1, err := fs1.PutFile(pathSplit("dir/file2.txt"), []byte("My ship is full of eels."))
+	childinfo1, err := fs1.PutFileTest(pathSplit("dir/file2.txt"), []byte("My ship is full of eels."))
 	if err != nil {
 		t.Fatalf("could not create child in directory %s: %s", infoDir1, err)
 	}
