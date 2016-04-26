@@ -83,6 +83,7 @@ type Client struct {
 	closeWait   chan struct{}
 	*scanJob
 	scanJobMutex sync.Mutex
+	maxInflight  int
 }
 
 // NewClient writes the connection header and returns a new *Client. It also
@@ -166,6 +167,12 @@ func (c *Client) run(r *bufio.Reader, w *bufio.Writer) {
 				inflight[id] = req.replyChan
 			}
 			req.idChan <- id
+
+			if c.maxInflight > 0 && len(inflight) > c.maxInflight {
+				// Panic here, so we get a full stack trace for debugging (and
+				// see what's currently running).
+				panic("maximum number of concurrent requests passed")
+			}
 
 			debugLog("C: send command", *req.req.RequestId, Command_name[int32(*req.req.Command)])
 

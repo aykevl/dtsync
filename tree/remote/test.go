@@ -62,5 +62,10 @@ func TestClient() (*Client, error) {
 		}
 	}()
 
-	return NewClient(clientReader, clientWriter)
+	client, err := NewClient(clientReader, clientWriter)
+	if err != nil {
+		return nil, err
+	}
+	client.maxInflight = 1
+	return client, nil
 }
