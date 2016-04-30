@@ -436,13 +436,13 @@ func (s *Server) rsyncSrc(requestId uint64, info tree.FileInfo, sigChan chan []b
 			return
 		}
 
-		patchJob, err := librsync.NewDeltaGen(sig, reader)
+		delta, err := librsync.NewDeltaGen(sig, reader)
 		if err != nil {
 			s.replyError(requestId, err)
 			return
 		}
 
-		s.streamSendData(requestId, patchJob, true)
+		s.streamSendData(requestId, delta, true)
 	default:
 		s.replyError(requestId, tree.ErrNoRegular(info.RelativePath()))
 	}
