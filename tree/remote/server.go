@@ -729,48 +729,42 @@ func (s *Server) scan(requestId uint64, job *serverJob) {
 
 func (s *Server) streamSendData(requestId uint64, reader io.Reader, finish bool) bool {
 	// TODO: what if the client cancels?
-	buf1 := make([]byte, 16*1024)
-	var buf2 []byte
 	commandDATA := Command_DATA
 	// Depend on the non-buffered behavior of channels for synchronisation.
 	// Use two buffers to read and send at the same time.
-	for {
-		for i, buf := range [][]byte{buf1, buf2} {
-			if i == 1 && buf == nil {
-				// buf2 hasn't yet been initialized
-				buf2 = make([]byte, len(buf1))
-				buf = buf2
-			}
-			n, err := reader.Read(buf)
-			if err == io.EOF {
-				status := DataStatus_FINISH
-				s.replyChan <- replyResponse{
-					requestId,
-					&Response{
-						Command: &commandDATA,
-						Data:    buf[:n],
-						Status:  &status,
-					},
-					nil,
-				}
-				if finish {
-					// Send empty message (reply with success).
-					s.replyChan <- replyResponse{requestId, nil, nil}
-				}
-				return true
-			}
+	bigbuf := make([]byte, 32*1024)
+	bufs := [2][]byte{bigbuf[:16*1024], bigbuf[16*1024:]}
+	for i := 0; ; i++ {
+		buf := bufs[i%2]
+		n, err := reader.Read(buf)
+		if err == io.EOF {
+			status := DataStatus_FINISH
 			s.replyChan <- replyResponse{
 				requestId,
 				&Response{
 					Command: &commandDATA,
 					Data:    buf[:n],
+					Status:  &status,
 				},
 				nil,
 			}
-			if err != nil {
-				s.replyError(requestId, err)
-				return false
+			if finish {
+				// Send empty message (reply with success).
+				s.replyChan <- replyResponse{requestId, nil, nil}
 			}
+			return true
+		}
+		s.replyChan <- replyResponse{
+			requestId,
+			&Response{
+				Command: &commandDATA,
+				Data:    buf[:n],
+			},
+			nil,
+		}
+		if err != nil {
+			s.replyError(requestId, err)
+			return false
 		}
 	}
 }
