@@ -202,7 +202,7 @@ func (c *Client) run(r *bufio.Reader, w *bufio.Writer) {
 				Command:   &command,
 				RequestId: &stream,
 			}
-			debugLog("C: send DATA   ", stream, Command_name[int32(command)], DataStatus_name[int32(block.status)])
+			debugLog("C: send DATA   ", stream, Command_name[int32(command)], DataStatus_name[int32(block.status)], len(block.data))
 			if block.status != DataStatus_NORMAL {
 				status := block.status
 				msg.Status = &status
@@ -254,7 +254,7 @@ func (c *Client) run(r *bufio.Reader, w *bufio.Writer) {
 			if msg.Command != nil {
 				switch *msg.Command {
 				case Command_DATA:
-					debugLog("C: recv        ", *msg.RequestId, "DATA")
+					debugLog("C: recv        ", *msg.RequestId, "DATA", DataStatus_name[int32(msg.GetStatus())], len(msg.Data))
 					streamChan, ok := recvStreams[*msg.RequestId]
 					if !ok {
 						pipeErr = ErrInvalidResponse("DATA: unknown stream ID")

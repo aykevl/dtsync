@@ -153,7 +153,11 @@ func (s *Server) Run() error {
 				err = invalidRequest{"command or requestId not set"}
 			} else {
 				requestId = *msg.RequestId
-				debugLog("S: recv command", requestId, Command_name[int32(*msg.Command)])
+				if *msg.Command == Command_DATA {
+					debugLog("S: recv command", requestId, "DATA", DataStatus_name[int32(msg.GetStatus())], len(msg.Data))
+				} else {
+					debugLog("S: recv command", requestId, Command_name[int32(*msg.Command)])
+				}
 				err = s.handleRequest(msg, recvStreams)
 			}
 			if err != nil {
@@ -323,7 +327,11 @@ func (s *Server) doReply(w *bufio.Writer, reply replyResponse) error {
 		msg.Error = encodeRemoteError(reply.err)
 	}
 	if msg.Command != nil {
-		debugLog("S: send reply  ", *msg.RequestId, Command_name[int32(*msg.Command)])
+		if *msg.Command == Command_DATA {
+			debugLog("S: send reply  ", *msg.RequestId, Command_name[int32(*msg.Command)], DataStatus_name[int32(msg.GetStatus())], len(msg.Data))
+		} else {
+			debugLog("S: send reply  ", *msg.RequestId, Command_name[int32(*msg.Command)])
+		}
 	} else {
 		debugLog("S: send reply  ", *msg.RequestId)
 	}
