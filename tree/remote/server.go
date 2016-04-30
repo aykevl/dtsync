@@ -482,6 +482,7 @@ func (s *Server) rsyncDst(requestId uint64, info, source tree.FileInfo, deltaCha
 		s.replyError(requestId, err)
 		return
 	}
+	defer patchJob.Close()
 
 	go func() {
 		for block := range deltaChan {

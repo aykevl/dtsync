@@ -376,14 +376,15 @@ func Update(this, other Tree, source, target FileInfo) (FileInfo, FileInfo, Upda
 			if err != nil {
 				return nil, nil, stats, err
 			}
+			defer delta.Close()
 
 			patchJob, err := librsync.NewPatcher(&countReader{delta, &stats.ToTarget}, basis)
 			if err != nil {
 				return nil, nil, stats, err
 			}
+			defer patchJob.Close()
 
 			info, parentInfo, err := CopyFile(copier, patchJob, source)
-			delta.Close()
 			return info, parentInfo, stats, err
 
 		} else if targetRemote {
