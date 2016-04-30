@@ -610,15 +610,13 @@ func (c *Client) ReadSymlink(file tree.FileInfo) (string, error) {
 
 func (c *Client) CopySource(info tree.FileInfo) (io.ReadCloser, error) {
 	debugLog("\nC: CopySource")
+
 	command := Command_COPY_SRC
-	return c.recvFile(&Request{
+	request := &Request{
 		Command:   &command,
 		FileInfo1: serializeFileInfo(info),
-	})
-}
+	}
 
-// recvFile sends a request and returns a stream to receive a file.
-func (c *Client) recvFile(request *Request) (*streamReader, error) {
 	reader, writer := io.Pipe()
 	stream := &streamReader{
 		reader: reader,
