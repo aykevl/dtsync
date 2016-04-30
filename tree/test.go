@@ -265,6 +265,10 @@ func TreeTest(t Tester, fs1, fs2 TestTree) {
 	if string(buf) != quickBrowFox {
 		t.Errorf("expected to get %#v but instead got %#v when reading from %s", quickBrowFox, string(buf), info1)
 	}
+	err = f.Close()
+	if err != nil {
+		t.Errorf("CopySource Close() error:", err)
+	}
 
 	info2, _, _, err = Update(fs1, fs2, info1, info2)
 	if err != nil {
