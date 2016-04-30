@@ -126,6 +126,7 @@ func TreeTest(t Tester, fs1, fs2 TestTree) {
 	if err == nil {
 		buf := make([]byte, 1024)
 		_, err = reader.Read(buf)
+		reader.Close() // wait for server close
 	}
 	if err == nil {
 		t.Fatal("file.txt was copied but expected ErrChanged")

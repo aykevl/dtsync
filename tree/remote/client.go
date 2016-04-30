@@ -630,6 +630,7 @@ func (c *Client) CopySource(info tree.FileInfo) (io.ReadCloser, error) {
 		defer close(stream.done)
 		respData := <-ch
 		if respData.err != nil {
+			writer.CloseWithError(respData.err)
 			stream.setError(respData.err)
 		}
 	}()
@@ -651,9 +652,8 @@ func (c *Client) RsyncSrc(file tree.FileInfo, signature io.Reader) (io.ReadClose
 		return nil, err
 	}
 	stream := &streamReader{
-		reader:    deltaReader,
-		done:      make(chan struct{}),
-		mustClose: true,
+		reader: deltaReader,
+		done:   make(chan struct{}),
 	}
 	go func() {
 		defer close(stream.done)
@@ -830,17 +830,23 @@ func (c *Client) handleReply(request *Request, sendStream io.Reader, recvStream 
 					recvFinished <- block.err
 					return
 				}
-				_, err := recvStream.Write(block.data)
-				if err != nil {
-					recvFinished <- err
-					return
+				if block.data == nil {
+					panic("block.data == nil")
+				}
+				if len(block.data) != 0 {
+					_, err := recvStream.Write(block.data)
+					if err != nil {
+						recvFinished <- err
+						return
+					}
 				}
 			}
 			recvFinished <- recvStream.Close()
 		}()
 	}
 
-	returnChan := make(chan roundtripResponse, 2)
+	returnChan := make(chan roundtripResponse)
+	var respErr error
 	go func() {
 		for {
 			select {
@@ -851,29 +857,31 @@ func (c *Client) handleReply(request *Request, sendStream io.Reader, recvStream 
 					}
 					err := <-sendFinished
 					if err != nil {
-						returnChan <- roundtripResponse{nil, err}
-						return
+						respErr = err
 					}
 				}
 
 				if recvStream != nil {
 					err := <-recvFinished
 					if err != nil {
-						returnChan <- roundtripResponse{nil, err}
-						return
+						respErr = err
 					}
 				}
 
-				returnChan <- respData
+				if respErr != nil {
+					returnChan <- roundtripResponse{nil, respErr}
+				} else {
+					returnChan <- respData
+				}
 				return
 			case err := <-sendFinished:
 				if err != nil {
-					returnChan <- roundtripResponse{nil, err}
+					respErr = err
 				}
 				sendStream = nil
 			case err := <-recvFinished:
 				if err != nil {
-					returnChan <- roundtripResponse{nil, err}
+					respErr = err
 				}
 				recvStream = nil
 			}
