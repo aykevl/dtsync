@@ -35,6 +35,7 @@ import (
 	"github.com/aykevl/dtsync/tree/file"
 	"github.com/aykevl/dtsync/tree/memory"
 	"github.com/aykevl/gocount"
+	"time"
 )
 
 func TestRemote(t *testing.T) {
@@ -60,6 +61,8 @@ func TestRemote(t *testing.T) {
 	}
 	_ = fsFile
 
+	time.Sleep(time.Millisecond)
+
 	numRoutines := gocount.Number()
 
 	for i, tc := range [][2]tree.TestTree{
@@ -73,6 +76,7 @@ func TestRemote(t *testing.T) {
 		{fsFile, fsCheck},
 	} {
 		tree.TreeTest(t, tc[0], tc[1])
+		time.Sleep(time.Millisecond)
 		if num := gocount.Number(); num != numRoutines {
 			t.Errorf("remote test #%d: number of goroutines changed from %d to %d", i+1, numRoutines, num)
 			numRoutines = num
