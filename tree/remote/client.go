@@ -272,8 +272,7 @@ func (c *Client) run(r *bufio.Reader, w *bufio.Writer) {
 							streamChan <- recvBlock{*msg.RequestId, nil, tree.ErrCancelled}
 						default:
 							// Might happen when messages.proto is extended.
-							pipeErr = ErrInvalidResponse("DataStatus is outside range NORMAL-CANCEL")
-							continue
+							streamChan <- recvBlock{*msg.RequestId, nil, ErrInvalidResponse("DataStatus is outside range NORMAL-CANCEL")}
 						}
 						close(streamChan)
 						delete(recvStreams, *msg.RequestId)
