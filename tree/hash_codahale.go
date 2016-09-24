@@ -1,4 +1,4 @@
-// tree_nocgo.go
+// hash_codahale.go
 //
 // Copyright (c) 2016, Ayke van Laethem
 // All rights reserved.
@@ -26,18 +26,18 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// +build !cgo
+// +build cgo,amd64
 
 package tree
 
 import (
 	"hash"
 
-	"github.com/dchest/blake2b"
+	"github.com/codahale/blake2"
 )
 
 // NewHash returns the hashing function used by interfaces implementing Entry
 // and by Copy and Update.
 func NewHash() hash.Hash {
-	return blake2b.New256()
+	return blake2.New(&blake2.Config{Size: 32})
 }
