@@ -261,9 +261,17 @@ func main() {
 			finished := p[0] != nil && p[1] != nil && p[0].Done == p[0].Total && p[1].Done == p[1].Total
 			path := ""
 			behind := p.Behind()
+			ahead := p.Ahead()
 
-			if behind != nil {
-				path = strings.Join(p.Behind().Path, "/")
+			if behind != nil && ahead != nil {
+				// Choose the path that's *actually* behind, instead of based on
+				// the percents which can be way off (especially on the first
+				// run).
+				path = strings.Join(behind.Path, "/")
+				path2 := strings.Join(ahead.Path, "/")
+				if path2 > path {
+					path = path2
+				}
 				width := terminalWidth() - len("progress: 99% ")
 				if len(path) > width {
 					path = path[:width-1] + "…"

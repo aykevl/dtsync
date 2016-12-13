@@ -136,6 +136,17 @@ func (p ScanProgress) Behind() *tree.ScanProgress {
 	}
 }
 
+func (p ScanProgress) Ahead() *tree.ScanProgress {
+	if p[0] == nil || p[1] == nil {
+		return nil
+	}
+	if p[0].After(p[1]) {
+		return p[0]
+	} else {
+		return p[1]
+	}
+}
+
 type Replica struct {
 	revision
 	isChanged          bool // true if there was a change in generation (any file added/deleted/updated)
