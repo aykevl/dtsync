@@ -247,6 +247,12 @@ func (r *Result) Jobs() []*Job {
 	return r.jobs
 }
 
+// Perms returns the effective permission bits. By default 0777, or less if the
+// "perms" option is set.
+func (r *Result) Perms() tree.Mode {
+	return r.rs.Get(0).Perms() & r.rs.Get(1).Perms()
+}
+
 // markSynced sets both replicas as having incorporated all changes made in the
 // other replica.
 func (r *Result) markSynced() {

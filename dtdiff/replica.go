@@ -246,6 +246,13 @@ func (r *Replica) Root() *Entry {
 	return r.rootEntry
 }
 
+// Perms returns the permission map used for this replica (which permissions are
+// used in synchronizing). 0777 by default, but can be changed by the "perms"
+// option.
+func (r *Replica) Perms() tree.Mode {
+	return r.perms
+}
+
 func (r *Replica) markChanged() revision {
 	if !r.isChanged {
 		r.isChanged = true
