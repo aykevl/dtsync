@@ -709,6 +709,13 @@ func writeKeyValue(out *bufio.Writer, key, value string) error {
 }
 
 func (r *Replica) scan(fs tree.LocalFileTree, cancel chan struct{}, progress chan<- *tree.ScanProgress) error {
+	// Signal we're starting the scan.
+	progress <- &tree.ScanProgress{
+		Total: r.total,
+		Done:  0,
+		Path:  nil,
+	}
+
 	r.startScan = time.Now()
 	r.scanned = 0
 	r.progressSent = time.Time{}
@@ -716,6 +723,13 @@ func (r *Replica) scan(fs tree.LocalFileTree, cancel chan struct{}, progress cha
 	err := r.scanDir(fs.Root(), r.Root(), cancel, progress)
 	if r.scanned != r.total {
 		panic("scanned != total???")
+	}
+
+	// Signal we're done.
+	progress <- &tree.ScanProgress{
+		Total: r.total,
+		Done:  r.scanned,
+		Path:  nil,
 	}
 	close(progress)
 	return err
