@@ -36,18 +36,14 @@ import (
 	"io/ioutil"
 	"os"
 	"os/exec"
-	"runtime/pprof"
 	"strings"
 	"unicode"
 
 	"github.com/aykevl/dtsync/sync"
 	"github.com/aykevl/dtsync/tree"
-	"github.com/aykevl/dtsync/tree/remote"
 )
 
-var cpuprofile = flag.String("cpuprofile", "", "write CPU profile to file")
 var editorCommand = flag.String("editor", "/usr/bin/editor", "Editor to use for editing jobs")
-var isServer = flag.Bool("server", false, "Run as server side process")
 
 const ERASE_SOL = "\033[2K\r"
 
@@ -195,66 +191,7 @@ func editJobs(result *sync.Result, root1, root2 string) bool {
 	return true
 }
 
-func usage() {
-	fmt.Fprintf(os.Stderr, "Usage: %s [options] <dir1> <dir2>\n", os.Args[0])
-	fmt.Fprintf(os.Stderr, "Options:\n")
-	flag.PrintDefaults()
-}
-
-func main() {
-	flag.Usage = usage
-	flag.Parse()
-
-	if *cpuprofile != "" {
-		f, err := os.Create(*cpuprofile)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "Could not open CPU profile file:", err)
-		}
-		defer f.Close()
-		pprof.StartCPUProfile(f)
-		defer pprof.StopCPUProfile()
-	}
-
-	if *isServer {
-		if flag.NArg() != 1 {
-			fmt.Fprintf(os.Stderr, "Provide exactly one directory on the command line (got %d).\n", flag.NArg())
-			return
-		}
-		root, err := sync.NewTree(flag.Arg(0))
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Could not open root %s: %s\n", flag.Arg(0), err)
-			return
-		}
-		if localRoot, ok := root.(tree.LocalFileTree); !ok {
-			fmt.Fprintf(os.Stderr, "Cannot use non-local root\n")
-			return
-		} else {
-			err = remote.NewServer(os.Stdin, os.Stdout, localRoot).Run()
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Server error: %s\n", err)
-			}
-		}
-		return
-	}
-
-	if flag.NArg() != 2 {
-		usage()
-		return
-	}
-
-	root1 := flag.Arg(0)
-	root2 := flag.Arg(1)
-	fs1, err := sync.NewTree(root1)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Could not open first root %s: %s\n", root1, err)
-		return
-	}
-	fs2, err := sync.NewTree(root2)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Could not open second root %s: %s\n", root2, err)
-		return
-	}
-
+func cliScan(fs1, fs2 tree.Tree) *sync.Result {
 	progress, optionProgress := sync.Progress()
 	go func() {
 		for p := range progress {
@@ -290,7 +227,7 @@ func main() {
 	fmt.Print(ERASE_SOL)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Could not scan roots:", err)
-		return
+		return nil
 	}
 
 	if len(result.Jobs()) == 0 {
@@ -301,7 +238,7 @@ func main() {
 		} else {
 			fmt.Println("No changes.")
 		}
-		return
+		return nil
 	}
 
 	fmt.Println("Scan results:")
@@ -319,6 +256,27 @@ func main() {
 			direction = "!!!"
 		}
 		fmt.Printf("%-8s  %s  %8s   %s\n", job.StatusLeft(), direction, job.StatusRight(), job.RelativePath())
+	}
+
+	return result
+}
+
+func runCLI(root1, root2 string) {
+	fs1, err := sync.NewTree(root1)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Could not open first root %s: %s\n", root1, err)
+		return
+	}
+	fs2, err := sync.NewTree(root2)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Could not open second root %s: %s\n", root2, err)
+		return
+	}
+
+	result := cliScan(fs1, fs2)
+	if result == nil {
+		// something went wrong
+		return
 	}
 
 	scanner := bufio.NewScanner(os.Stdin)
@@ -342,6 +300,11 @@ func main() {
 			action = actionEdit
 		case "q", "quit", "n", "no":
 			action = actionQuit
+		case "r":
+			result = cliScan(fs1, fs2)
+			if result == nil {
+				return
+			}
 		default:
 			continue
 		}
