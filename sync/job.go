@@ -70,18 +70,15 @@ type Job struct {
 	status2       *dtdiff.Entry
 	statusParent1 *dtdiff.Entry
 	statusParent2 *dtdiff.Entry
-	// The direction is a special one.
-	// When it is changed, file1, file2 etc are also changed.
-	// And if it is a copy or delete, the action is reversed (copy becomes
-	// delete, and delete becomes copy).
+	// When newDirection differs from direction, the effective action is changed
+	// as well.
 	//
 	// Values:
 	//   1 left-to-right aka forwards (file1 → file2)
 	//   0 undecided (conflict, user must choose)
 	//  -1 right-to-left aka backwards (file1 ← file2)
-	direction       int
-	hasNewDirection bool
-	newDirection    int
+	direction     int
+	origDirection int
 }
 
 // String returns a representation of this job for debugging.
@@ -257,10 +254,13 @@ func copyFile(fs1, fs2 tree.Tree, status1, statusParent2 *dtdiff.Entry) error {
 // Direction returns the sync direction of this file, with 1 for left-to-right,
 // 0 for undecided (conflict), and -1 for right-to-left.
 func (j *Job) Direction() int {
-	if j.hasNewDirection {
-		return j.newDirection
-	}
 	return j.direction
+}
+
+// OrigDirection returns the original sync direction of this file (before
+// SetDirection).
+func (j *Job) OrigDirection() int {
+	return j.origDirection
 }
 
 // SetDirection sets the job direction, which must be -1, 0, or 1. Any other
@@ -271,13 +271,12 @@ func (j *Job) SetDirection(direction int) {
 	default:
 		panic("invalid direction")
 	}
-	j.newDirection = direction
-	j.hasNewDirection = true
+	j.direction = direction
 }
 
 // Action returns the (possibly flipped) action constant.
 func (j *Job) Action() Action {
-	if j.hasNewDirection && j.direction != 0 && j.newDirection != 0 && j.direction != j.newDirection {
+	if j.direction != 0 && j.origDirection != 0 && j.direction != j.origDirection {
 		switch j.action {
 		case ACTION_COPY:
 			return ACTION_REMOVE

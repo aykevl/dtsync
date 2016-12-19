@@ -141,10 +141,13 @@ func (r *Result) reconcile(statusDir1, statusDir2 *dtdiff.Entry) {
 
 			if status1.Conflict(status2) {
 				job.direction = 0
+				job.origDirection = 0
 			} else if status1.After(status2) {
 				job.direction = 1
+				job.origDirection = 1
 			} else if status1.Before(status2) {
 				job.direction = -1
+				job.origDirection = -1
 			} else {
 				panic("equal but not equal? (should be unreachable)")
 			}
@@ -178,16 +181,19 @@ func (r *Result) addSingleJob(job *Job, status1, statusDir2 *dtdiff.Entry, direc
 		if !statusDir2.HasRevision(status1) {
 			job.action = ACTION_COPY
 			job.direction = direction
+			job.origDirection = direction
 		} else {
 			// TODO: check for conflicts (a new or updated file
 			// inside status1).
 			job.action = ACTION_REMOVE
 			job.direction = -direction
+			job.origDirection = -direction
 		}
 
 		if job.status1 != nil && job.status1.Type() == tree.TYPE_NOTFOUND || job.status2 != nil && job.status2.Type() == tree.TYPE_NOTFOUND {
 			// Maybe this should be an error.
 			job.direction = 0
+			job.origDirection = 0
 		}
 
 		r.jobs = append(r.jobs, job)
