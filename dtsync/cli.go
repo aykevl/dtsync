@@ -195,7 +195,6 @@ func cliScan(fs1, fs2 tree.Tree) *sync.Result {
 	progress, optionProgress := sync.Progress()
 	go func() {
 		for p := range progress {
-			finished := p[0] != nil && p[1] != nil && p[0].Done == p[0].Total && p[1].Done == p[1].Total
 			path := ""
 			behind := p.Behind()
 			ahead := p.Ahead()
@@ -214,7 +213,14 @@ func cliScan(fs1, fs2 tree.Tree) *sync.Result {
 					path = path[:width-1] + "…"
 				}
 			}
-			if finished {
+
+			// TODO: send the actual status with the progress (e.g. 'starting',
+			// 'scanning', 'finished'), so we don't have to guess.
+			unknown := p[0] == nil || p[1] == nil || p[0].Done == p[0].Total && p[1].Done == p[1].Total && len(p[0].Path) != 0 && len(p[1].Path) != 0
+			finished := p[0] != nil && p[1] != nil && len(p[0].Path) == 0 && len(p[1].Path) == 0 && p[0].Done == p[0].Total && p[1].Done == p[1].Total
+			if unknown {
+				fmt.Printf(ERASE_SOL+"progress: --%% %s", path)
+			} else if finished {
 				fmt.Printf(ERASE_SOL + "progress: finished")
 			} else {
 				fmt.Printf(ERASE_SOL+"progress: %2d%% %s", int(p.Percent()*100), path)
