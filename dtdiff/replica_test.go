@@ -35,7 +35,7 @@ import (
 
 const status1 = `Magic: dtsync-status-file
 Version: 1
-Created-By: dtsync 0.1
+Created-By: dtsync 0.2
 Content-Type: text/tab-separated-values; charset=utf-8
 Identity: first
 Generation: 2
@@ -58,7 +58,7 @@ removed.txt	f/2016-02-14T16:30:26.819348761Z/0	664		0:2	removed=2016-02-14T16:30
 
 const status2 = `Magic: dtsync-status-file
 Version: 1
-Created-By: dtsync 0.1
+Created-By: dtsync 0.2
 Content-Type: text/tab-separated-values; charset=utf-8
 Identity: second
 Generation: 5

@@ -41,6 +41,7 @@ import (
 
 var cpuprofile = flag.String("cpuprofile", "", "write CPU profile to file")
 var isServer = flag.Bool("server", false, "Run as server side process")
+var outputType = flag.String("output", "term", "Output type (term, msgpack)")
 
 func usage() {
 	fmt.Fprintf(os.Stderr, "Usage: %s [options] <dir1> <dir2>\n", os.Args[0])
@@ -91,5 +92,14 @@ func main() {
 
 	root1 := flag.Arg(0)
 	root2 := flag.Arg(1)
-	runCLI(root1, root2)
+	switch *outputType {
+	case "term":
+		runCLI(root1, root2)
+	case "msgpack":
+		runMsgpack(root1, root2)
+	default:
+		fmt.Fprintf(os.Stderr, "Unknown output type (options are: term, msgpack).\n")
+		usage()
+		return
+	}
 }

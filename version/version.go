@@ -30,4 +30,4 @@
 package version
 
 // Current program version.
-const VERSION = "dtsync 0.1"
+const VERSION = "dtsync 0.2"

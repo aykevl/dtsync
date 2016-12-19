@@ -133,6 +133,46 @@ func (j *Job) Path() string {
 	}
 }
 
+// RelativePath returns the path relative to it's root.
+func (j *Job) RelativePath() string {
+	// This must be updated when we implement file or directory moves: then the
+	// paths cannot be assumed to be the same.
+	var relpath []string
+	if j.status1 == nil {
+		relpath = j.status2.RelativePath()
+	} else {
+		relpath = j.status1.RelativePath()
+	}
+	return path.Join(relpath...)
+}
+
+func (j *Job) PathLeft() string {
+	if j.status1 == nil {
+		return path.Join(path.Join(j.statusParent1.RelativePath()...), j.status2.Name())
+	} else {
+		return path.Join(j.status1.RelativePath()...)
+	}
+}
+
+func (j *Job) PathRight() string {
+	if j.status2 == nil {
+		return path.Join(path.Join(j.statusParent2.RelativePath()...), j.status1.Name())
+	} else {
+		return path.Join(j.status2.RelativePath()...)
+	}
+}
+
+// StatusLeft returns an identifying string of what happened on the left side of
+// the sync.
+func (j *Job) StatusLeft() string {
+	return j.status(j.status1, j.statusParent1, j.status2, j.statusParent2)
+}
+
+// StatusRight is similar to StatusLeft.
+func (j *Job) StatusRight() string {
+	return j.status(j.status2, j.statusParent2, j.status1, j.statusParent1)
+}
+
 func (j *Job) primary() (*dtdiff.Entry, *dtdiff.Entry) {
 	status1, status2 := j.status1, j.status2
 	if j.Action() == ACTION_REMOVE {
@@ -294,17 +334,6 @@ func (j *Job) Applied() bool {
 	return j.applied
 }
 
-// StatusLeft returns an identifying string of what happened on the left side of
-// the sync.
-func (j *Job) StatusLeft() string {
-	return j.status(j.status1, j.statusParent1, j.status2, j.statusParent2)
-}
-
-// StatusRight is similar to StatusLeft.
-func (j *Job) StatusRight() string {
-	return j.status(j.status2, j.statusParent2, j.status1, j.statusParent1)
-}
-
 // status returns the change that was applied to this file (new, modified,
 // removed).
 func (j *Job) status(status, statusParent, otherStatus, otherStatusParent *dtdiff.Entry) string {
@@ -331,15 +360,10 @@ func (j *Job) status(status, statusParent, otherStatus, otherStatusParent *dtdif
 	return ""
 }
 
-// RelativePath returns the path relative to it's root.
-func (j *Job) RelativePath() string {
-	// This must be updated when we implement file or directory moves: then the
-	// paths cannot be assumed to be the same.
-	var relpath []string
-	if j.status1 == nil {
-		relpath = j.status2.RelativePath()
-	} else {
-		relpath = j.status1.RelativePath()
-	}
-	return path.Join(relpath...)
+func (j *Job) StatusEntryLeft() *dtdiff.Entry {
+	return j.status1
+}
+
+func (j *Job) StatusEntryRight() *dtdiff.Entry {
+	return j.status2
 }
