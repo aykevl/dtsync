@@ -5,7 +5,7 @@ from gi.repository import GLib
 
 import subprocess
 import queue
-from threading import Thread
+from threading import Thread, Event
 import msgpack
 import sys
 
@@ -17,12 +17,19 @@ class Background:
         processThread = Thread(target=self.process, daemon=True)
         processThread.start()
 
+        self.daemon = None
+        self.daemonStarted = Event()
         self.sendQueue = queue.Queue(1)
         writerThread = Thread(target=self.writer, daemon=True)
         writerThread.start()
 
     def process(self):
-        self.daemon = subprocess.Popen(['dtsync', '-output', 'msgpack', self.main.root1, self.main.root2], stdin=subprocess.PIPE, stdout=subprocess.PIPE, bufsize=0)
+        try:
+            self.daemon = subprocess.Popen(['dtsync', '-output', 'msgpack', self.main.root1, self.main.root2], stdin=subprocess.PIPE, stdout=subprocess.PIPE, bufsize=0)
+        except:
+            raise
+        finally:
+            self.daemonStarted.set()
         unpacker = msgpack.Unpacker(self.daemon.stdout, encoding='utf-8')
         for msg in unpacker:
             if self.willExit:
@@ -53,10 +60,13 @@ class Background:
             GLib.idle_add(self.main.on_error, {'title': 'Process quit', 'message': 'Background dtsync process quit unexpectedly'})
 
     def quit(self):
-        self.daemon.terminate()
+        self.daemonStarted.wait()
+        if self.daemon:
+            self.daemon.terminate()
         self.willExit = True
 
     def writer(self):
+        self.daemonStarted.wait()
         packer = msgpack.Packer()
         while True:
             message = self.sendQueue.get()
