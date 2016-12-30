@@ -34,6 +34,7 @@ package tree
 
 import (
 	"bytes"
+	"hash"
 	"io"
 	"sort"
 	"strconv"
@@ -41,6 +42,7 @@ import (
 	"time"
 
 	"github.com/aykevl/golibrsync/librsync"
+	blake2b "github.com/minio/blake2b-simd"
 )
 
 // The type used for TYPE_* constants
@@ -85,6 +87,12 @@ func (m Mode) Calc(sourceHasMode, targetDefault Mode) Mode {
 	//    targetDefault if the source is e.g. FAT32.
 	//  - Add the bits from the source file.
 	return (targetDefault &^ sourceHasMode) | m
+}
+
+// NewHash returns the hashing function used by interfaces implementing Entry
+// and by Copy and Update.
+func NewHash() hash.Hash {
+	return blake2b.New256()
 }
 
 type HashType int
