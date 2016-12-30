@@ -168,7 +168,7 @@ class Main(Gtk.Window):
         self.reset_applybox()
 
     def load_style(self):
-        path = os.path.join(os.path.dirname(__file__), 'style.css')
+        path = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'style.css')
         style_provider = Gtk.CssProvider()
         style_provider.load_from_path(path)
         Gtk.StyleContext.add_provider_for_screen(
