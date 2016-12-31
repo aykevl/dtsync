@@ -136,7 +136,7 @@ class Main(Gtk.Window):
         self.infobox = Gtk.Label('')
         self.infobox.set_selectable(True)
         self.infobox.set_name('infobox')
-        self.infobox.set_alignment(0, 0.5)
+        self.infobox.set_alignment(0, 0)
         self.bottombar.add(self.infobox)
 
         self.scanbox = Gtk.Grid()
@@ -324,6 +324,9 @@ class Main(Gtk.Window):
         for i in range(len(self.jobs)):
             self.store.append(self.job_values(i))
         self.tree.grab_focus()
+
+        if len(self.jobs) == 0:
+            self.infobox.set_text('No changes to apply.')
 
     def apply(self):
         if self.state != State.scanned:
