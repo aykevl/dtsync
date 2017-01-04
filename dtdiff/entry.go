@@ -151,12 +151,12 @@ func (e *Entry) countRecursive() uint64 {
 // Count returns the number of entries (at least 1) and the number of bytes in
 // the file or directory tree (only regular bytes, no directory entries). Can be
 // used for progress indication.
-func (e *Entry) Count() (int, uint64) {
+func (e *Entry) Count() (int, int64) {
 	if e.isRemoved() {
 		return 0, 0
 	}
 	count := 1
-	bytes := uint64(e.Size())
+	bytes := e.Size()
 	for _, child := range e.children {
 		if !child.isRemoved() {
 			c, b := child.Count()

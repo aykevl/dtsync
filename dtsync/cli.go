@@ -344,7 +344,7 @@ func runCLI(root1, root2 string) {
 		if job.Direction() == 0 {
 			continue
 		}
-		err := job.Apply()
+		err := job.Apply(nil)
 		if err != nil {
 			// TODO: print in red: https://github.com/andrew-d/go-termutil
 			fmt.Printf("%*s%s\n", digits*2+10, "", err)

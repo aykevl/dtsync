@@ -250,8 +250,8 @@ func runMsgpack(root1, root2 string) {
 
 		case "apply":
 			jobs := make([]jobQueueItem, 0, len(result.Jobs()))
-			var costTotal uint64
-			var costDone uint64
+			var costTotal int64
+			var costDone int64
 			for i, job := range result.Jobs() {
 				if job.Direction() != 0 {
 					jobs = append(jobs, jobQueueItem{i, job})
@@ -267,10 +267,31 @@ func runMsgpack(root1, root2 string) {
 					JobProgress:   0.0,
 				})
 
-				// TODO: send progress of inidividual jobs
-				costDone += item.job.Cost()
+				// TODO: send better progress of inidividual jobs (e.g. while
+				// copying a large file or removing a large directory)
 
-				err := item.job.Apply()
+				jobCostTotal := item.job.Cost()
+				var jobCostDone int64
+				progressChan := make(chan int64)
+				progressExit := make(chan struct{})
+				go func() {
+					for cost := range progressChan {
+						jobCostDone += cost
+						if jobCostDone > jobCostTotal {
+							panic("jobCostDone > jobCostTotal")
+						}
+						mp.sendValue("apply-progress", -1, applyProgressValue{
+							TotalProgress: float64(costDone+jobCostDone) / float64(costTotal),
+							Job:           item.index,
+							State:         "progress",
+							JobProgress:   float64(jobCostDone) / float64(jobCostTotal),
+						})
+					}
+					close(progressExit)
+				}()
+
+				err := item.job.Apply(progressChan)
+				costDone += jobCostTotal
 				progress := applyProgressValue{
 					TotalProgress: float64(costDone) / float64(costTotal),
 					Job:           item.index,
@@ -281,6 +302,7 @@ func runMsgpack(root1, root2 string) {
 					progress.State = "error"
 					progress.Error = err.Error()
 				}
+				<-progressExit // wait until the goroutine exited
 				mp.sendValue("apply-progress", -1, progress)
 			}
 

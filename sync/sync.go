@@ -300,7 +300,7 @@ func (r *Result) SyncAll() (Stats, error) {
 		if job.applied {
 			continue
 		}
-		err := job.Apply()
+		err := job.Apply(nil)
 		if err != nil {
 			// TODO: continue after errors, but mark the sync as unclean
 			return r.Stats(), err

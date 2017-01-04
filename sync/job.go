@@ -188,7 +188,13 @@ func (j *Job) primary() (*dtdiff.Entry, *dtdiff.Entry) {
 }
 
 // Apply this job (copying, updating, or removing).
-func (j *Job) Apply() error {
+func (j *Job) Apply(progress chan int64) error {
+	defer func() {
+		if progress != nil {
+			close(progress)
+		}
+	}()
+
 	if j.applied {
 		return ErrAlreadyApplied
 	}
@@ -222,7 +228,7 @@ func (j *Job) Apply() error {
 
 	switch j.Action() {
 	case ACTION_COPY:
-		err := copyFile(fs1, fs2, status1, statusParent2)
+		err := copyFile(fs1, fs2, status1, statusParent2, progress)
 		if err != nil {
 			return err
 		}
@@ -265,7 +271,7 @@ func (j *Job) Apply() error {
 	return nil
 }
 
-func copyFile(fs1, fs2 tree.Tree, status1, statusParent2 *dtdiff.Entry) error {
+func copyFile(fs1, fs2 tree.Tree, status1, statusParent2 *dtdiff.Entry, progress chan int64) error {
 	if status1.Type() == tree.TYPE_DIRECTORY {
 		info, err := fs2.CreateDir(status1.Name(), statusParent2, status1)
 		if err != nil {
@@ -275,9 +281,12 @@ func copyFile(fs1, fs2 tree.Tree, status1, statusParent2 *dtdiff.Entry) error {
 		if err != nil {
 			panic(err)
 		}
+		if progress != nil {
+			progress <- COST_PER_INODE
+		}
 		list := status1.List()
 		for _, child1 := range list {
-			err := copyFile(fs1, fs2, child1, status2)
+			err := copyFile(fs1, fs2, child1, status2, progress)
 			if err != nil {
 				// TODO revert
 				return err
@@ -292,6 +301,9 @@ func copyFile(fs1, fs2 tree.Tree, status1, statusParent2 *dtdiff.Entry) error {
 		_, err = statusParent2.Add(info, status1)
 		if err != nil {
 			return err
+		}
+		if progress != nil {
+			progress <- COST_PER_INODE + status1.Size()
 		}
 	}
 	return nil
@@ -374,7 +386,7 @@ func (j *Job) StatusEntryRight() *dtdiff.Entry {
 	return j.status2
 }
 
-func (j *Job) Cost() uint64 {
+func (j *Job) Cost() int64 {
 	status1 := j.status1
 	status2 := j.status2
 
@@ -394,12 +406,12 @@ func (j *Job) Cost() uint64 {
 	switch j.Action() {
 	case ACTION_COPY, ACTION_UPDATE:
 		count, bytes := status1.Count()
-		return uint64(count)*COST_PER_INODE + bytes
+		return int64(count)*COST_PER_INODE + bytes
 	case ACTION_CHMOD:
 		return COST_PER_INODE
 	case ACTION_REMOVE:
 		count, _ := status2.Count()
-		return uint64(count) * COST_PER_INODE
+		return int64(count) * COST_PER_INODE
 	default:
 		panic("unknown action")
 	}
