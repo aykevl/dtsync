@@ -57,7 +57,7 @@ class Background:
                 print('unknown message:', msg)
 
         if not self.willExit:
-            GLib.idle_add(self.main.on_error, {'title': 'Process quit', 'message': 'Background dtsync process quit unexpectedly'})
+            GLib.idle_add(self.main.on_error, {'title': 'Process quit', 'message': 'Background dtsync process died unexpectedly.'})
 
     def quit(self):
         self.daemonStarted.wait()

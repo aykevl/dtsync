@@ -134,7 +134,7 @@ func TreeTest(t Tester, fs1, fs2 TestTree) {
 		t.Error("error while trying to copy (invalid) file1.txt:", err)
 	}
 
-	info2, _, err := Copy(fs1, fs2, info1, &FileInfoStruct{})
+	info2, _, err := Copy(fs1, fs2, info1, &FileInfoStruct{}, nil)
 	if err != nil {
 		t.Fatalf("failed to copy file %s to %s: %s", info1, fs2, err)
 	}
@@ -334,7 +334,7 @@ func TreeTest(t Tester, fs1, fs2 TestTree) {
 	big1, _ = fs1.ReadInfo(big1.RelativePath())
 
 	// test copying big file
-	big2, _, err := Copy(fs1, fs2, big1, &FileInfoStruct{})
+	big2, _, err := Copy(fs1, fs2, big1, &FileInfoStruct{}, nil)
 	if err != nil {
 		t.Fatal("could not Copy big.txt:", err)
 	}
@@ -426,13 +426,13 @@ func TreeTest(t Tester, fs1, fs2 TestTree) {
 
 	// try to copy 'modified' symlink
 	link1Wrong := &FileInfoStruct{link1.RelativePath(), TYPE_SYMLINK, 0666, 0666, time.Time{}, 0, Hash{}}
-	_, _, err = Copy(fs1, fs2, link1Wrong, &FileInfoStruct{})
+	_, _, err = Copy(fs1, fs2, link1Wrong, &FileInfoStruct{}, nil)
 	if !IsChanged(err) {
 		t.Errorf("No ErrChanged while copying %s: %s", link2.Name(), err)
 	}
 
 	// copy symlink
-	link2, _, err = Copy(fs1, fs2, link1, &FileInfoStruct{})
+	link2, _, err = Copy(fs1, fs2, link1, &FileInfoStruct{}, nil)
 	if err != nil {
 		t.Fatal("cannot copy link:", err)
 	}
@@ -441,7 +441,7 @@ func TreeTest(t Tester, fs1, fs2 TestTree) {
 	}
 
 	// try copying symlink again
-	_, _, err = Copy(fs1, fs2, link1, &FileInfoStruct{})
+	_, _, err = Copy(fs1, fs2, link1, &FileInfoStruct{}, nil)
 	if !IsExist(err) {
 		t.Fatal("overwrite with Copy, error:", err)
 	}
@@ -555,7 +555,7 @@ func TreeTest(t Tester, fs1, fs2 TestTree) {
 		checkInfo(t, dir1, childinfo1, 0, 1, "dir/file2.txt")
 	}
 
-	_, _, err = Copy(fs1, fs2, childinfo1, infoDir2)
+	_, _, err = Copy(fs1, fs2, childinfo1, infoDir2, nil)
 	if err != nil {
 		t.Errorf("could not copy entry %s to dir %s: %s", childinfo1, infoDir2, err)
 	}

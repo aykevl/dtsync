@@ -293,7 +293,7 @@ func copyFile(fs1, fs2 tree.Tree, status1, statusParent2 *dtdiff.Entry, progress
 			}
 		}
 	} else {
-		info, parentInfo, err := tree.Copy(fs1, fs2, status1, statusParent2)
+		info, parentInfo, err := tree.Copy(fs1, fs2, status1, statusParent2, progress)
 		if err != nil {
 			return err
 		}
@@ -303,7 +303,7 @@ func copyFile(fs1, fs2 tree.Tree, status1, statusParent2 *dtdiff.Entry, progress
 			return err
 		}
 		if progress != nil {
-			progress <- COST_PER_INODE + status1.Size()
+			progress <- COST_PER_INODE
 		}
 	}
 	return nil

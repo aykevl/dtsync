@@ -500,7 +500,7 @@ func (s *Server) rsyncDst(requestId uint64, info, source tree.FileInfo, deltaCha
 		deltaWriter.Close()
 	}()
 
-	newFileInfo, newParentInfo, err := tree.CopyFile(copier, patchJob, source)
+	newFileInfo, newParentInfo, err := tree.CopyFile(copier, patchJob, source, nil)
 	if err != nil {
 		s.replyError(requestId, err)
 		return

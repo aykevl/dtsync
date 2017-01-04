@@ -261,7 +261,7 @@ type Entry interface {
 // the actual file.
 // Before the actual copy, the fingerprint of the source is compared with the
 // stat results of the source.
-func Copy(this, other Tree, source, targetParent FileInfo) (info FileInfo, parentInfo FileInfo, err error) {
+func Copy(this, other Tree, source, targetParent FileInfo, progress chan int64) (info FileInfo, parentInfo FileInfo, err error) {
 	thisFileTree, ok := this.(FileTree)
 	if !ok {
 		return nil, nil, ErrNotImplemented("source in Copy not a FileTree")
@@ -285,7 +285,7 @@ func Copy(this, other Tree, source, targetParent FileInfo) (info FileInfo, paren
 		}
 		defer outf.Cancel()
 
-		return CopyFile(outf, inf, nil)
+		return CopyFile(outf, inf, nil, progress)
 
 	case TYPE_SYMLINK:
 		link, err := thisFileTree.ReadSymlink(source)
@@ -392,7 +392,7 @@ func Update(this, other Tree, source, target FileInfo) (FileInfo, FileInfo, Upda
 			}
 			defer patchJob.Close()
 
-			info, parentInfo, err := CopyFile(copier, patchJob, source)
+			info, parentInfo, err := CopyFile(copier, patchJob, source, nil)
 			return info, parentInfo, stats, err
 
 		} else if targetRemote {
@@ -446,7 +446,7 @@ func Update(this, other Tree, source, target FileInfo) (FileInfo, FileInfo, Upda
 			}
 			defer outf.Cancel()
 
-			info, parentInfo, err := CopyFile(outf, &countReader{inf, &stats.ToTarget}, source)
+			info, parentInfo, err := CopyFile(outf, &countReader{inf, &stats.ToTarget}, source, nil)
 			return info, parentInfo, stats, err
 		}
 
@@ -469,7 +469,7 @@ func Update(this, other Tree, source, target FileInfo) (FileInfo, FileInfo, Upda
 
 // CopyFile acts like io.Copy, but it also hashes the data that passes through.
 // The returned FileInfo has this hash.
-func CopyFile(outf Copier, inf io.Reader, source FileInfo) (FileInfo, FileInfo, error) {
+func CopyFile(outf Copier, inf io.Reader, source FileInfo, progress chan int64) (FileInfo, FileInfo, error) {
 	hash := NewHash()
 
 	// A lot like io.Copy
@@ -485,6 +485,9 @@ func CopyFile(outf Copier, inf io.Reader, source FileInfo) (FileInfo, FileInfo, 
 				return nil, nil, io.ErrShortWrite
 			}
 			hash.Write(buf[:nr])
+		}
+		if progress != nil {
+			progress <- int64(nr)
 		}
 		if er == io.EOF {
 			break

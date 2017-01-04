@@ -275,10 +275,14 @@ func runMsgpack(root1, root2 string) {
 				progressChan := make(chan int64)
 				progressExit := make(chan struct{})
 				go func() {
+					// Progress indication is inexact. It may not give the exact
+					// number of bytes per file, or might even count a bit more
+					// in rare circumstances.
 					for cost := range progressChan {
 						jobCostDone += cost
-						if jobCostDone > jobCostTotal {
-							panic("jobCostDone > jobCostTotal")
+						if jobCostDone >= jobCostTotal {
+							// Be forgiving in the progress indication.
+							jobCostDone = jobCostTotal - 1
 						}
 						mp.sendValue("apply-progress", -1, applyProgressValue{
 							TotalProgress: float64(costDone+jobCostDone) / float64(costTotal),
