@@ -332,9 +332,12 @@ class Main(Gtk.Window):
         if self.state != State.scanned:
             raise RuntimeError('apply() in invalid state')
 
-        self.bottombar.set_visible_child(self.applybox)
-        self.set_state(State.applying)
-        self.background.apply()
+        if not self.jobs:
+            self.infobox.set_text('Nothing to apply.')
+        else:
+            self.bottombar.set_visible_child(self.applybox)
+            self.set_state(State.applying)
+            self.background.apply()
 
     def on_apply_progress(self, progress):
         self.apply_progress.set_fraction(progress['totalProgress'])
@@ -350,8 +353,14 @@ class Main(Gtk.Window):
 
     def on_apply_finished(self, result):
         self.set_state(State.applied)
-        self.apply_progress.set_fraction(1)
-        self.apply_text.set_text('')
+        if result['error'] > 0:
+            self.infobox.set_text('Finished with errors: %d applied, %d errors.' % (result['applied'], result['error']))
+        elif result['applied'] == 0:
+            self.infobox.set_text('No changes propagated.')
+        else:
+            self.infobox.set_text('Done, %d applied (no errors).' % result['applied'])
+        self.bottombar.set_visible_child(self.infobox)
+        self.reset_applybox()
 
     def set_state(self, state):
         self.state = state
