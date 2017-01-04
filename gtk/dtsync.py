@@ -341,14 +341,21 @@ class Main(Gtk.Window):
 
     def on_apply_progress(self, progress):
         self.apply_progress.set_fraction(progress['totalProgress'])
+        if progress['state'] == 'saving-status':
+            self.apply_text.set_text('Saving tree state...')
+            return
+
         self.apply_text.set_text(self.jobs[progress['job']]['path'])
         iter = self.tree.get_model().iter_nth_child(None, progress['job'])
         if progress['state'] == 'starting':
             state = '0%'
         elif progress['state'] == 'progress':
             state = '{}%'.format(int(round((progress['jobProgress']*100))))
-        else:
+        elif progress['state'] == 'finished':
             state = '✓'
+        else:
+            print('unknown state:', progress['state'])
+            state = '?'
         self.store.set_value(iter, 5, state)
 
     def on_apply_finished(self, result):

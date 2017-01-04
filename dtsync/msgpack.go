@@ -232,7 +232,7 @@ func runMsgpack(root1, root2 string) {
 
 			err = result.SaveStatus()
 			if err != nil {
-				mp.sendError("could not save status", -1, err)
+				mp.sendError("could not save status after scan", -1, err)
 				return
 			}
 
@@ -282,6 +282,18 @@ func runMsgpack(root1, root2 string) {
 					progress.Error = err.Error()
 				}
 				mp.sendValue("apply-progress", -1, progress)
+			}
+
+			mp.sendValue("apply-progress", -1, applyProgressValue{
+				TotalProgress: 1.0,
+				Job:           -1,
+				State:         "saving-status",
+			})
+
+			err := result.SaveStatus()
+			if err != nil {
+				mp.sendError("could not save status after apply", -1, err)
+				return
 			}
 
 			stats := result.Stats()
