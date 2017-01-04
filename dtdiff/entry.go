@@ -148,6 +148,25 @@ func (e *Entry) countRecursive() uint64 {
 	return count
 }
 
+// Count returns the number of entries (at least 1) and the number of bytes in
+// the file or directory tree (only regular bytes, no directory entries). Can be
+// used for progress indication.
+func (e *Entry) Count() (int, uint64) {
+	if e.isRemoved() {
+		return 0, 0
+	}
+	count := 1
+	bytes := uint64(e.Size())
+	for _, child := range e.children {
+		if !child.isRemoved() {
+			c, b := child.Count()
+			count += c
+			bytes += b
+		}
+	}
+	return count, bytes
+}
+
 // Add new entry by recursively finding the parent
 func (e *Entry) addRecursive(path []string, rev revision, fingerprint string, mode tree.Mode, hash tree.Hash, options string) (*Entry, error) {
 	if path[0] == "" {

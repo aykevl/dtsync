@@ -250,26 +250,29 @@ func runMsgpack(root1, root2 string) {
 
 		case "apply":
 			jobs := make([]jobQueueItem, 0, len(result.Jobs()))
+			var costTotal uint64
+			var costDone uint64
 			for i, job := range result.Jobs() {
 				if job.Direction() != 0 {
 					jobs = append(jobs, jobQueueItem{i, job})
+					costTotal += job.Cost()
 				}
 			}
 
-			for i, item := range jobs {
+			for _, item := range jobs {
 				mp.sendValue("apply-progress", -1, applyProgressValue{
-					TotalProgress: float64(i) / float64(len(jobs)),
+					TotalProgress: float64(costDone) / float64(costTotal),
 					Job:           item.index,
 					State:         "starting",
 					JobProgress:   0.0,
 				})
 
 				// TODO: send progress of inidividual jobs
-				// TODO: more accurate global progress (count bytes and files)
+				costDone += item.job.Cost()
 
 				err := item.job.Apply()
 				progress := applyProgressValue{
-					TotalProgress: float64(i+1) / float64(len(jobs)),
+					TotalProgress: float64(costDone) / float64(costTotal),
 					Job:           item.index,
 					State:         "finished",
 					JobProgress:   1.0,

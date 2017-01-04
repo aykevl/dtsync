@@ -46,6 +46,12 @@ const (
 	ACTION_REMOVE Action = iota
 )
 
+// Size to add per inode that is going to be changed. The cost is roughly the
+// number of bytes to copy.
+// This is a semi-random number. There is a cost per file that's created/removed
+// (even if it's small), this is just a blind guess at that cost.
+const COST_PER_INODE = 1024
+
 func (a Action) String() string {
 	s := "action?"
 	switch a {
@@ -366,4 +372,35 @@ func (j *Job) StatusEntryLeft() *dtdiff.Entry {
 
 func (j *Job) StatusEntryRight() *dtdiff.Entry {
 	return j.status2
+}
+
+func (j *Job) Cost() uint64 {
+	status1 := j.status1
+	status2 := j.status2
+
+	switch j.Direction() {
+	case 1:
+		// don't swap
+	case 0:
+		// No cost for a no-op
+		return 0
+	case -1:
+		// swap: we're going the opposite direction
+		status1, status2 = status2, status1
+	default:
+		panic("unknown direction")
+	}
+
+	switch j.Action() {
+	case ACTION_COPY, ACTION_UPDATE:
+		count, bytes := status1.Count()
+		return uint64(count)*COST_PER_INODE + bytes
+	case ACTION_CHMOD:
+		return COST_PER_INODE
+	case ACTION_REMOVE:
+		count, _ := status2.Count()
+		return uint64(count) * COST_PER_INODE
+	default:
+		panic("unknown action")
+	}
 }
