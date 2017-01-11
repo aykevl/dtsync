@@ -34,13 +34,16 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/aykevl/dtsync/dtdiff"
-	"github.com/aykevl/dtsync/sync"
+	dtsync "github.com/aykevl/dtsync/sync"
 	"github.com/aykevl/dtsync/tree"
 	"github.com/ugorji/go/codec"
 )
+
+const NUM_PARALLEL_JOBS = 8
 
 type mpMessage struct {
 	Message string      `codec:"message"`
@@ -91,7 +94,7 @@ type applyFinishedValue struct {
 
 type jobQueueItem struct {
 	index int
-	job   *sync.Job
+	job   *dtsync.Job
 }
 
 type mpCommand struct {
@@ -101,9 +104,10 @@ type mpCommand struct {
 }
 
 type MessagePack struct {
-	writer *bufio.Writer
-	enc    *codec.Encoder
-	dec    *codec.Decoder
+	writer  *bufio.Writer
+	enc     *codec.Encoder
+	encLock sync.Mutex
+	dec     *codec.Decoder
 }
 
 func newMessagePack() *MessagePack {
@@ -118,6 +122,9 @@ func newMessagePack() *MessagePack {
 }
 
 func (mp *MessagePack) sendMessage(msg mpMessage) {
+	mp.encLock.Lock()
+	defer mp.encLock.Unlock()
+
 	err := mp.enc.Encode(msg)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "FATAL: could not write message: %s\n", err)
@@ -148,7 +155,7 @@ func (mp *MessagePack) sendError(errorType string, root int, err error) {
 	})
 }
 
-func createJobValue(result *sync.Result, job *sync.Job) *jobValue {
+func createJobValue(result *dtsync.Result, job *dtsync.Job) *jobValue {
 	jv := &jobValue{
 		Direction:     job.Direction(),
 		OrigDirection: job.OrigDirection(),
@@ -179,20 +186,99 @@ func createJobValue(result *sync.Result, job *sync.Job) *jobValue {
 	return jv
 }
 
+func runJob(jobs chan jobQueueItem, mp *MessagePack, state *applyState) {
+	defer state.workers.Done()
+
+	for item := range jobs {
+		state.lock.Lock()
+		progress := float64(state.costDone) / float64(state.costTotal)
+		state.lock.Unlock()
+
+		mp.sendValue("apply-progress", -1, applyProgressValue{
+			TotalProgress: progress,
+			Job:           item.index,
+			State:         "starting",
+			JobProgress:   0.0,
+		})
+
+		jobCostTotal := item.job.Cost()
+		progressChan := make(chan int64, 2)
+		progressExit := make(chan struct{})
+		go func() {
+			// Progress indication is inexact. It may not give the exact
+			// number of bytes per file, or might even count a bit more
+			// in rare circumstances.
+			var jobCostDone int64
+			for cost := range progressChan {
+				prevJobCostDone := jobCostDone
+				jobCostDone += cost
+				if jobCostDone >= jobCostTotal {
+					// Be forgiving in the progress indication.
+					jobCostDone = jobCostTotal - 1
+				}
+
+				state.lock.Lock()
+				state.costDone += (jobCostDone - prevJobCostDone) // add current job progress to global progress
+				progress := float64(state.costDone) / float64(state.costTotal)
+				state.lock.Unlock()
+
+				mp.sendValue("apply-progress", -1, applyProgressValue{
+					TotalProgress: progress,
+					Job:           item.index,
+					State:         "progress",
+					JobProgress:   float64(jobCostDone) / float64(jobCostTotal),
+				})
+			}
+
+			state.lock.Lock()
+			state.costDone -= jobCostDone  // subtract estimated/inexact progress
+			state.costDone += jobCostTotal // add real progress
+			state.lock.Unlock()
+			close(progressExit)
+		}()
+
+		err := item.job.Apply(progressChan)
+		<-progressExit // wait until the goroutine exited
+
+		state.lock.Lock()
+		progress = float64(state.costDone) / float64(state.costTotal)
+		state.lock.Unlock()
+
+		progressValue := applyProgressValue{
+			TotalProgress: progress,
+			Job:           item.index,
+			State:         "finished",
+			JobProgress:   1.0,
+		}
+		if err != nil {
+			progressValue.State = "error"
+			progressValue.Error = err.Error()
+		}
+		mp.sendValue("apply-progress", -1, progressValue)
+	}
+}
+
+type applyState struct {
+	lock      sync.Mutex
+	costTotal int64
+	costDone  int64
+	workers   sync.WaitGroup
+}
+
 func runMsgpack(root1, root2 string) {
 	mp := newMessagePack()
-	fs1, err := sync.NewTree(root1)
+	fs1, err := dtsync.NewTree(root1)
 	if err != nil {
 		mp.sendError("could not open root", 0, err)
 		return
 	}
-	fs2, err := sync.NewTree(root2)
+	fs2, err := dtsync.NewTree(root2)
 	if err != nil {
 		mp.sendError("could not open root", 1, err)
 		return
 	}
 
-	var result *sync.Result
+	var result *dtsync.Result
 
 	for {
 		var command mpCommand
@@ -204,7 +290,7 @@ func runMsgpack(root1, root2 string) {
 
 		switch command.Command {
 		case "scan":
-			progress, optionProgress := sync.Progress()
+			progress, optionProgress := dtsync.Progress()
 			progressExit := make(chan struct{})
 			go func() {
 				for p := range progress {
@@ -219,7 +305,7 @@ func runMsgpack(root1, root2 string) {
 				close(progressExit)
 			}()
 
-			result, err = sync.Scan(fs1, fs2, optionProgress)
+			result, err = dtsync.Scan(fs1, fs2, optionProgress)
 
 			// Make sure the progress values have been fully sent before sending the
 			// status.
@@ -249,66 +335,27 @@ func runMsgpack(root1, root2 string) {
 			mp.sendValue("scan-finished", -1, value)
 
 		case "apply":
+			state := &applyState{}
 			jobs := make([]jobQueueItem, 0, len(result.Jobs()))
-			var costTotal int64
-			var costDone int64
 			for i, job := range result.Jobs() {
 				if job.Direction() != 0 {
 					jobs = append(jobs, jobQueueItem{i, job})
-					costTotal += job.Cost()
+					state.costTotal += job.Cost()
 				}
+			}
+
+			jobChan := make(chan jobQueueItem)
+			state.workers.Add(NUM_PARALLEL_JOBS)
+			for i := 0; i < NUM_PARALLEL_JOBS; i++ {
+				go runJob(jobChan, mp, state)
 			}
 
 			for _, item := range jobs {
-				mp.sendValue("apply-progress", -1, applyProgressValue{
-					TotalProgress: float64(costDone) / float64(costTotal),
-					Job:           item.index,
-					State:         "starting",
-					JobProgress:   0.0,
-				})
-
-				// TODO: send better progress of inidividual jobs (e.g. while
-				// copying a large file or removing a large directory)
-
-				jobCostTotal := item.job.Cost()
-				var jobCostDone int64
-				progressChan := make(chan int64, 2)
-				progressExit := make(chan struct{})
-				go func() {
-					// Progress indication is inexact. It may not give the exact
-					// number of bytes per file, or might even count a bit more
-					// in rare circumstances.
-					for cost := range progressChan {
-						jobCostDone += cost
-						if jobCostDone >= jobCostTotal {
-							// Be forgiving in the progress indication.
-							jobCostDone = jobCostTotal - 1
-						}
-						mp.sendValue("apply-progress", -1, applyProgressValue{
-							TotalProgress: float64(costDone+jobCostDone) / float64(costTotal),
-							Job:           item.index,
-							State:         "progress",
-							JobProgress:   float64(jobCostDone) / float64(jobCostTotal),
-						})
-					}
-					close(progressExit)
-				}()
-
-				err := item.job.Apply(progressChan)
-				costDone += jobCostTotal
-				progress := applyProgressValue{
-					TotalProgress: float64(costDone) / float64(costTotal),
-					Job:           item.index,
-					State:         "finished",
-					JobProgress:   1.0,
-				}
-				if err != nil {
-					progress.State = "error"
-					progress.Error = err.Error()
-				}
-				<-progressExit // wait until the goroutine exited
-				mp.sendValue("apply-progress", -1, progress)
+				jobChan <- item
 			}
+			close(jobChan)
+
+			state.workers.Wait()
 
 			mp.sendValue("apply-progress", -1, applyProgressValue{
 				TotalProgress: 1.0,
@@ -337,7 +384,7 @@ func runMsgpack(root1, root2 string) {
 				mp.sendError("job direction invalide", -1, errors.New("dtsync: invalid job direction, must be {-1,0,1}"))
 				return
 			}
-			jobs := make(map[int]*sync.Job, len(command.Jobs))
+			jobs := make(map[int]*dtsync.Job, len(command.Jobs))
 			for _, job := range command.Jobs {
 				if job < 0 || job >= len(result.Jobs()) {
 					mp.sendError("job out of range", -1, errors.New("dtsync: job out of range"))

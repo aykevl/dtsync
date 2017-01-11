@@ -223,8 +223,10 @@ func (j *Job) Apply(progress chan int64) error {
 
 	// Add error now, remove it at the end when there was no error (all errors
 	// return early).
+	j.result.lock.Lock()
 	j.result.countTotal++
 	j.result.countError++
+	j.result.lock.Unlock()
 
 	switch j.Action() {
 	case ACTION_COPY:
@@ -264,10 +266,13 @@ func (j *Job) Apply(progress chan int64) error {
 	}
 
 	// There was no error.
+	j.result.lock.Lock()
 	j.result.countError--
 	if j.result.countTotal == len(j.result.jobs) && j.result.countError == 0 {
 		j.result.markSynced()
 	}
+	j.result.lock.Unlock()
+
 	return nil
 }
 

@@ -348,7 +348,6 @@ class Main(Gtk.Window):
             self.apply_text.set_text('Saving tree state...')
             return
 
-        self.apply_text.set_text(self.jobs[progress['job']]['path'])
         iter = self.tree.get_model().iter_nth_child(None, progress['job'])
         if progress['state'] == 'starting':
             state = '0%'

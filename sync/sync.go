@@ -33,6 +33,7 @@ package sync
 
 import (
 	"errors"
+	gosync "sync"
 
 	"github.com/aykevl/dtsync/dtdiff"
 	"github.com/aykevl/dtsync/tree"
@@ -48,6 +49,7 @@ var (
 // Result is returned by Scan on success. It contains the scan jobs that can
 // then be applied.
 type Result struct {
+	lock       gosync.Mutex
 	rs         *dtdiff.ReplicaSet
 	fs1        tree.Tree
 	fs2        tree.Tree
