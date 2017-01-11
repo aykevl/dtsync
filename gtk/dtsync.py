@@ -110,6 +110,9 @@ class Main(Gtk.Window):
         self.btnRight.connect('clicked', self.on_right)
         toolbar.pack_start(self.btnRight, False, False, 0)
 
+        rootsbox = Gtk.Label('Dir 1: %s\nDir 2: %s' % (self.root1, self.root2))
+        toolbar.pack_end(rootsbox, False, False, 0)
+
         self.store = Gtk.ListStore(int, str, str, str, str, str, str)
 
         scrolled_tree = Gtk.ScrolledWindow()
