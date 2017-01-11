@@ -310,7 +310,7 @@ type UpdateStats struct {
 
 // Update replaces this file with the contents and modtime of the other file.
 // It is very similar to Copy.
-func Update(this, other Tree, source, target FileInfo) (FileInfo, FileInfo, UpdateStats, error) {
+func Update(this, other Tree, source, target FileInfo, progress chan int64) (FileInfo, FileInfo, UpdateStats, error) {
 	stats := UpdateStats{}
 
 	thisFileTree, ok := this.(FileTree)
@@ -352,7 +352,7 @@ func Update(this, other Tree, source, target FileInfo) (FileInfo, FileInfo, Upda
 			}
 			defer deltaReader.Close()
 
-			stats.ToTarget, err = io.Copy(deltaWriter, deltaReader)
+			stats.ToTarget, err = io.Copy(deltaWriter, &sendProgress{deltaReader, progress})
 			if err != nil {
 				return nil, nil, stats, err
 			}
@@ -392,7 +392,7 @@ func Update(this, other Tree, source, target FileInfo) (FileInfo, FileInfo, Upda
 			}
 			defer patchJob.Close()
 
-			info, parentInfo, err := CopyFile(copier, patchJob, source, nil)
+			info, parentInfo, err := CopyFile(copier, patchJob, source, progress)
 			return info, parentInfo, stats, err
 
 		} else if targetRemote {
@@ -418,7 +418,7 @@ func Update(this, other Tree, source, target FileInfo) (FileInfo, FileInfo, Upda
 				return nil, nil, stats, err
 			}
 
-			deltaJob, err := librsync.NewDeltaGen(sig, sourceFile)
+			deltaJob, err := librsync.NewDeltaGen(sig, &sendProgress{sourceFile, progress})
 			if err != nil {
 				return nil, nil, stats, err
 			}
@@ -446,7 +446,7 @@ func Update(this, other Tree, source, target FileInfo) (FileInfo, FileInfo, Upda
 			}
 			defer outf.Cancel()
 
-			info, parentInfo, err := CopyFile(outf, &countReader{inf, &stats.ToTarget}, source, nil)
+			info, parentInfo, err := CopyFile(outf, &countReader{inf, &stats.ToTarget}, source, progress)
 			return info, parentInfo, stats, err
 		}
 
@@ -519,6 +519,19 @@ type countReader struct {
 func (c *countReader) Read(b []byte) (int, error) {
 	n, err := c.r.Read(b)
 	*c.n += int64(n)
+	return n, err
+}
+
+type sendProgress struct {
+	r io.Reader
+	p chan int64
+}
+
+func (s *sendProgress) Read(b []byte) (int, error) {
+	n, err := s.r.Read(b)
+	if s.p != nil {
+		s.p <- int64(n)
+	}
 	return n, err
 }
 

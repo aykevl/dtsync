@@ -272,7 +272,7 @@ func runMsgpack(root1, root2 string) {
 
 				jobCostTotal := item.job.Cost()
 				var jobCostDone int64
-				progressChan := make(chan int64)
+				progressChan := make(chan int64, 2)
 				progressExit := make(chan struct{})
 				go func() {
 					// Progress indication is inexact. It may not give the exact

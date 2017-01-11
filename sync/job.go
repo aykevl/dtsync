@@ -233,7 +233,7 @@ func (j *Job) Apply(progress chan int64) error {
 			return err
 		}
 	case ACTION_UPDATE:
-		info, parentInfo, _, err := tree.Update(fs1, fs2, status1, status2)
+		info, parentInfo, _, err := tree.Update(fs1, fs2, status1, status2, progress)
 		if err != nil {
 			if tree.IsChanged(err) {
 				status1.UpdateHash(tree.Hash{}, nil)
