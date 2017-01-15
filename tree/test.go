@@ -268,7 +268,7 @@ func TreeTest(t Tester, fs1, fs2 TestTree) {
 	}
 	err = f.Close()
 	if err != nil {
-		t.Errorf("CopySource Close() error:", err)
+		t.Error("CopySource Close() error:", err)
 	}
 
 	info2, _, _, err = Update(fs1, fs2, info1, info2, nil)
