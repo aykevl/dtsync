@@ -58,8 +58,34 @@ func isLoop(err error) bool {
 	if !ok {
 		return false
 	}
-	if pathError.Err == syscall.ELOOP {
+	if pathError.Err == syscall.ELOOP || pathError.Err == unix.ELOOP {
 		return true
 	}
 	return true
+}
+
+// getInode returns the inode field if available on the current system. The 2nd
+// return value indicates success.
+func getInode(st os.FileInfo) (uint64, bool) {
+	switch sys := st.Sys().(type) {
+	case *syscall.Stat_t:
+		return sys.Ino, true
+	case *unix.Stat_t:
+		return sys.Ino, true
+	default:
+		return 0, false
+	}
+}
+
+// getDevNumber returns the st_dev field of the inode if available on the
+// current system. The 2nd return value indicates success.
+func getDevNumber(st os.FileInfo) (uint64, bool) {
+	switch sys := st.Sys().(type) {
+	case *syscall.Stat_t:
+		return sys.Dev, true
+	case *unix.Stat_t:
+		return sys.Dev, true
+	default:
+		return 0, false
+	}
 }

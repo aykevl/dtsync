@@ -41,19 +41,19 @@ Identity: first
 Generation: 2
 Knowledge: second:1
 Hash: blake2b-256
-Root-Options: hasmode=777
+Root-Options: hasmode=777,fs=1
 Option-Test: abc
 
-path	fingerprint	mode	hash	revision	options
-conflict.txt	f/2016-02-14T19:10:10.327687803Z/0	644		0:2	
-dir	d/2016-02-15T19:17:51.35414374Z	755		0:1	
-dir/file.txt	f/2016-02-15T19:18:18.290458876Z/0	644		0:1	
-file1.txt	f/2013-01-03T19:04:31.721713001Z/0	644	NUKtf9FUAgogL4_fgiXMrK4MsFbBBzzxSTUIBq5Y5Nk	0:1	
-file2.html	f/2012-12-19T20:25:21.119862001Z/0	644		0:2	
-file3.jpeg	f/2012-12-18T20:25:21.099852001Z/0	644		1:1	
-link	l/2016-04-19T17:36:57.980486709Z	777	@file1.txt	0:1	
-new.txt	f/2016-02-14T16:30:26.719348761Z/0	664		0:2	
-removed.txt	f/2016-02-14T16:30:26.819348761Z/0	664		0:2	removed=2016-02-14T16:30:28Z
+path	fingerprint	id	mode	hash	revision	options
+conflict.txt	f/2016-02-14T19:10:10.327687803Z/0		644		0:2	
+dir	d/2016-02-15T19:17:51.35414374Z		755		0:1	
+dir/file.txt	f/2016-02-15T19:18:18.290458876Z/0		644		0:1	
+file1.txt	f/2013-01-03T19:04:31.721713001Z/0		644	NUKtf9FUAgogL4_fgiXMrK4MsFbBBzzxSTUIBq5Y5Nk	0:1	
+file2.html	f/2012-12-19T20:25:21.119862001Z/0		644		0:2	
+file3.jpeg	f/2012-12-18T20:25:21.099852001Z/0		644		1:1	
+link	l/2016-04-19T17:36:57.980486709Z		777	@file1.txt	0:1	
+new.txt	f/2016-02-14T16:30:26.719348761Z/0		664		0:2	
+removed.txt	f/2016-02-14T16:30:26.819348761Z/0		664		0:2	removed=2016-02-14T16:30:28Z
 `
 
 const status2 = `Magic: dtsync-status-file
@@ -64,15 +64,15 @@ Identity: second
 Generation: 5
 Knowledge: first:1,other:0
 Hash: blake2b-256
-Root-Options: hasmode=757
+Root-Options: hasmode=757,fs=1
 
-path	fingerprint	mode	hash	revision	options
-conflict.txt	f/2016-02-14T20:10:10.327687803Z/0	644		0:3	
-dir	d/2016-02-15T19:17:51.35414374Z	755		0:1	
-dir/file.txt	f/2016-02-15T19:18:18.290458876Z/0	644		0:1	
-file1.txt	f/2013-01-03T19:04:31.721713001Z/0	644	NUKtf9FUAgogL4_fgiXMrK4MsFbBBzzxSTUIBq5Y5Nk	1:1	
-file2.html	f/2012-12-18T20:25:21.119862001Z/0	644		1:1	
-file3.jpeg	f/2012-12-19T20:25:21.099852001Z/0	664		0:2	
+path	fingerprint	id	mode	hash	revision	options
+conflict.txt	f/2016-02-14T20:10:10.327687803Z/0		644		0:3	
+dir	d/2016-02-15T19:17:51.35414374Z		755		0:1	
+dir/file.txt	f/2016-02-15T19:18:18.290458876Z/0		644		0:1	
+file1.txt	f/2013-01-03T19:04:31.721713001Z/0	15/1	644	NUKtf9FUAgogL4_fgiXMrK4MsFbBBzzxSTUIBq5Y5Nk	1:1	
+file2.html	f/2012-12-18T20:25:21.119862001Z/0	18/1	644		1:1	
+file3.jpeg	f/2012-12-19T20:25:21.099852001Z/0	20/2	664		0:2	
 `
 
 func TestReplica(t *testing.T) {

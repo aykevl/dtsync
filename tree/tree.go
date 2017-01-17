@@ -238,6 +238,10 @@ type Entry interface {
 	// Size returns the filesize for regular files. For others, it's
 	// implementation-dependent.
 	Size() int64
+	// Id returns a unique identification and the filesystem for this file. If
+	// files can't be uniquely identified, return nil. If the id is non-nil, the
+	// filesystem must be non-nil as well.
+	Id() (id *FileId, fs *LocalFilesystem)
 	// Hash calculates the blake2b hash of the file and returns it.
 	Hash() (Hash, error)
 	// Info returns a FileInfo without a hash from this Entry.
@@ -252,6 +256,73 @@ type Entry interface {
 	// Return a list of children, in alphabetic order.
 	// Returns an error when this is not a directory.
 	List(ListOptions) ([]Entry, error)
+}
+
+type LocalFilesystem struct {
+	Type     string
+	DeviceId uint64
+}
+
+type Filesystem int64
+
+// FileId has information for unique identification of a file within a
+// filesystem. Note: duplicates are possible across filesystems.
+type FileId struct {
+	inode      uint64
+	generation uint64
+}
+
+func NewFileId(inode, generation uint64) *FileId {
+	return &FileId{
+		inode:      inode,
+		generation: generation,
+	}
+}
+
+// ParseFileId returns a parsed FileId, formatted like FileId.Format().
+func ParseFileId(s string) (*FileId, error) {
+	parts := strings.Split(s, "/")
+	if len(parts) != 2 {
+		return nil, ErrInvalidFileId
+	}
+	inode, err := strconv.ParseUint(parts[0], 10, 64)
+	if err != nil {
+		return nil, err
+	}
+	generation, err := strconv.ParseUint(parts[1], 10, 64)
+	if err != nil {
+		return nil, err
+	}
+	return &FileId{inode, generation}, nil
+}
+
+// Format returns a textual serialization of this FileId, which can be parsed by
+// ParseFileId().
+func (id *FileId) Format() string {
+	if id == nil {
+		return ""
+	}
+	return strconv.FormatUint(id.inode, 10) + "/" + strconv.FormatUint(id.generation, 10)
+}
+
+// Inode returns the inode number of this file ID.
+func (id *FileId) Inode() uint64 {
+	return id.inode
+}
+
+// Generation returns the generation number (same as the generation number in
+// NFS).
+func (id *FileId) Generation() uint64 {
+	return id.generation
+}
+
+// Equal returns true if and only if both IDs are the same (same inode and
+// generation number). They can both be nil (which will return false).
+func (id *FileId) Equal(id2 *FileId) bool {
+	if id == nil || id2 == nil {
+		return false
+	}
+	return id.inode == id2.inode && id.generation == id2.generation
 }
 
 // Copy copies the object indicated by the source to the target in the other
@@ -555,6 +626,8 @@ type FileInfo interface {
 	// Size returns the filesize for regular files. For others, it's
 	// implementation-dependent.
 	Size() int64
+	// Id returns the inode number and generation, if it is available.
+	Id() *FileId
 	// Hash returns the blake2b hash of the file, or nil if no hash is known
 	// (e.g. for directories).
 	Hash() Hash
@@ -567,10 +640,11 @@ type FileInfoStruct struct {
 	hasMode  Mode
 	modTime  time.Time
 	size     int64
+	id       *FileId
 	hash     Hash
 }
 
-func NewFileInfo(path []string, fileType Type, mode Mode, hasMode Mode, modTime time.Time, size int64, hash Hash) FileInfo {
+func NewFileInfo(path []string, fileType Type, mode Mode, hasMode Mode, modTime time.Time, size int64, id *FileId, hash Hash) FileInfo {
 	return &FileInfoStruct{
 		path:     path,
 		fileType: fileType,
@@ -578,6 +652,7 @@ func NewFileInfo(path []string, fileType Type, mode Mode, hasMode Mode, modTime 
 		hasMode:  hasMode,
 		modTime:  modTime,
 		size:     size,
+		id:       id,
 		hash:     hash,
 	}
 }
@@ -591,6 +666,10 @@ func cloneFileInfo(orig FileInfo) *FileInfoStruct {
 		modTime:  orig.ModTime(),
 		size:     orig.Size(),
 		hash:     Hash{Type: orig.Hash().Type},
+	}
+	id := orig.Id()
+	if id != nil {
+		info.id = &FileId{id.inode, id.generation}
 	}
 	if !orig.Hash().IsZero() {
 		info.hash.Data = make([]byte, len(orig.Hash().Data))
@@ -632,6 +711,10 @@ func (fi *FileInfoStruct) Mode() Mode {
 
 func (fi *FileInfoStruct) HasMode() Mode {
 	return fi.hasMode
+}
+
+func (fi *FileInfoStruct) Id() *FileId {
+	return fi.id
 }
 
 func (fi *FileInfoStruct) String() string {

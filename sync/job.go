@@ -246,21 +246,21 @@ func (j *Job) Apply(progress chan int64) error {
 			// This should have been checked in the Update() function.
 			panic("hash change wasn't detected")
 		}
-		status2.Update(info, info.Hash(), status1)
-		statusParent2.Update(parentInfo, tree.Hash{}, statusParent1)
+		status2.Update(info, statusParent2.Filesystem(), info.Hash(), status1)
+		statusParent2.Update(parentInfo, statusParent2.Filesystem(), tree.Hash{}, statusParent1)
 	case ACTION_REMOVE:
 		parentInfo, err := fs2.Remove(status2)
 		if err != nil {
 			return err
 		}
 		status2.Remove()
-		statusParent2.Update(parentInfo, tree.Hash{}, statusParent1)
+		statusParent2.Update(parentInfo, statusParent2.Filesystem(), tree.Hash{}, statusParent1)
 	case ACTION_CHMOD:
 		info, err := fs2.Chmod(status2, status1)
 		if err != nil {
 			return err
 		}
-		status2.Update(info, status2.Hash(), status1)
+		status2.Update(info, status2.Filesystem(), status2.Hash(), status1)
 	default:
 		panic("unknown action (must not happen)")
 	}
@@ -302,7 +302,7 @@ func copyFile(fs1, fs2 tree.Tree, status1, statusParent2 *dtdiff.Entry, progress
 		if err != nil {
 			return err
 		}
-		statusParent2.Update(parentInfo, tree.Hash{}, nil)
+		statusParent2.Update(parentInfo, statusParent2.Filesystem(), tree.Hash{}, nil)
 		_, err = statusParent2.Add(info, status1)
 		if err != nil {
 			return err

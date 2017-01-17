@@ -149,20 +149,22 @@ func (p ScanProgress) Ahead() *tree.ScanProgress {
 
 type Replica struct {
 	revision
-	isChanged          bool // true if there was a change in generation (any file added/deleted/updated)
-	isMetaChanged      bool // true if the metadata of any files changed
-	isKnowledgeChanged bool // true if the Knowledge header was updated
-	knowledge          map[string]int
-	rootEntry          *Entry
-	options            textproto.MIMEHeader
-	exclude            []string // paths to exclude
-	include            []string // paths to not exclude
-	follow             []string // paths that should not be treated as symlinks
-	perms              tree.Mode
-	startScan          time.Time
-	scanned            uint64
-	total              uint64
-	progressSent       time.Time
+	isChanged           bool // true if there was a change in generation (any file added/deleted/updated)
+	isMetaChanged       bool // true if the metadata of any files changed
+	isKnowledgeChanged  bool // true if the Knowledge header was updated
+	knowledge           map[string]int
+	rootEntry           *Entry
+	options             textproto.MIMEHeader
+	exclude             []string // paths to exclude
+	include             []string // paths to not exclude
+	follow              []string // paths that should not be treated as symlinks
+	perms               tree.Mode
+	startScan           time.Time
+	scanned             uint64
+	total               uint64
+	progressSent        time.Time
+	deviceIdMap         map[uint64]tree.Filesystem
+	filesystemIdCounter tree.Filesystem
 }
 
 func ScanTree(fs tree.LocalFileTree, recvOptionsChan, sendOptionsChan chan *tree.ScanOptions, progress chan<- *tree.ScanProgress, cancel chan struct{}) (*Replica, error) {
@@ -211,7 +213,8 @@ func LoadReplica(file io.Reader) (*Replica, error) {
 		rootEntry: &Entry{
 			fileType: tree.TYPE_DIRECTORY,
 		},
-		perms: PERMS_DEFAULT,
+		perms:       PERMS_DEFAULT,
+		deviceIdMap: make(map[uint64]tree.Filesystem),
 	}
 	r.rootEntry.replica = r
 
@@ -396,13 +399,14 @@ func (r *Replica) loadText(reader *bufio.Reader) error {
 		TSV_FINGERPRINT
 		TSV_REVISION
 		TSV_MODE
+		TSV_ID
 		TSV_HASH
 		TSV_OPTIONS
 	)
 
 	tsvReader, err := unitsv.NewReader(reader, unitsv.Config{
 		Required: []string{"path", "fingerprint", "revision"},
-		Optional: []string{"mode", "hash", "options"},
+		Optional: []string{"mode", "id", "hash", "options"},
 	})
 	if err != nil {
 		return &ParseError{"could not read TSV header", 0, err}
@@ -466,11 +470,20 @@ func (r *Replica) loadText(reader *bufio.Reader) error {
 			}
 		}
 
+		idString := fields[TSV_ID]
+		var id *tree.FileId
+		if idString != "" {
+			id, err = tree.ParseFileId(idString)
+			if err != nil {
+				return &ParseError{"cannot parse id", row, err}
+			}
+		}
+
 		fingerprint := fields[TSV_FINGERPRINT]
 		path := strings.Split(fields[TSV_PATH], "/")
 
 		// now add this entry
-		child, err := r.rootEntry.addRecursive(path, revision{revReplica, revGeneration}, fingerprint, tree.Mode(mode), hash, fields[TSV_OPTIONS])
+		child, err := r.rootEntry.addRecursive(path, revision{revReplica, revGeneration}, fingerprint, tree.Mode(mode), id, hash, fields[TSV_OPTIONS])
 		if err != nil {
 			return &ParseError{"could not add row", row, err}
 		}
@@ -521,6 +534,19 @@ func (e *Entry) parseOptions(s string) error {
 			return err
 		}
 		e.hasMode = tree.Mode(hasMode)
+	}
+
+	// TODO; duplicate code (see proto.go)
+	if fsString, ok := options["fs"]; ok {
+		_fs, err := strconv.ParseUint(fsString, 10, 64)
+		if err != nil {
+			return err
+		}
+		fs := tree.Filesystem(_fs)
+		if fs > e.replica.filesystemIdCounter {
+			e.replica.filesystemIdCounter = fs
+		}
+		e.fs = fs
 	}
 
 	return nil
@@ -614,7 +640,7 @@ func (r *Replica) serializeText(out io.Writer) error {
 	}
 	writer.WriteByte('\n')
 
-	tsvWriter, err := unitsv.NewWriter(writer, []string{"path", "fingerprint", "mode", "hash", "revision", "options"})
+	tsvWriter, err := unitsv.NewWriter(writer, []string{"path", "fingerprint", "id", "mode", "hash", "revision", "options"})
 	if err != nil {
 		return err
 	}
@@ -670,14 +696,14 @@ func (e *Entry) serializeTextChildren(tsvWriter *unitsv.Writer, peerIndex map[st
 			}
 		}
 
+		idString := child.id.Format()
 		modeString := strconv.FormatUint(uint64(child.mode), 8)
-
 		identity := strconv.Itoa(peerIndex[child.identity])
 		generation := strconv.Itoa(child.generation)
 		revString := identity + ":" + generation
 		options := child.serializeOptions()
 
-		err := tsvWriter.WriteRow([]string{childpath, serializeFingerprint(child), modeString, hash, revString, options})
+		err := tsvWriter.WriteRow([]string{childpath, serializeFingerprint(child), idString, modeString, hash, revString, options})
 		if err != nil {
 			return err
 		}
@@ -697,6 +723,9 @@ func (e *Entry) serializeOptions() string {
 	}
 	if e.isRoot() || e.hasMode != e.parent.hasMode {
 		options = append(options, "hasmode="+strconv.FormatUint(uint64(e.hasMode), 8))
+	}
+	if e.fs > 0 && (e.isRoot() || e.fs != e.parent.fs) {
+		options = append(options, "fs="+strconv.FormatUint(uint64(e.fs), 10))
 	}
 	return strings.Join(options, ",")
 }
@@ -719,6 +748,8 @@ func (r *Replica) scan(fs tree.LocalFileTree, cancel chan struct{}, progress cha
 	r.startScan = time.Now()
 	r.scanned = 0
 	r.progressSent = time.Time{}
+	_, rootFilesystem := fs.Root().Id()
+	r.Root().updateFilesystem(rootFilesystem, false)
 	r.Root().hasMode = fs.Root().Info().HasMode()
 	err := r.scanDir(fs.Root(), r.Root(), cancel, progress)
 	if r.scanned != r.total {
@@ -814,7 +845,8 @@ func (r *Replica) scanDir(dir tree.Entry, statusDir *Entry, cancel chan struct{}
 					return err
 				}
 			}
-			status.Update(info, newHash, nil)
+			_, fs := file.Id()
+			status.Update(info, fs, newHash, nil)
 		}
 
 		if file.Type() == tree.TYPE_DIRECTORY {
@@ -874,4 +906,11 @@ func (r *Replica) addScanOptions(options *tree.ScanOptions) {
 	r.include = append(r.include, options.Include...)
 	r.follow = append(r.follow, options.Follow...)
 	r.perms &= options.Perms
+}
+
+// nextFilesystemId returns the next unknown device ID, which is always bigger
+// than 0 and the biggerst known device ID.
+func (r *Replica) nextFilesystemId() tree.Filesystem {
+	r.filesystemIdCounter++
+	return r.filesystemIdCounter
 }

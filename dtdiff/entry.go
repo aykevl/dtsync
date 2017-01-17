@@ -55,6 +55,8 @@ type Entry struct {
 	modTime  time.Time
 	size     int64
 	mode     tree.Mode
+	fs       tree.Filesystem // 0 if not available
+	id       *tree.FileId    // nil if not available
 	hasMode  tree.Mode
 	hash     tree.Hash
 	children map[string]*Entry
@@ -110,6 +112,21 @@ func (e *Entry) ModTime() time.Time {
 // Size returns the filesize for regular files, or 0.
 func (e *Entry) Size() int64 {
 	return e.size
+}
+
+// Filesystem returns the filesystem ID for this replica (filesystem IDs are
+// unique per replica).
+func (e *Entry) Filesystem() tree.Filesystem {
+	return e.fs
+}
+
+// Id returns an unique identification for this file: a combination of the inode
+// number and the generation number (for NFS). Together with the filesystem ID,
+// this is a unique identification for this replica.
+//
+// Returns a nil value if there is no unique identification available.
+func (e *Entry) Id() *tree.FileId {
+	return e.id
 }
 
 func (e *Entry) isRoot() bool {
@@ -168,7 +185,7 @@ func (e *Entry) Count() (int, int64) {
 }
 
 // Add new entry by recursively finding the parent
-func (e *Entry) addRecursive(path []string, rev revision, fingerprint string, mode tree.Mode, hash tree.Hash, options string) (*Entry, error) {
+func (e *Entry) addRecursive(path []string, rev revision, fingerprint string, mode tree.Mode, id *tree.FileId, hash tree.Hash, options string) (*Entry, error) {
 	if path[0] == "" {
 		return nil, errInvalidPath
 	}
@@ -179,17 +196,17 @@ func (e *Entry) addRecursive(path []string, rev revision, fingerprint string, mo
 			// or: the path has a parent that hasn't yet been scanned
 			return nil, errInvalidPath
 		}
-		return child.addRecursive(path[1:], rev, fingerprint, mode, hash, options)
+		return child.addRecursive(path[1:], rev, fingerprint, mode, id, hash, options)
 	} else {
 		fileInfo, err := parseFingerprint(fingerprint)
 		if err != nil {
 			return nil, err
 		}
-		return e.addChild(path[0], rev, fileInfo, mode, hash, options)
+		return e.addChild(path[0], rev, fileInfo, mode, id, hash, options)
 	}
 }
 
-func (e *Entry) addChild(name string, rev revision, fileInfo fingerprintInfo, mode tree.Mode, hash tree.Hash, options string) (*Entry, error) {
+func (e *Entry) addChild(name string, rev revision, fileInfo fingerprintInfo, mode tree.Mode, id *tree.FileId, hash tree.Hash, options string) (*Entry, error) {
 	if e.children == nil {
 		e.children = make(map[string]*Entry)
 	} else if e.children[name].exists() {
@@ -204,6 +221,7 @@ func (e *Entry) addChild(name string, rev revision, fileInfo fingerprintInfo, mo
 		size:     fileInfo.size,
 		mode:     mode,
 		hasMode:  e.hasMode,
+		id:       id,
 		hash:     hash,
 		parent:   e,
 		replica:  e.replica,
@@ -213,6 +231,9 @@ func (e *Entry) addChild(name string, rev revision, fileInfo fingerprintInfo, mo
 		if err != nil {
 			return nil, &ParseError{"could not parse options for " + strings.Join(child.RelativePath(), "/"), 0, err}
 		}
+	}
+	if child.fs == 0 && !child.isRoot() {
+		child.fs = e.fs
 	}
 	if !child.isRemoved() {
 		e.replica.total++
@@ -346,12 +367,14 @@ func (e *Entry) add(info tree.FileInfo, rev revision) (*Entry, error) {
 		// Maybe not necessary, but just to be safe...
 		fileInfo.size = 0
 	}
-	return e.addChild(info.Name(), rev, fileInfo, info.Mode(), info.Hash(), "")
+	return e.addChild(info.Name(), rev, fileInfo, info.Mode(), info.Id(), info.Hash(), "")
 }
 
 // Update updates the revision if the file was changed. The file is not changed
 // if the fingerprint but not the hash changed.
-func (e *Entry) Update(info tree.FileInfo, hash tree.Hash, source *Entry) {
+// Note: the fs argument must be one of *tree.LocalFilesystem or
+// tree.Filesystem.
+func (e *Entry) Update(info tree.FileInfo, fs interface{}, hash tree.Hash, source *Entry) {
 	e.removed = time.Time{}
 
 	if !tree.MatchFingerprint(e, info) {
@@ -401,7 +424,58 @@ func (e *Entry) Update(info tree.FileInfo, hash tree.Hash, source *Entry) {
 		}
 	}
 
+	id := info.Id()
+	if !e.id.Equal(id) && (id != nil || e.id != nil) {
+		// Equal() returns false when both are nil, but that doesn't mean
+		// something has changed.
+		e.id = id
+		e.replica.markChanged()
+	}
+
+	e.updateFilesystem(fs, true)
 	e.UpdateHash(hash, source)
+}
+
+// updateFilesystem sets the correct filesystem ID based on either
+// *tree.LocalFilesystem or tree.Filesystem.
+func (e *Entry) updateFilesystem(fs interface{}, markChanged bool) {
+	changed := false
+	switch fs := fs.(type) {
+	case *tree.LocalFilesystem:
+		if fs != nil {
+			if fs2, ok := e.replica.deviceIdMap[fs.DeviceId]; !ok {
+				if e.fs == 0 {
+					// Add new entry to deviceId map
+					e.fs = e.replica.nextFilesystemId()
+					e.replica.deviceIdMap[fs.DeviceId] = e.fs
+				} else {
+					// Update deviceId map
+					e.replica.deviceIdMap[fs.DeviceId] = e.fs
+				}
+				changed = true
+			} else {
+				if e.fs != fs2 {
+					e.fs = fs2
+					changed = true
+				}
+			}
+		} else { // fs == nil
+			if e.fs > 0 {
+				e.fs = 0
+				changed = true
+			}
+		}
+	case tree.Filesystem:
+		if fs != e.fs {
+			e.fs = fs
+			changed = true
+		}
+	default:
+		panic("invalid fs argument")
+	}
+	if changed && markChanged {
+		e.replica.markChanged()
+	}
 }
 
 // UpdateHash sets the new hash from the parameter, marking this file as changed

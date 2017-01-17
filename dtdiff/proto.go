@@ -145,6 +145,15 @@ func (e *Entry) loadProto(reader *bufio.Reader, buffer *proto.Buffer, knowledgeK
 		return parseBinError("ProtoEntry message: could not parse", err)
 	}
 
+	// TODO: duplicate code (see replica.go)
+	if m.Fs != nil {
+		fs := tree.Filesystem(*m.Fs)
+		if fs > e.replica.filesystemIdCounter {
+			e.replica.filesystemIdCounter = fs
+		}
+		e.fs = fs
+	}
+
 	if e.isRoot() {
 		if m.HasMode != nil {
 			e.hasMode = tree.Mode(m.GetHasMode())
@@ -175,6 +184,9 @@ func (e *Entry) loadProto(reader *bufio.Reader, buffer *proto.Buffer, knowledgeK
 		}
 		e.hash.Type = tree.HashType(m.GetHashType())
 		e.hash.Data = m.HashData
+		if m.IdInode != nil && m.IdGen != nil {
+			e.id = tree.NewFileId(*m.IdInode, *m.IdGen)
+		}
 		if m.Removed != nil {
 			e.removed = time.Unix(*m.Removed, 0)
 		}
@@ -275,6 +287,10 @@ func (r *Replica) serializeProto(out io.Writer) error {
 func (e *Entry) serializeProto(writer *bufio.Writer, buffer *proto.Buffer, knowledgeMap map[string]int) error {
 	m := &ProtoEntry{}
 
+	if e.fs > 0 && (e.isRoot() || e.fs != e.parent.fs) {
+		m.Fs = proto.Uint64(uint64(e.fs))
+	}
+
 	if e.isRoot() {
 		if e.hasMode != 0 {
 			m.HasMode = proto.Uint32(uint32(e.hasMode))
@@ -300,6 +316,10 @@ func (e *Entry) serializeProto(writer *bufio.Writer, buffer *proto.Buffer, knowl
 		m.HashData = e.hash.Data
 		if !e.removed.IsZero() {
 			m.Removed = proto.Int64(e.removed.Unix())
+		}
+		if e.id != nil {
+			m.IdInode = proto.Uint64(e.id.Inode())
+			m.IdGen = proto.Uint64(e.id.Generation())
 		}
 	}
 

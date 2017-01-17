@@ -40,6 +40,7 @@ import (
 	"time"
 
 	"github.com/aykevl/dtsync/tree"
+	"golang.org/x/sys/unix"
 )
 
 // A prefix and suffix for files that are being copied.
@@ -51,10 +52,11 @@ const (
 // Entry is one file or directory in the filesystem. It additionally contains
 // it's name, parent, root, and stat() result.
 type Entry struct {
-	root     *Tree
-	path     []string
-	st       os.FileInfo
-	notFound bool
+	root       *Tree
+	path       []string
+	st         os.FileInfo
+	notFound   bool
+	generation *uint64 // if non-nil: the generation field as used in NFS
 }
 
 // String returns a string representation of this file, for debugging.
@@ -164,6 +166,25 @@ func (e *Entry) Size() int64 {
 	return e.st.Size()
 }
 
+// Id returns the unique file ID and local filesystem information, if the
+// underlying filesystem supports it.
+func (e *Entry) Id() (*tree.FileId, *tree.LocalFilesystem) {
+	devNumber, ok := getDevNumber(e.st)
+	if !ok {
+		return nil, nil
+	}
+	mount := e.root.fsInfo.GetReal(e.realPath(), e.st)
+	fs := &tree.LocalFilesystem{
+		Type:     mount.Type,
+		DeviceId: devNumber,
+	}
+	inode, ok := getInode(e.st)
+	if !ok || !mount.Filesystem().Inode || e.generation == nil {
+		return nil, fs
+	}
+	return tree.NewFileId(inode, *e.generation), fs
+}
+
 // Hash returns the blake2b hash of this file.
 func (e *Entry) Hash() (tree.Hash, error) {
 	switch e.Type() {
@@ -194,9 +215,10 @@ func (e *Entry) Hash() (tree.Hash, error) {
 // it.
 func (e *Entry) makeInfo(hash tree.Hash) tree.FileInfo {
 	if e.notFound {
-		return tree.NewFileInfo(e.RelativePath(), e.Type(), 0, 0, time.Time{}, 0, tree.Hash{})
+		return tree.NewFileInfo(e.RelativePath(), e.Type(), 0, 0, time.Time{}, 0, nil, tree.Hash{})
 	}
-	return tree.NewFileInfo(e.RelativePath(), e.Type(), e.Mode(), e.HasMode(), e.ModTime(), e.Size(), hash)
+	id, _ := e.Id()
+	return tree.NewFileInfo(e.RelativePath(), e.Type(), e.Mode(), e.HasMode(), e.ModTime(), e.Size(), id, hash)
 }
 
 // FullInfo returns a tree.FileInfo with hash, or an error if the hash couldn't
@@ -222,7 +244,7 @@ func (e *Entry) Tree() tree.Tree {
 
 // List returns a directory listing, sorted by name.
 func (e *Entry) List(options tree.ListOptions) ([]tree.Entry, error) {
-	dirfp, err := os.Open(e.fullPath())
+	dirfp, err := os.OpenFile(e.fullPath(), unix.O_RDONLY|unix.O_DIRECTORY, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -242,19 +264,15 @@ func (e *Entry) List(options tree.ListOptions) ([]tree.Entry, error) {
 			root: e.root,
 			path: e.childPath(name),
 		}
-		// TODO: use fstatat with AT_SYMLINK_NOFOLLOW (set or not set)
-		if options.Follow != nil && options.Follow(entry.RelativePath()) {
-			entry.st, err = os.Stat(entry.fullPath())
-			if os.IsNotExist(err) || isLoop(err) {
-				err = nil
-				entry = &Entry{
-					root:     e.root,
-					path:     e.childPath(name),
-					notFound: true,
-				}
+
+		entry.st, err = entry.readStat(dirfp, options.Follow != nil && options.Follow(entry.RelativePath()))
+		if os.IsNotExist(err) || isLoop(err) {
+			err = nil
+			entry = &Entry{
+				root:     e.root,
+				path:     e.childPath(name),
+				notFound: true,
 			}
-		} else {
-			entry.st, err = os.Lstat(entry.fullPath())
 		}
 		if err != nil {
 			return nil, err

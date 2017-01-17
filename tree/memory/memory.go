@@ -36,6 +36,7 @@ import (
 	"io"
 	"path"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/aykevl/dtsync/tree"
@@ -47,9 +48,13 @@ const (
 	DEFAULT_HAS_MODE = 0777
 )
 
+// Call nextUniqueId() to get one.
+var uniqueId = uint64(1)
+
 // Entry is one file or directory.
 type Entry struct {
 	fileType tree.Type
+	inode    uint64
 	mode     tree.Mode
 	hasMode  tree.Mode
 	modTime  time.Time
@@ -63,6 +68,7 @@ type Entry struct {
 func NewRoot() *Entry {
 	return &Entry{
 		fileType: tree.TYPE_DIRECTORY,
+		inode:    nextUniqueId(),
 		mode:     DEFAULT_DIR_MODE,
 		hasMode:  DEFAULT_HAS_MODE,
 		modTime:  time.Now(),
@@ -158,6 +164,18 @@ func (e *Entry) ModTime() time.Time {
 	return e.modTime
 }
 
+func (e *Entry) id() *tree.FileId {
+	return tree.NewFileId(e.inode, 1)
+}
+
+// Id returns the file ID and dummy filesystem information.
+func (e *Entry) Id() (*tree.FileId, *tree.LocalFilesystem) {
+	return e.id(), &tree.LocalFilesystem{
+		Type:     "dtsync.memory",
+		DeviceId: 1,
+	}
+}
+
 // Hash returns the blake2b hash of this file.
 func (e *Entry) Hash() (tree.Hash, error) {
 	return e.hash(), nil
@@ -182,7 +200,7 @@ func (e *Entry) hash() tree.Hash {
 }
 
 func (e *Entry) makeInfo(hash tree.Hash) tree.FileInfo {
-	return tree.NewFileInfo(e.RelativePath(), e.fileType, e.mode, 0777, e.modTime, e.Size(), hash)
+	return tree.NewFileInfo(e.RelativePath(), e.fileType, e.mode, 0777, e.modTime, e.Size(), e.id(), hash)
 }
 
 // Info returns a FileInfo object without a hash.
@@ -364,6 +382,7 @@ func (e *Entry) PutFile(name string) (tree.Copier, error) {
 		return newFileCopier(func(buf *bytes.Buffer) (tree.FileInfo, tree.FileInfo, error) {
 			child := &Entry{
 				fileType: tree.TYPE_REGULAR,
+				inode:    nextUniqueId(),
 				mode:     DEFAULT_MODE & e.hasMode,
 				hasMode:  e.hasMode,
 				modTime:  time.Now(),
@@ -385,6 +404,7 @@ func (e *Entry) CreateDir(name string, parentInfo, sourceInfo tree.FileInfo) (tr
 	}
 	child := &Entry{
 		fileType: tree.TYPE_DIRECTORY,
+		inode:    nextUniqueId(),
 		mode:     sourceInfo.Mode() & parent.hasMode,
 		hasMode:  parent.hasMode,
 		modTime:  time.Now(),
@@ -418,6 +438,7 @@ func (e *Entry) CreateFile(name string, parent, source tree.FileInfo) (tree.Copi
 
 	child := &Entry{
 		fileType: tree.TYPE_REGULAR,
+		inode:    nextUniqueId(),
 		mode:     source.Mode() & p.hasMode,
 		hasMode:  p.hasMode,
 		modTime:  modTime,
@@ -513,6 +534,7 @@ func (e *Entry) CreateSymlink(name string, parentInfo, sourceInfo tree.FileInfo,
 
 	child := &Entry{
 		fileType: tree.TYPE_SYMLINK,
+		inode:    nextUniqueId(),
 		mode:     sourceInfo.Mode() & parent.hasMode, // not relevant on Unix filesystems
 		hasMode:  parent.hasMode,
 		name:     name,
@@ -597,6 +619,7 @@ func (e *Entry) PutFileTest(path []string, contents []byte) (tree.FileInfo, erro
 	} else {
 		child = &Entry{
 			fileType: tree.TYPE_REGULAR,
+			inode:    nextUniqueId(),
 			mode:     DEFAULT_MODE & parent.hasMode,
 			hasMode:  parent.hasMode,
 			modTime:  time.Now(),
@@ -610,4 +633,10 @@ func (e *Entry) PutFileTest(path []string, contents []byte) (tree.FileInfo, erro
 		}
 	}
 	return child.fullInfo(), nil
+}
+
+// Return the next unique number, atomically (may be called from multiple
+// goroutines at the same time).
+func nextUniqueId() uint64 {
+	return atomic.AddUint64(&uniqueId, 1)
 }
