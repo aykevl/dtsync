@@ -31,70 +31,23 @@ package file
 import (
 	"os"
 	"time"
-	"unsafe"
 
 	"golang.org/x/sys/unix"
 )
-
-// Magic!
-// This value is normally stored in <linux/fs.h>:
-//
-//     #define FS_IOC_GETVERSION     _IOR('v', 1, long)
-const FS_IOC_GETVERSION = 0x80087601
-
-// readGeneration does an IOCTL to read the current i_generation of the inode.
-// Not implemented for all filesystems on Linux.
-//
-// See:
-// http://stackoverflow.com/questions/20052912/how-do-i-get-the-generation-number-of-an-inode-in-linux/28006048#28006048
-func readGeneration(fd uintptr) (uint64, error) {
-	// I *hope* this is the right type, but I'm not sure. It's not like this is
-	// a well-defined interface...
-	// Looking at the kernel source, the value is copied from i_generation (a
-	// member of `struct inode`), which is a 32-bit unsigned integer. I checked
-	// ext4 and btrfs. Btrfs stores a 64-bit value on disk, but only exposes a
-	// 32-bit value to userspace.
-	// At the same time, it's defined in <linux/fs.h> as a long, which is
-	// usually a 32-bit signed integer, but can also be larger.
-	// Playing it safe here with an unsigned 64-bit integer. I don't expect the
-	// generation number to ever go below zero (just like an inode number), and
-	// on little-endian hardware it should be safe to provide a bigger number.
-	var generation uint64
-
-	// Here the magic happens!
-	_, _, errno := unix.Syscall(unix.SYS_IOCTL, fd, FS_IOC_GETVERSION, uintptr(unsafe.Pointer(&generation)))
-
-	var err error
-	if errno != 0 {
-		err = os.NewSyscallError("ioctl", errno)
-	}
-
-	return generation, err
-}
 
 func (e *Entry) readStat(dir *os.File, follow bool) (os.FileInfo, error) {
 	name := e.path[len(e.path)-1]
 	var fd int
 	var err error
 	if follow {
-		fd, err = unix.Openat(int(dir.Fd()), name, unix.O_PATH, 0)
+		fd, err = unix.Openat(int(dir.Fd()), name, unix.O_PATH|unix.O_RDONLY|unix.O_NOATIME, 0)
 	} else {
-		fd, err = unix.Openat(int(dir.Fd()), name, unix.O_PATH|unix.O_NOFOLLOW, 0)
+		fd, err = unix.Openat(int(dir.Fd()), name, unix.O_PATH|unix.O_RDONLY|unix.O_NOATIME|unix.O_NOFOLLOW, 0)
 	}
 	if err != nil {
 		return nil, &os.PathError{"openat", e.fullPath(), err}
 	}
 	defer unix.Close(fd)
-
-	generation, err := readGeneration(uintptr(fd))
-	if err.(*os.SyscallError).Err == unix.EBADF {
-		// Wrong FS type? It appears tmpfs hasn't implemented it.
-	} else if err != nil {
-		return nil, &os.PathError{"readGeneration", e.fullPath(), err}
-	} else {
-		// valid generation number found
-		e.generation = &generation
-	}
 
 	var sys unix.Stat_t
 	err = unix.Fstat(fd, &sys)

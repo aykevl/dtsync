@@ -24,7 +24,6 @@ message ProtoEntry {
 	optional uint32 hashType   =  9; // see tree.HASH_* constants
 	optional bytes  hashData   = 10; // e.g. 32-byte blake2b-256 hash (defined in ProtoReplica.hash)
 	optional sint64 removed    = 11; // removed time, unset if not removed
-	optional uint64 idInode    = 12;
-	optional uint64 idGen      = 13;
+	optional uint64 inode      = 12;
 	optional uint64 fs         = 16; // if set, a filesystem boundary
 }

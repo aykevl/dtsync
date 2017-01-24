@@ -52,11 +52,10 @@ const (
 // Entry is one file or directory in the filesystem. It additionally contains
 // it's name, parent, root, and stat() result.
 type Entry struct {
-	root       *Tree
-	path       []string
-	st         os.FileInfo
-	notFound   bool
-	generation *uint64 // if non-nil: the generation field as used in NFS
+	root     *Tree
+	path     []string
+	st       os.FileInfo
+	notFound bool
 }
 
 // String returns a string representation of this file, for debugging.
@@ -166,12 +165,12 @@ func (e *Entry) Size() int64 {
 	return e.st.Size()
 }
 
-// Id returns the unique file ID and local filesystem information, if the
-// underlying filesystem supports it.
-func (e *Entry) Id() (*tree.FileId, *tree.LocalFilesystem) {
+// Id returns the inode and local filesystem information, if the underlying
+// filesystem supports it.
+func (e *Entry) Id() (uint64, *tree.LocalFilesystem) {
 	devNumber, ok := getDevNumber(e.st)
 	if !ok {
-		return nil, nil
+		return 0, nil
 	}
 	mount := e.root.fsInfo.GetReal(e.realPath(), e.st)
 	fs := &tree.LocalFilesystem{
@@ -179,10 +178,10 @@ func (e *Entry) Id() (*tree.FileId, *tree.LocalFilesystem) {
 		DeviceId: devNumber,
 	}
 	inode, ok := getInode(e.st)
-	if !ok || !mount.Filesystem().Inode || e.generation == nil {
-		return nil, fs
+	if !ok || !mount.Filesystem().Inode {
+		return 0, fs
 	}
-	return tree.NewFileId(inode, *e.generation), fs
+	return inode, fs
 }
 
 // Hash returns the blake2b hash of this file.
@@ -215,10 +214,10 @@ func (e *Entry) Hash() (tree.Hash, error) {
 // it.
 func (e *Entry) makeInfo(hash tree.Hash) tree.FileInfo {
 	if e.notFound {
-		return tree.NewFileInfo(e.RelativePath(), e.Type(), 0, 0, time.Time{}, 0, nil, tree.Hash{})
+		return tree.NewFileInfo(e.RelativePath(), e.Type(), 0, 0, time.Time{}, 0, 0, tree.Hash{})
 	}
-	id, _ := e.Id()
-	return tree.NewFileInfo(e.RelativePath(), e.Type(), e.Mode(), e.HasMode(), e.ModTime(), e.Size(), id, hash)
+	inode, _ := e.Id()
+	return tree.NewFileInfo(e.RelativePath(), e.Type(), e.Mode(), e.HasMode(), e.ModTime(), e.Size(), inode, hash)
 }
 
 // FullInfo returns a tree.FileInfo with hash, or an error if the hash couldn't

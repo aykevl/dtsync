@@ -164,13 +164,9 @@ func (e *Entry) ModTime() time.Time {
 	return e.modTime
 }
 
-func (e *Entry) id() *tree.FileId {
-	return tree.NewFileId(e.inode, 1)
-}
-
-// Id returns the file ID and dummy filesystem information.
-func (e *Entry) Id() (*tree.FileId, *tree.LocalFilesystem) {
-	return e.id(), &tree.LocalFilesystem{
+// Id returns the inode and dummy filesystem information.
+func (e *Entry) Id() (uint64, *tree.LocalFilesystem) {
+	return e.inode, &tree.LocalFilesystem{
 		Type:     "dtsync.memory",
 		DeviceId: 1,
 	}
@@ -200,7 +196,7 @@ func (e *Entry) hash() tree.Hash {
 }
 
 func (e *Entry) makeInfo(hash tree.Hash) tree.FileInfo {
-	return tree.NewFileInfo(e.RelativePath(), e.fileType, e.mode, 0777, e.modTime, e.Size(), e.id(), hash)
+	return tree.NewFileInfo(e.RelativePath(), e.fileType, e.mode, 0777, e.modTime, e.Size(), e.inode, hash)
 }
 
 // Info returns a FileInfo object without a hash.

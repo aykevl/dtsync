@@ -185,9 +185,8 @@ func serializeFileInfo(info tree.FileInfo) *FileInfo {
 		modTime := info.ModTime().UnixNano()
 		fileInfo.ModTime = &modTime
 	}
-	if info.Id() != nil {
-		fileInfo.IdInode = proto.Uint64(info.Id().Inode())
-		fileInfo.IdGen = proto.Uint64(info.Id().Generation())
+	if info.Inode() != 0 {
+		fileInfo.Inode = proto.Uint64(info.Inode())
 	}
 	return fileInfo
 }
@@ -209,10 +208,7 @@ func parseFileInfo(info *FileInfo) tree.FileInfo {
 		modTime = time.Unix(0, *info.ModTime)
 	}
 	size := info.GetSize()
-	var id *tree.FileId
-	if info.IdInode != nil && info.IdGen != nil {
-		id = tree.NewFileId(*info.IdInode, *info.IdGen)
-	}
+	id := info.GetInode()
 	return tree.NewFileInfo(info.Path, fileType, mode, hasMode, modTime, size, id, tree.Hash{tree.HashType(info.GetHashType()), info.HashData})
 }
 

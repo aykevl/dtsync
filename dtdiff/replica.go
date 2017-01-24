@@ -399,14 +399,14 @@ func (r *Replica) loadText(reader *bufio.Reader) error {
 		TSV_FINGERPRINT
 		TSV_REVISION
 		TSV_MODE
-		TSV_ID
+		TSV_INODE
 		TSV_HASH
 		TSV_OPTIONS
 	)
 
 	tsvReader, err := unitsv.NewReader(reader, unitsv.Config{
 		Required: []string{"path", "fingerprint", "revision"},
-		Optional: []string{"mode", "id", "hash", "options"},
+		Optional: []string{"mode", "inode", "hash", "options"},
 	})
 	if err != nil {
 		return &ParseError{"could not read TSV header", 0, err}
@@ -470,12 +470,12 @@ func (r *Replica) loadText(reader *bufio.Reader) error {
 			}
 		}
 
-		idString := fields[TSV_ID]
-		var id *tree.FileId
-		if idString != "" {
-			id, err = tree.ParseFileId(idString)
+		inodeString := fields[TSV_INODE]
+		var inode uint64
+		if inodeString != "" {
+			inode, err = strconv.ParseUint(inodeString, 10, 64)
 			if err != nil {
-				return &ParseError{"cannot parse id", row, err}
+				return &ParseError{"cannot parse inode", row, err}
 			}
 		}
 
@@ -483,7 +483,7 @@ func (r *Replica) loadText(reader *bufio.Reader) error {
 		path := strings.Split(fields[TSV_PATH], "/")
 
 		// now add this entry
-		child, err := r.rootEntry.addRecursive(path, revision{revReplica, revGeneration}, fingerprint, tree.Mode(mode), id, hash, fields[TSV_OPTIONS])
+		child, err := r.rootEntry.addRecursive(path, revision{revReplica, revGeneration}, fingerprint, tree.Mode(mode), inode, hash, fields[TSV_OPTIONS])
 		if err != nil {
 			return &ParseError{"could not add row", row, err}
 		}
@@ -640,7 +640,7 @@ func (r *Replica) serializeText(out io.Writer) error {
 	}
 	writer.WriteByte('\n')
 
-	tsvWriter, err := unitsv.NewWriter(writer, []string{"path", "fingerprint", "id", "mode", "hash", "revision", "options"})
+	tsvWriter, err := unitsv.NewWriter(writer, []string{"path", "fingerprint", "inode", "mode", "hash", "revision", "options"})
 	if err != nil {
 		return err
 	}
@@ -696,14 +696,18 @@ func (e *Entry) serializeTextChildren(tsvWriter *unitsv.Writer, peerIndex map[st
 			}
 		}
 
-		idString := child.id.Format()
+		inodeString := ""
+		if child.inode != 0 {
+			inodeString = strconv.FormatUint(child.inode, 10)
+		}
+
 		modeString := strconv.FormatUint(uint64(child.mode), 8)
 		identity := strconv.Itoa(peerIndex[child.identity])
 		generation := strconv.Itoa(child.generation)
 		revString := identity + ":" + generation
 		options := child.serializeOptions()
 
-		err := tsvWriter.WriteRow([]string{childpath, serializeFingerprint(child), idString, modeString, hash, revString, options})
+		err := tsvWriter.WriteRow([]string{childpath, serializeFingerprint(child), inodeString, modeString, hash, revString, options})
 		if err != nil {
 			return err
 		}

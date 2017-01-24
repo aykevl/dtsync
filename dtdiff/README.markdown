@@ -76,7 +76,7 @@ newline, and tab.
 
 The body has a few possible columns. More can be added in the future, but
 unknown columns should be removed by an implementation. The columns are `path`,
-`fingerprint`, `revision`, `hash`, and `options`.
+`fingerprint`, `inode`, `revision`, `hash`, and `options`.
 
 The path elements are separated by forward slashes, even on Windows, for
 consistency.
@@ -87,6 +87,10 @@ permissions field may be added, making it `type/modtime/permissions/size` and
 `type/modtime/permissions`. The `type` field is an `f` for regular files or `d`
 for directores. Other types are added as appropriate. `modtime` is encoded in
 the RFC3339 format with nanoseconds and no timezone
+
+The `inode` column contains the inode for this file, if the underlying
+filesystem supports it. When no inode is available, it is an empty string (or
+zero).
 
 The `revision` column has two values: the replica index (1-indexed in the
 Knowledge header, 0 means this replica) and the generation number. With each

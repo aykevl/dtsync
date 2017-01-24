@@ -59,8 +59,7 @@ message FileInfo {
 	optional sint64   size      = 6;
 	optional uint32   hashType  = 7;
 	optional bytes    hashData  = 8;
-	optional uint64   idInode   = 9;
-	optional uint64   idGen     = 10;
+	optional uint64   inode     = 9;
 }
 
 message ScanOptions {

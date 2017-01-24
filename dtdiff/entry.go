@@ -56,7 +56,7 @@ type Entry struct {
 	size     int64
 	mode     tree.Mode
 	fs       tree.Filesystem // 0 if not available
-	id       *tree.FileId    // nil if not available
+	inode    uint64          // 0 if not available
 	hasMode  tree.Mode
 	hash     tree.Hash
 	children map[string]*Entry
@@ -125,8 +125,8 @@ func (e *Entry) Filesystem() tree.Filesystem {
 // this is a unique identification for this replica.
 //
 // Returns a nil value if there is no unique identification available.
-func (e *Entry) Id() *tree.FileId {
-	return e.id
+func (e *Entry) Inode() uint64 {
+	return e.inode
 }
 
 func (e *Entry) isRoot() bool {
@@ -185,7 +185,7 @@ func (e *Entry) Count() (int, int64) {
 }
 
 // Add new entry by recursively finding the parent
-func (e *Entry) addRecursive(path []string, rev revision, fingerprint string, mode tree.Mode, id *tree.FileId, hash tree.Hash, options string) (*Entry, error) {
+func (e *Entry) addRecursive(path []string, rev revision, fingerprint string, mode tree.Mode, inode uint64, hash tree.Hash, options string) (*Entry, error) {
 	if path[0] == "" {
 		return nil, errInvalidPath
 	}
@@ -196,17 +196,17 @@ func (e *Entry) addRecursive(path []string, rev revision, fingerprint string, mo
 			// or: the path has a parent that hasn't yet been scanned
 			return nil, errInvalidPath
 		}
-		return child.addRecursive(path[1:], rev, fingerprint, mode, id, hash, options)
+		return child.addRecursive(path[1:], rev, fingerprint, mode, inode, hash, options)
 	} else {
 		fileInfo, err := parseFingerprint(fingerprint)
 		if err != nil {
 			return nil, err
 		}
-		return e.addChild(path[0], rev, fileInfo, mode, id, hash, options)
+		return e.addChild(path[0], rev, fileInfo, mode, inode, hash, options)
 	}
 }
 
-func (e *Entry) addChild(name string, rev revision, fileInfo fingerprintInfo, mode tree.Mode, id *tree.FileId, hash tree.Hash, options string) (*Entry, error) {
+func (e *Entry) addChild(name string, rev revision, fileInfo fingerprintInfo, mode tree.Mode, inode uint64, hash tree.Hash, options string) (*Entry, error) {
 	if e.children == nil {
 		e.children = make(map[string]*Entry)
 	} else if e.children[name].exists() {
@@ -221,7 +221,7 @@ func (e *Entry) addChild(name string, rev revision, fileInfo fingerprintInfo, mo
 		size:     fileInfo.size,
 		mode:     mode,
 		hasMode:  e.hasMode,
-		id:       id,
+		inode:    inode,
 		hash:     hash,
 		parent:   e,
 		replica:  e.replica,
@@ -367,7 +367,7 @@ func (e *Entry) add(info tree.FileInfo, rev revision) (*Entry, error) {
 		// Maybe not necessary, but just to be safe...
 		fileInfo.size = 0
 	}
-	return e.addChild(info.Name(), rev, fileInfo, info.Mode(), info.Id(), info.Hash(), "")
+	return e.addChild(info.Name(), rev, fileInfo, info.Mode(), info.Inode(), info.Hash(), "")
 }
 
 // Update updates the revision if the file was changed. The file is not changed
@@ -424,11 +424,9 @@ func (e *Entry) Update(info tree.FileInfo, fs interface{}, hash tree.Hash, sourc
 		}
 	}
 
-	id := info.Id()
-	if !e.id.Equal(id) && (id != nil || e.id != nil) {
-		// Equal() returns false when both are nil, but that doesn't mean
-		// something has changed.
-		e.id = id
+	inode := info.Inode()
+	if e.inode != inode {
+		e.inode = inode
 		e.replica.markChanged()
 	}
 

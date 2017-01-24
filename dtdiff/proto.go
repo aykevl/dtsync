@@ -184,8 +184,8 @@ func (e *Entry) loadProto(reader *bufio.Reader, buffer *proto.Buffer, knowledgeK
 		}
 		e.hash.Type = tree.HashType(m.GetHashType())
 		e.hash.Data = m.HashData
-		if m.IdInode != nil && m.IdGen != nil {
-			e.id = tree.NewFileId(*m.IdInode, *m.IdGen)
+		if m.Inode != nil {
+			e.inode = *m.Inode
 		}
 		if m.Removed != nil {
 			e.removed = time.Unix(*m.Removed, 0)
@@ -317,9 +317,8 @@ func (e *Entry) serializeProto(writer *bufio.Writer, buffer *proto.Buffer, knowl
 		if !e.removed.IsZero() {
 			m.Removed = proto.Int64(e.removed.Unix())
 		}
-		if e.id != nil {
-			m.IdInode = proto.Uint64(e.id.Inode())
-			m.IdGen = proto.Uint64(e.id.Generation())
+		if e.inode != 0 {
+			m.Inode = proto.Uint64(e.inode)
 		}
 	}
 

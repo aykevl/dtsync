@@ -171,7 +171,7 @@ func syncRoots(t *testing.T, scheme1, scheme2 string) {
 		callback func(fs tree.TestTree) error
 	}{
 		{"dir", ACTION_COPY, 2, func(fs tree.TestTree) error {
-			source := tree.NewFileInfo(nil, tree.TYPE_DIRECTORY, 0755, 0777, time.Now(), 0, nil, tree.Hash{})
+			source := tree.NewFileInfo(nil, tree.TYPE_DIRECTORY, 0755, 0777, time.Now(), 0, 0, tree.Hash{})
 			_, err := fs.CreateDir("dir", &tree.FileInfoStruct{}, source)
 			if err != nil {
 				return err
@@ -260,7 +260,7 @@ path	fingerprint	revision
 
 func runPatternTest(t *testing.T, fs1, fs2 tree.TestTree) {
 	for _, fs := range []tree.TestTree{fs1, fs2} {
-		source := tree.NewFileInfo(nil, tree.TYPE_DIRECTORY, 0755, 0777, time.Now(), 0, nil, tree.Hash{})
+		source := tree.NewFileInfo(nil, tree.TYPE_DIRECTORY, 0755, 0777, time.Now(), 0, 0, tree.Hash{})
 		_, err := fs.CreateDir("dir", &tree.FileInfoStruct{}, source)
 		assert(err)
 	}
@@ -389,14 +389,14 @@ func applyTestCase(t *testing.T, fs tree.TestTree, tc testCase) {
 		contents := tc.contents.(string)[2:]
 		switch action {
 		case 'd':
-			parent := tree.NewFileInfo(parts[:len(parts)-1], tree.TYPE_DIRECTORY, 0755, 0777, time.Time{}, 0, nil, tree.Hash{})
-			source := tree.NewFileInfo(nil, tree.TYPE_DIRECTORY, 0755, 0777, time.Now(), 0, nil, tree.Hash{})
+			parent := tree.NewFileInfo(parts[:len(parts)-1], tree.TYPE_DIRECTORY, 0755, 0777, time.Time{}, 0, 0, tree.Hash{})
+			source := tree.NewFileInfo(nil, tree.TYPE_DIRECTORY, 0755, 0777, time.Now(), 0, 0, tree.Hash{})
 			_, err = fs.CreateDir(name, parent, source)
 		case 'f':
 			_, err = fs.PutFileTest(parts, []byte(contents))
 		case 'l':
-			parent := tree.NewFileInfo(parts[:len(parts)-1], tree.TYPE_DIRECTORY, 0755, 0777, time.Time{}, 0, nil, tree.Hash{})
-			source := tree.NewFileInfo(parts, tree.TYPE_SYMLINK, 0777, 0777, time.Now(), 0, nil, tree.Hash{})
+			parent := tree.NewFileInfo(parts[:len(parts)-1], tree.TYPE_DIRECTORY, 0755, 0777, time.Time{}, 0, 0, tree.Hash{})
+			source := tree.NewFileInfo(parts, tree.TYPE_SYMLINK, 0777, 0777, time.Now(), 0, 0, tree.Hash{})
 			_, _, err = fs.CreateSymlink(name, parent, source, contents)
 		default:
 			panic("unknown copy action: " + tc.contents.(string))
@@ -411,7 +411,7 @@ func applyTestCase(t *testing.T, fs tree.TestTree, tc testCase) {
 			var file tree.FileInfo
 			file, err = fs.ReadInfo(strings.Split(tc.file, "/"))
 			assert(err)
-			source := tree.NewFileInfo(parts, tree.TYPE_SYMLINK, 0644, 0777, time.Now(), 0, nil, tree.Hash{})
+			source := tree.NewFileInfo(parts, tree.TYPE_SYMLINK, 0644, 0777, time.Now(), 0, 0, tree.Hash{})
 			_, _, err = fs.UpdateSymlink(file, source, contents)
 		default:
 			panic("unknown update action: " + tc.contents.(string))
@@ -419,7 +419,7 @@ func applyTestCase(t *testing.T, fs tree.TestTree, tc testCase) {
 	case ACTION_CHMOD:
 		var file tree.FileInfo
 		file, err = fs.ReadInfo(strings.Split(tc.file, "/"))
-		source := tree.NewFileInfo(parts, file.Type(), tree.Mode(tc.contents.(int)), 0777, time.Now(), 0, nil, tree.Hash{})
+		source := tree.NewFileInfo(parts, file.Type(), tree.Mode(tc.contents.(int)), 0777, time.Now(), 0, 0, tree.Hash{})
 		assert(err)
 		_, err = fs.Chmod(file, source)
 	case ACTION_REMOVE:
