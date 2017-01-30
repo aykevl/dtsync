@@ -1,5 +1,7 @@
 
-all:
+all: install
+
+install:
 	go install ./dtsync
 
 packages=./tree/memory ./tree/file ./tree/remote ./dtdiff ./sync ./dtsync
