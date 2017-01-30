@@ -1,0 +1,8 @@
+language: go
+
+go:
+  - 1.3 # Debian jessie
+  - 1.7 # Debian stretch
+  - tip
+
+script: make install && make test && make test-race
