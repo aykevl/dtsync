@@ -5,4 +5,20 @@ go:
   - 1.7 # Debian stretch
   - tip
 
+addons:
+  apt:
+    packages:
+    - librsync-dev
+
+install:
+  - go get github.com/aykevl/gocount
+  - go get github.com/aykevl/golibrsync/librsync
+  - go get github.com/aykevl/osfs
+  - go get github.com/aykevl/unitsv
+  - go get github.com/golang/protobuf/proto
+  - go get github.com/minio/blake2b-simd
+  - go get github.com/ugorji/go/codec
+  - go get golang.org/x/sys/unix
+  - go get golang.org/x/crypto/ssh/terminal
+
 script: make install && make test && make test-race
