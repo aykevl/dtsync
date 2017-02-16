@@ -169,14 +169,23 @@ func (e *Entry) countRecursive() uint64 {
 // the file or directory tree (only regular bytes, no directory entries). Can be
 // used for progress indication.
 func (e *Entry) Count() (int, int64) {
+	e.replica.lock.Lock()
+	defer e.replica.lock.Unlock()
+
+	return e.count()
+}
+
+// count is the internal (lock-free/unsafe) implementation of Count()
+func (e *Entry) count() (int, int64) {
 	if e.isRemoved() {
 		return 0, 0
 	}
+
 	count := 1
 	bytes := e.Size()
 	for _, child := range e.children {
 		if !child.isRemoved() {
-			c, b := child.Count()
+			c, b := child.count()
 			count += c
 			bytes += b
 		}
@@ -330,6 +339,9 @@ func (e *Entry) Includes(e2 *Entry) bool {
 }
 
 func (e *Entry) List() []*Entry {
+	e.replica.lock.Lock()
+	defer e.replica.lock.Unlock()
+
 	list := e.rawList()
 
 	// Remove removed children from the list.
@@ -358,6 +370,9 @@ func (e *Entry) rawList() []*Entry {
 
 // Add a new status entry.
 func (e *Entry) Add(info tree.FileInfo, source *Entry) (*Entry, error) {
+	e.replica.lock.Lock()
+	defer e.replica.lock.Unlock()
+
 	return e.add(info, source.revision)
 }
 
@@ -375,6 +390,13 @@ func (e *Entry) add(info tree.FileInfo, rev revision) (*Entry, error) {
 // Note: the fs argument must be one of *tree.LocalFilesystem or
 // tree.Filesystem.
 func (e *Entry) Update(info tree.FileInfo, fs interface{}, hash tree.Hash, source *Entry) {
+	e.replica.lock.Lock()
+	defer e.replica.lock.Unlock()
+
+	e.update(info, fs, hash, source)
+}
+
+func (e *Entry) update(info tree.FileInfo, fs interface{}, hash tree.Hash, source *Entry) {
 	e.removed = time.Time{}
 
 	if !tree.MatchFingerprint(e, info) {
@@ -431,7 +453,7 @@ func (e *Entry) Update(info tree.FileInfo, fs interface{}, hash tree.Hash, sourc
 	}
 
 	e.updateFilesystem(fs, true)
-	e.UpdateHash(hash, source)
+	e.updateHash(hash, source)
 }
 
 // updateFilesystem sets the correct filesystem ID based on either
@@ -479,6 +501,13 @@ func (e *Entry) updateFilesystem(fs interface{}, markChanged bool) {
 // UpdateHash sets the new hash from the parameter, marking this file as changed
 // if it is different from the existing one.
 func (e *Entry) UpdateHash(hash tree.Hash, source *Entry) {
+	e.replica.lock.Lock()
+	defer e.replica.lock.Unlock()
+
+	e.updateHash(hash, source)
+}
+
+func (e *Entry) updateHash(hash tree.Hash, source *Entry) {
 	if hash.IsZero() {
 		// mark 'to be hashed'
 		e.hash = hash

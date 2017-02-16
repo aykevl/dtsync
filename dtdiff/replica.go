@@ -36,6 +36,7 @@ import (
 	"mime"
 	"net/textproto"
 	"path"
+	"sync"
 	"sort"
 	"strconv"
 	"strings"
@@ -165,6 +166,7 @@ type Replica struct {
 	progressSent        time.Time
 	deviceIdMap         map[uint64]tree.Filesystem
 	filesystemIdCounter tree.Filesystem
+	lock                sync.Mutex
 }
 
 func ScanTree(fs tree.LocalFileTree, recvOptionsChan, sendOptionsChan chan *tree.ScanOptions, progress chan<- *tree.ScanProgress, cancel chan struct{}) (*Replica, error) {
@@ -850,7 +852,7 @@ func (r *Replica) scanDir(dir tree.Entry, statusDir *Entry, cancel chan struct{}
 				}
 			}
 			_, fs := file.Id()
-			status.Update(info, fs, newHash, nil)
+			status.update(info, fs, newHash, nil)
 		}
 
 		if file.Type() == tree.TYPE_DIRECTORY {
