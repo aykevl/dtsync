@@ -7,7 +7,7 @@ install:
 packages=./tree/memory ./tree/file ./tree/remote ./dtdiff ./sync ./dtsync
 
 test:
-	go test $(packages)
+	go test -timeout 2m $(packages)
 
 test-race:
 	go test -race $(packages)
