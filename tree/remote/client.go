@@ -233,6 +233,7 @@ func (c *Client) run(r *bufio.Reader, w *bufio.Writer) {
 			if data.err != nil {
 				if data.err == io.EOF {
 					close(c.closeWait) // all reads will continue immediately
+					debugLog("C: closed")
 					return
 				}
 				debugLog("C: read err:", data.err)
