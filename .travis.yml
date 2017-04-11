@@ -3,6 +3,7 @@ language: go
 go:
   - 1.5 # Minimum supported version (golang.org/x/sys/unix)
   - 1.7 # Debian stretch
+  - 1.8 # Latest stable release
   - tip
 
 addons:
