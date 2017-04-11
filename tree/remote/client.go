@@ -281,6 +281,7 @@ func (c *Client) run(r *bufio.Reader, w *bufio.Writer) {
 					debugLog("C: recv reply  ", *msg.RequestId, "SCANOPTS")
 					job := c.getScanJob()
 					if job == nil {
+						panic("no scan running")
 						pipeErr = ErrInvalidResponse("SCANOPTS: no scan running")
 						continue
 					}
@@ -289,6 +290,7 @@ func (c *Client) run(r *bufio.Reader, w *bufio.Writer) {
 					select {
 					case job.scanOptions <- msg.Data:
 					default:
+						panic("SCANOPTS received but couldn't process")
 						pipeErr = ErrInvalidResponse("SCANOPTS: no scan running")
 					}
 				case Command_SCANPROG:
