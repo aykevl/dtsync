@@ -4,7 +4,7 @@ all: install
 install:
 	go install ./dtsync
 
-packages=./tree/memory ./tree/file ./tree/remote ./dtdiff ./sync ./dtsync
+packages=./sync
 
 test:
 	GODEBUG=cogocheck=2 go test -timeout 2m $(packages)
