@@ -90,11 +90,11 @@ func removeTestRoots(t *testing.T, filesystems ...tree.TestTree) {
 }
 
 func TestSync(t *testing.T) {
-	schemes := []string{"memory", "file", "remote-memory"}
+	schemes := []string{"file", "remote-memory"}
 	for i, scheme1 := range schemes {
 		for j := i; j < len(schemes); j++ {
 			scheme2 := schemes[j]
-			t.Logf("Filesystems: %s + %s", scheme1, scheme2)
+			fmt.Fprintln(os.Stderr, "Filesystems: %s + %s", scheme1, scheme2)
 			syncRoots(t, scheme1, scheme2)
 			if testing.Short() {
 				return
