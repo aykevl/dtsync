@@ -33,6 +33,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"fmt"
+	"os"
 
 	"github.com/aykevl/dtsync/dtdiff"
 	"github.com/aykevl/dtsync/tree"
@@ -219,12 +221,14 @@ path	fingerprint	revision
 		for _, swapped := range []bool{false, true} {
 			for _, fsCheckWith := range []tree.TestTree{fs2, fs1} {
 				for _, tc := range testCases {
-					t.Log("Action:", tc.action, tc.file)
+					//t.Log("Action:", tc.action, tc.file)
+					fmt.Fprintln(os.Stderr, "Action:", tc.action, tc.file)
 					applyTestCase(t, fs1, tc)
 					runTestCase(t, fs1, fs2, fsCheck, fsCheckWith, swapped, scanTwice, tc)
 				}
 				for _, tc := range complexTestCases {
-					t.Log("Action:", tc.action, tc.file)
+					//t.Log("Action:", tc.action, tc.file)
+					fmt.Fprintln(os.Stderr, "Action:", tc.action, tc.file)
 					err := tc.callback(fs1)
 					if err != nil {
 						t.Fatal("could not apply complex test case:", err)

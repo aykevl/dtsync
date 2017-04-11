@@ -33,7 +33,7 @@ import (
 	"os"
 )
 
-const _DEBUG = false
+const _DEBUG = true
 
 func debugLog(args ...interface{}) {
 	// I assume the Go compiler is smart enough to recognize this is often not
