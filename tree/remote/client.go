@@ -371,14 +371,21 @@ func (c *Client) RemoteScan(sendOptions, recvOptions chan *tree.ScanOptions, rec
 	if err != nil {
 		return nil, err
 	}
+
+	// The check that all goroutines related to this scan have closed properly
+	// before ending the scan command.
+	scanOptsFinished := make(chan struct{})
+
 	go func() {
+		// Wait until done, then close the scan command
 		defer close(stream.done)
 		respData := <-ch
-		c.setScanJob(nil)
-		close(job.scanProgress)
 		if respData.err != nil {
 			stream.setError(respData.err)
 		}
+		<-scanOptsFinished // wait until the remote SCANOPTS are received
+		c.setScanJob(nil)
+		close(job.scanProgress)
 	}()
 
 	go func() {
@@ -393,16 +400,21 @@ func (c *Client) RemoteScan(sendOptions, recvOptions chan *tree.ScanOptions, rec
 	}()
 
 	go func() {
+		// Wait for the scan options from the remote replica. Send the result to
+		// the other replica.
 		options, err := parseScanOptions(<-job.scanOptions)
 		if err != nil {
 			stream.setError(err)
 			recvOptions <- nil
 			return
 		}
+		close(scanOptsFinished) // signal we're done
 		recvOptions <- options
 	}()
 
 	go func() {
+		// Receive SCANPROG packets, decode them, and send them to the other
+		// replica (the caller).
 		for data := range job.scanProgress {
 			progress := &ScanProgress{}
 			err := proto.Unmarshal(data, progress)
