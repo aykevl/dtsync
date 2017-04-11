@@ -93,8 +93,9 @@ func TestSync(t *testing.T) {
 	schemes := []string{"file", "remote-memory"}
 	for i, scheme1 := range schemes {
 		for j := i; j < len(schemes); j++ {
-			scheme2 := schemes[j]
-			fmt.Fprintln(os.Stderr, "Filesystems: %s + %s", scheme1, scheme2)
+			scheme1 = "file"
+			scheme2 := "remote-memory"//schemes[j]
+			fmt.Fprintf(os.Stderr, "Filesystems: %s + %s\n", scheme1, scheme2)
 			syncRoots(t, scheme1, scheme2)
 			if testing.Short() {
 				return
