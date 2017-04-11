@@ -432,6 +432,7 @@ func (c *Client) RemoteScan(sendOptions, recvOptions chan *tree.ScanOptions, rec
 // but probably the protobuf serialization), and the remote writes it to a
 // .dtsync file or similar.
 func (c *Client) SendStatus() (tree.Copier, error) {
+	debugLog("\nC: SendStatus")
 	command := Command_PUTSTATE
 	request := &Request{
 		Command: &command,
