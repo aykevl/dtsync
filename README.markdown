@@ -1,5 +1,7 @@
 # Distributed Tree Synchronisation
 
+[![Build Status](https://travis-ci.org/aykevl/dtsync.svg?branch=master)](https://travis-ci.org/aykevl/dtsync)
+
 This is two things at the same time:
 
   * An algorithm that detects differences between two abstract trees. Currently,
