@@ -36,10 +36,10 @@ import (
 	"mime"
 	"net/textproto"
 	"path"
-	"sync"
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/aykevl/dtsync/tree"
