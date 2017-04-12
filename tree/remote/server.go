@@ -59,6 +59,7 @@ type Server struct {
 	replyChan chan replyResponse
 	jobMutex  sync.Mutex
 	job       *serverJob
+	running   bool
 }
 
 type serverJob struct {
@@ -96,6 +97,12 @@ func (s *Server) setJob(j *serverJob) bool {
 // Run runs in a goroutine, until the server experiences a fatal (connection)
 // error. It is used to handle concurrent requests and responses.
 func (s *Server) Run() error {
+	// Lightweight check that the server isn't run twice
+	if s.running {
+		panic("Server: running twice at the same time")
+	}
+	s.running = true
+
 	r := bufio.NewReader(s.reader)
 	w := bufio.NewWriter(s.writer)
 
