@@ -164,7 +164,7 @@ func editJobs(result *sync.Result, root1, root2 string) bool {
 		switch fields[1] {
 		case ">":
 			direction = 1
-		case "?":
+		case "?", "/":
 			direction = 0
 		case "<":
 			direction = -1
