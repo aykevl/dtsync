@@ -98,6 +98,7 @@ func (r *Result) reconcile(statusDir1, statusDir2 *dtdiff.Entry) {
 	for {
 		status1, status2 := iterator()
 		if status1 == nil && status2 == nil {
+			// end of directory
 			break
 		}
 
@@ -127,18 +128,6 @@ func (r *Result) reconcile(statusDir1, statusDir2 *dtdiff.Entry) {
 				status2:       status2,
 				statusParent1: statusDir1,
 				statusParent2: statusDir2,
-			}
-
-			if status1.EqualContents(status2) || bothDirs && !status1.EqualMode(status2) {
-				if status1.EqualMode(status2) {
-					// should never happen
-					panic("same contents and mode?")
-				}
-				// only the mode differs
-				job.action = ACTION_CHMOD
-			} else {
-				// the contents changed
-				job.action = ACTION_UPDATE
 			}
 
 			if status1.Conflict(status2) {
@@ -181,25 +170,45 @@ func (r *Result) reconcile(statusDir1, statusDir2 *dtdiff.Entry) {
 func (r *Result) addSingleJob(job *Job, status1, statusDir2 *dtdiff.Entry, direction int) {
 	if statusDir2 != nil {
 		if !statusDir2.HasRevision(status1) {
-			job.action = ACTION_COPY
+			// copy
 			job.direction = direction
 			job.origDirection = direction
 		} else {
-			// TODO: check for conflicts (a new or updated file
-			// inside status1).
-			job.action = ACTION_REMOVE
-			job.direction = -direction
-			job.origDirection = -direction
+			if status1.Type() == tree.TYPE_DIRECTORY && isDirUpdated(status1, statusDir2) {
+				// conflict: there is an updated file in the to-be-removed
+				// directory
+				job.direction = 0
+				job.origDirection = 0
+			} else {
+				// remove
+				job.direction = -direction
+				job.origDirection = -direction
+			}
 		}
 
-		if job.status1 != nil && job.status1.Type() == tree.TYPE_NOTFOUND || job.status2 != nil && job.status2.Type() == tree.TYPE_NOTFOUND {
-			// Maybe this should be an error.
+		if job.HasError() {
 			job.direction = 0
 			job.origDirection = 0
 		}
 
 		r.jobs = append(r.jobs, job)
 	}
+}
+
+// Check whether at least one of the files in the directory has been updated
+// since the last sync.
+// This is useful to check before removing the directory (it means there is a
+// conflict).
+func isDirUpdated(dir, reference *dtdiff.Entry) bool {
+	if !reference.HasRevision(dir) {
+		return true
+	}
+	for _, child := range dir.List() {
+		if isDirUpdated(child, reference) {
+			return true
+		}
+	}
+	return false
 }
 
 // iterateEntries returns an iterator iterating over the two status dirs. The

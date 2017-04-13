@@ -40,10 +40,12 @@ type Action int
 
 // Some job action constants. The names should be obvious.
 const (
+	ACTION_NONE   Action = iota
 	ACTION_COPY   Action = iota
 	ACTION_UPDATE Action = iota
 	ACTION_CHMOD  Action = iota
 	ACTION_REMOVE Action = iota
+	ACTION_ERROR  Action = iota
 )
 
 // Size to add per inode that is going to be changed. The cost is roughly the
@@ -55,6 +57,8 @@ const COST_PER_INODE = 1024
 func (a Action) String() string {
 	s := "action?"
 	switch a {
+	case ACTION_NONE:
+		s = "none"
 	case ACTION_COPY:
 		s = "copy"
 	case ACTION_UPDATE:
@@ -63,6 +67,8 @@ func (a Action) String() string {
 		s = "chmod"
 	case ACTION_REMOVE:
 		s = "remove"
+	case ACTION_ERROR:
+		s = "error"
 	}
 	return s
 }
@@ -71,7 +77,6 @@ func (a Action) String() string {
 type Job struct {
 	result        *Result
 	applied       bool
-	action        Action
 	status1       *dtdiff.Entry
 	status2       *dtdiff.Entry
 	statusParent1 *dtdiff.Entry
@@ -104,7 +109,7 @@ func (j *Job) String() string {
 // Name returns the filename of the file to be copied, updated, or removed.
 func (j *Job) Name() string {
 	status1, status2 := j.primary()
-	switch j.Direction() {
+	switch j.direction {
 	case 1:
 		return status1.Name()
 	case 0:
@@ -120,7 +125,7 @@ func (j *Job) Name() string {
 // Name().
 func (j *Job) Path() string {
 	status1, status2 := j.primary()
-	switch j.Direction() {
+	switch j.direction {
 	case 1:
 		return path.Join(status1.RelativePath()...)
 	case 0:
@@ -206,7 +211,7 @@ func (j *Job) Apply(progress chan int64) error {
 	fs1 := j.result.fs1
 	fs2 := j.result.fs2
 
-	switch j.Direction() {
+	switch j.direction {
 	case 1:
 		// don't swap
 	case 0:
@@ -329,6 +334,11 @@ func (j *Job) OrigDirection() int {
 // SetDirection sets the job direction, which must be -1, 0, or 1. Any other
 // value will cause a panic.
 func (j *Job) SetDirection(direction int) {
+	if j.HasError() {
+		// Don't change the direction when there's an error.
+		return
+	}
+
 	switch direction {
 	case -1, 0, 1:
 	default:
@@ -339,17 +349,38 @@ func (j *Job) SetDirection(direction int) {
 
 // Action returns the (possibly flipped) action constant.
 func (j *Job) Action() Action {
-	if j.direction != 0 && j.origDirection != 0 && j.direction != j.origDirection {
-		switch j.action {
-		case ACTION_COPY:
-			return ACTION_REMOVE
-		case ACTION_REMOVE:
-			return ACTION_COPY
-		default:
-			return j.action
-		}
+	if j.HasError() {
+		return ACTION_ERROR
 	}
-	return j.action
+
+	status1 := j.status1
+	status2 := j.status2
+
+	switch j.direction {
+	case 1:
+		// don't swap
+	case 0:
+		return ACTION_NONE
+	case -1:
+		// swap: we're going the opposite direction
+		status1, status2 = status2, status1
+	default:
+		panic("unknown direction")
+	}
+
+	if status2 == nil {
+		return ACTION_COPY
+	}
+	if status1 == nil {
+		return ACTION_REMOVE
+	}
+	if j.equalContents() {
+		if status1.EqualMode(status2) {
+			panic("both contents and mode the same within a job?")
+		}
+		return ACTION_CHMOD
+	}
+	return ACTION_UPDATE
 }
 
 // Applied returns true if this action was already applied.
@@ -368,13 +399,20 @@ func (j *Job) status(status, statusParent, otherStatus, otherStatusParent *dtdif
 		}
 	} else if otherStatus == nil {
 		if otherStatusParent.HasRevision(status) {
-			return ""
+			if isDirUpdated(status, otherStatusParent) {
+				// The dir itself isn't changed, but the contents is.
+				// This is a problem when the directory on the other side is
+				// removed.
+				return "chgd-dir"
+			} else {
+				return ""
+			}
 		} else {
 			return "new"
 		}
 	}
 	if status.After(otherStatus) {
-		if j.action == ACTION_CHMOD {
+		if j.equalContents() {
 			return "chmod"
 		} else {
 			return "modified"
@@ -395,7 +433,7 @@ func (j *Job) Cost() int64 {
 	status1 := j.status1
 	status2 := j.status2
 
-	switch j.Direction() {
+	switch j.direction {
 	case 1:
 		// don't swap
 	case 0:
@@ -420,4 +458,22 @@ func (j *Job) Cost() int64 {
 	default:
 		panic("unknown action")
 	}
+}
+
+// equalContents returns true when both sides have equal files (same fingerprint
+// etc)
+func (j *Job) equalContents() bool {
+	// Two directories with the same  name have no 'content' (the files within
+	// don't count)
+	if j.status1.Type() == tree.TYPE_DIRECTORY && j.status2.Type() == tree.TYPE_DIRECTORY {
+		return true
+	}
+	// Compare fingerprint/hash for other file types
+	return j.status1.EqualContents(j.status2)
+}
+
+// HasError returns true if one of the sides encountered an error during the
+// scan.
+func (j *Job) HasError() bool {
+	return j.status1 != nil && j.status1.Type() == tree.TYPE_NOTFOUND || j.status2 != nil && j.status2.Type() == tree.TYPE_NOTFOUND
 }

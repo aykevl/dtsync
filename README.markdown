@@ -30,9 +30,6 @@ it.
 
 ## Issues
 
-There are probably many more issues. Don't rely on this software for anything
-critical.
-
-  * When a file is modified in a directory, and that directory is removed on the
-    other replica, the modified file is likely removed as well (untested).
-
+This tool seems to be stable, although unfinished. I am not aware of any issues
+that will eat your data. I use it for some of my synchronization needs. But be
+careful to check what it does exactly.

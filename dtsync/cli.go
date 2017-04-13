@@ -258,7 +258,9 @@ func cliScan(fs1, fs2 tree.Tree) *sync.Result {
 		case 1:
 			direction = "-->"
 		default:
-			// We might as wel just panic.
+			panic("unknown direction")
+		}
+		if job.HasError() {
 			direction = "!!!"
 		}
 		fmt.Printf("%-8s  %s  %8s   %s\n", job.StatusLeft(), direction, job.StatusRight(), job.RelativePath())

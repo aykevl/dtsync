@@ -256,6 +256,17 @@ path	fingerprint	revision
 		// Otherwise an error is printed on the next check.
 		t.FailNow()
 	}
+
+	for _, schemes := range [][]string{{scheme1, scheme2}, {scheme2, scheme1}} {
+		fs1 = newTestRoot(t, schemes[0])
+		fs2 = newTestRoot(t, schemes[1])
+		defer removeTestRoots(t, fs1, fs2)
+
+		runConflictTest(t, fs1, fs2)
+
+		assert(fs1.Close())
+		assert(fs2.Close())
+	}
 }
 
 func runPatternTest(t *testing.T, fs1, fs2 tree.TestTree) {
@@ -362,6 +373,7 @@ path	fingerprint	revision
 
 	for i, effect := range effects {
 		if i >= len(result.Jobs()) {
+			t.Errorf("too many jobs")
 			break
 		}
 		job := result.Jobs()[i]
@@ -369,11 +381,145 @@ path	fingerprint	revision
 			t.Errorf("job #%d %s should have name %s", i, job, effect.name)
 			continue
 		}
-		if job.Action() != ACTION_COPY {
-			t.Errorf("job #%d %s should be copy", i, job)
-		}
 		if job.Direction() != effect.direction {
 			t.Errorf("job #%d %s direction is not %d but %d", i, job, effect.direction, job.Direction())
+		} else {
+			switch effect.direction {
+			case 0:
+				if job.Action() != ACTION_ERROR {
+					t.Errorf("job #%d %s should be error, not %s", i, job, job.Action())
+				}
+			case 1:
+				if job.Action() != ACTION_COPY {
+					t.Errorf("job #%d %s should be copy, not %s", i, job, job.Action())
+				}
+			default:
+				panic("unknown effect.direction")
+			}
+		}
+	}
+}
+
+func runConflictTest(t *testing.T, fs1, fs2 tree.TestTree) {
+	conflictCases := []struct {
+		name      string
+		callback1 func(fs tree.TestTree) error       // set stage for conflict
+		callback2 func(fs1, fs2 tree.TestTree) error // create conflict
+	}{
+		{"conflict1.txt", func(fs tree.TestTree) error {
+			// Create one file
+			_, err := fs.PutFileTest([]string{"conflict1.txt"}, []byte("abc"))
+			return err
+		}, func(fs1, fs2 tree.TestTree) error {
+			// Update both files
+			_, err := fs1.PutFileTest([]string{"conflict1.txt"}, []byte("foo"))
+			if err != nil {
+				return err
+			}
+			_, err = fs2.PutFileTest([]string{"conflict1.txt"}, []byte("bar"))
+			return err
+		}},
+		{"conflict2.txt", func(fs tree.TestTree) error {
+			return nil
+		}, func(fs1, fs2 tree.TestTree) error {
+			// Create two new files
+			_, err := fs1.PutFileTest([]string{"conflict2.txt"}, []byte("foo"))
+			if err != nil {
+				return err
+			}
+			_, err = fs2.PutFileTest([]string{"conflict2.txt"}, []byte("bar"))
+			return err
+		}},
+		{"dir", func(fs tree.TestTree) error {
+			// Create a directory with a file
+			source := tree.NewFileInfo(nil, tree.TYPE_DIRECTORY, 0755, 0777, time.Now(), 0, 0, tree.Hash{})
+			_, err := fs.CreateDir("dir", &tree.FileInfoStruct{}, source)
+			if err != nil {
+				return err
+			}
+			_, err = fs.PutFileTest([]string{"dir", "file.txt"}, []byte("abc"))
+			return err
+		}, func(fs1, fs2 tree.TestTree) error {
+			// Remove fs1/dir
+			info, err := fs1.ReadInfo([]string{"dir"})
+			if err != nil {
+				t.Fatalf("could not get info for dir: %s", err)
+			}
+			_, err = fs1.Remove(info)
+			if err != nil {
+				return err
+			}
+			// Modify fs1/dir/file.txt
+			_, err = fs2.PutFileTest([]string{"dir", "file.txt"}, []byte("abcdef"))
+			return err
+		}},
+	}
+
+	for i, cc := range conflictCases {
+		for _, resolveDirection := range []int{1, -1} { // resolve in both directions
+			// Apply first callback - set the stage for potential conflicts.
+			err := cc.callback1(fs1)
+			if err != nil {
+				t.Fatalf("could not run conflict test case #%d callback 1: %s", i, err)
+			}
+
+			result, err := Scan(fs1, fs2)
+			if err != nil {
+				t.Fatalf("could not scan in conflict test #%d: %s", i, err)
+			}
+
+			_, err = result.SyncAll()
+			if err != nil {
+				t.Fatalf("could not apply in conflict test #%d: %s", i, err)
+			}
+
+			err = result.SaveStatus()
+			if err != nil {
+				t.Fatalf("could not save the status in conflict test #%d: %s", i, err)
+			}
+
+			// Apply second callback - actually create the conflict.
+			err = cc.callback2(fs1, fs2)
+			if err != nil {
+				t.Fatalf("could not run conflict test case #%d callback 2: %s", i, err)
+			}
+
+			result, err = Scan(fs1, fs2)
+			if err != nil {
+				t.Fatalf("could not scan in conflict test #%d: %s", i, err)
+			}
+			if len(result.Jobs()) != 1 {
+				t.Fatalf("conflict #%d: did not find 1 job but %d", i, len(result.Jobs()))
+			}
+			job := result.Jobs()[0]
+			if job.Direction() != 0 {
+				t.Fatalf("conflict #%d: expected direction 0, got %s", i, job)
+			}
+			if job.Action() != ACTION_NONE {
+				t.Fatalf("conflict #%d: expected action none, got %s", i, job)
+			}
+			job.SetDirection(resolveDirection)
+			_, err = result.SyncAll()
+			if err != nil {
+				t.Fatalf("conflict #%d: could not apply after resolving conflict: %s", i, err)
+			}
+
+			err = result.SaveStatus()
+			if err != nil {
+				t.Fatalf("conflict #%d: could not save the status after resolving the conflict: %s", i, err)
+			}
+
+			// Clean up the tree.
+			for _, fs := range []tree.TestTree{fs1, fs2} {
+				info, err := fs.ReadInfo([]string{cc.name})
+				if tree.IsNotExist(err) {
+					continue
+				}
+				if err != nil {
+					t.Fatalf("could not get info for file %s: %s", cc.name, err)
+				}
+				_, err = fs.Remove(info)
+			}
 		}
 	}
 }
@@ -638,7 +784,7 @@ func runTestCaseScan(t *testing.T, tc *testCase, fs1, fs2 tree.TestTree, jobDire
 			t.Errorf("expected direction for %s to be %d, not %d", job, jobDirection, job.direction)
 		}
 		parts := strings.Split(tc.file, "/")
-		if job.action != tc.action || job.Name() != parts[len(parts)-1] {
+		if job.Action() != tc.action || job.Name() != parts[len(parts)-1] {
 			t.Errorf("expected a %s job for file %s, but got %s", tc.action, tc.file, job)
 		}
 	}
