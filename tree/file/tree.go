@@ -95,7 +95,7 @@ func NewRoot(rootPath string) (*Tree, error) {
 // NewTestRoot returns a new root in a temporary directory. It should be removed
 // after use using root.Remove()
 func NewTestRoot() (*Tree, error) {
-	rootPath1, err := ioutil.TempDir("", "usync-test-")
+	rootPath1, err := ioutil.TempDir("", "dtsync-test-")
 	if err != nil {
 		return nil, err
 	}

@@ -45,7 +45,7 @@ import (
 
 // A prefix and suffix for files that are being copied.
 const (
-	TEMPPREFIX = ".usync-"
+	TEMPPREFIX = ".dtsync-"
 	TEMPSUFFIX = ".tmp"
 )
 
