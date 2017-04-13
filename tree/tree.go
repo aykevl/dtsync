@@ -99,7 +99,7 @@ type HashType int
 
 const (
 	HASH_NONE    HashType = 0 // no hash (nil)
-	HASH_DEFAULT HashType = 1 // the hash that is set witt the Hash header
+	HASH_DEFAULT HashType = 1 // the hash that is set with the Hash header
 	HASH_TARGET  HashType = 2 // path of the symlink (via readlink())
 )
 
