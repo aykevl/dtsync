@@ -47,7 +47,7 @@ var editorCommand = flag.String("editor", "/usr/bin/editor", "Editor to use for 
 
 const ERASE_SOL = "\033[2K\r"
 
-func editJobs(result *sync.Result, root1, root2 string) bool {
+func editJobs(result *sync.Result, profile *Profile) bool {
 	jobs := result.Jobs()
 
 	tmpFile, err := ioutil.TempFile("", "dtsync-edit-")
@@ -67,7 +67,7 @@ func editJobs(result *sync.Result, root1, root2 string) bool {
 #  ?  skip
 # Lines starting with '#' are comments and are ignored.
 # Removing a line has the same effect as marking it '?'.
-`, root1, root2)
+`, profile.root1, profile.root2)
 	for _, job := range jobs {
 		statusLeft := job.StatusLeft()
 		if statusLeft == "" {
@@ -269,15 +269,15 @@ func cliScan(fs1, fs2 tree.Tree) *sync.Result {
 	return result
 }
 
-func runCLI(root1, root2 string) {
-	fs1, err := sync.NewTree(root1)
+func runCLI(profile *Profile) {
+	fs1, err := sync.NewTree(profile.root1)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Could not open first root %s: %s\n", root1, err)
+		fmt.Fprintf(os.Stderr, "Could not open first root %s: %s\n", profile.root1, err)
 		return
 	}
-	fs2, err := sync.NewTree(root2)
+	fs2, err := sync.NewTree(profile.root2)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Could not open second root %s: %s\n", root2, err)
+		fmt.Fprintf(os.Stderr, "Could not open second root %s: %s\n", profile.root2, err)
 		return
 	}
 
@@ -327,7 +327,7 @@ func runCLI(root1, root2 string) {
 	}
 
 	if action == actionEdit {
-		if !editJobs(result, root1, root2) {
+		if !editJobs(result, profile) {
 			return
 		}
 	}

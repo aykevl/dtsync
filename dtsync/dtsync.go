@@ -85,18 +85,31 @@ func main() {
 		return
 	}
 
-	if flag.NArg() != 2 {
-		usage()
-		return
-	}
-
-	root1 := flag.Arg(0)
-	root2 := flag.Arg(1)
 	switch *outputType {
 	case "term":
-		runCLI(root1, root2)
+		var profile *Profile
+		if flag.NArg() == 1 {
+			// Load profile
+			var err error
+			profile, err = NewConfigProfile(flag.Arg(0))
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Could not load profile %s: %s", flag.Arg(0), err)
+				return
+			}
+		} else if flag.NArg() == 2 {
+			// Load pair of replicas
+			profile = NewPairProfile(flag.Arg(0), flag.Arg(1))
+		} else {
+			usage()
+			return
+		}
+		runCLI(profile)
 	case "msgpack":
-		runMsgpack(root1, root2)
+		if flag.NArg() != 0 {
+			fmt.Fprintf(os.Stderr, "Msgpack output chosen, don't provide extra parameters")
+			return
+		}
+		runMsgpack()
 	default:
 		fmt.Fprintf(os.Stderr, "Unknown output type (options are: term, msgpack).\n")
 		usage()

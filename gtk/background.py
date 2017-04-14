@@ -25,7 +25,7 @@ class Background:
 
     def process(self):
         try:
-            self.daemon = subprocess.Popen(['dtsync', '-output', 'msgpack', self.main.root1, self.main.root2], stdin=subprocess.PIPE, stdout=subprocess.PIPE, bufsize=0)
+            self.daemon = subprocess.Popen(['dtsync', '-output', 'msgpack'], stdin=subprocess.PIPE, stdout=subprocess.PIPE, bufsize=0)
         except:
             raise
         finally:
@@ -35,7 +35,9 @@ class Background:
             if self.willExit:
                 print('Expected the process to exit?')
 
-            if msg['message'] == 'scan-progress':
+            if msg['message'] == 'scan-profile':
+                GLib.idle_add(self.main.on_scan_profile, msg['value'])
+            elif msg['message'] == 'scan-progress':
                 GLib.idle_add(self.main.on_scan_progress, msg['value'])
             elif msg['message'] == 'scan-finished':
                 GLib.idle_add(self.main.on_scan_finished, msg['value'])
@@ -80,10 +82,17 @@ class Background:
             'direction': direction,
         })
 
-    def scan(self):
-        self.sendQueue.put({
-            'command':   'scan',
-        })
+    def scan(self, profile):
+        if profile.get('name'):
+            self.sendQueue.put({
+                'command': 'scan',
+                'profile': profile['name'],
+            })
+        else:
+            self.sendQueue.put({
+                'command': 'scan',
+                'roots': [profile['root1'], profile['root2']],
+            })
 
     def apply(self):
         self.sendQueue.put({

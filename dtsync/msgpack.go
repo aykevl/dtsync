@@ -52,6 +52,12 @@ type mpMessage struct {
 	Error   string      `codec:"error,omitempty"`
 }
 
+type profileValue struct {
+	Name  string `codec:"name"`
+	Root1 string `codec:"root1"`
+	Root2 string `codec:"root2"`
+}
+
 type progressValue struct {
 	Done  uint64 `codec:"done"`
 	Total uint64 `codec:"total"`
@@ -98,9 +104,11 @@ type jobQueueItem struct {
 }
 
 type mpCommand struct {
-	Command   string `codec:"command"`
-	Jobs      []int  `codec:"jobs"`
-	Direction int    `codec:"direction"`
+	Command   string   `codec:"command"`
+	Jobs      []int    `codec:"jobs"`
+	Direction int      `codec:"direction"`
+	Roots     []string `codec:"roots"`
+	Profile   string   `codec:"profile"`
 }
 
 type MessagePack struct {
@@ -265,18 +273,8 @@ type applyState struct {
 	workers   sync.WaitGroup
 }
 
-func runMsgpack(root1, root2 string) {
+func runMsgpack() {
 	mp := newMessagePack()
-	fs1, err := dtsync.NewTree(root1)
-	if err != nil {
-		mp.sendError("could not open root", 0, err)
-		return
-	}
-	fs2, err := dtsync.NewTree(root2)
-	if err != nil {
-		mp.sendError("could not open root", 1, err)
-		return
-	}
 
 	var result *dtsync.Result
 
@@ -290,6 +288,37 @@ func runMsgpack(root1, root2 string) {
 
 		switch command.Command {
 		case "scan":
+			var profile *Profile
+			if command.Profile != "" {
+				profile, err = NewConfigProfile(command.Profile)
+				if err != nil {
+					mp.sendError("could not open profile", -1, err)
+					return
+				}
+			} else if len(command.Roots) == 2 {
+				profile = NewPairProfile(command.Roots[0], command.Roots[1])
+			} else {
+				mp.sendError("provide a profile or two roots (protocol error)", -1, nil)
+				return
+			}
+
+			mp.sendValue("scan-profile", -1, profileValue{
+				Name:  profile.name,
+				Root1: profile.root1,
+				Root2: profile.root2,
+			})
+
+			fs1, err := dtsync.NewTree(profile.root1)
+			if err != nil {
+				mp.sendError("could not open root", 0, err)
+				return
+			}
+			fs2, err := dtsync.NewTree(profile.root2)
+			if err != nil {
+				mp.sendError("could not open root", 1, err)
+				return
+			}
+
 			progress, optionProgress := dtsync.Progress()
 			progressExit := make(chan struct{})
 			go func() {

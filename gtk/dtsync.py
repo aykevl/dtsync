@@ -62,10 +62,8 @@ def format_size(num, suffix='B'):
 class Main(Gtk.Window):
     state = State.none
 
-    def __init__(self, root1, root2):
-        self.root1 = root1
-        self.root2 = root2
-
+    def __init__(self, profile):
+        self.profile = profile
         Gtk.Window.__init__(self, title='DTSync')
         self.set_name('DTSync')
         self.resize(1000, 600)
@@ -75,7 +73,6 @@ class Main(Gtk.Window):
         self.load_style()
 
         self.background = Background(self)
-
         GLib.idle_add(self.scan)
 
     def setup_window(self):
@@ -110,8 +107,8 @@ class Main(Gtk.Window):
         self.btnRight.connect('clicked', self.on_right)
         toolbar.pack_start(self.btnRight, False, False, 0)
 
-        rootsbox = Gtk.Label('Dir 1: %s\nDir 2: %s' % (self.root1, self.root2))
-        toolbar.pack_end(rootsbox, False, False, 0)
+        self.rootsbox = Gtk.Label('Dir 1: --\nDir 2: --')
+        toolbar.pack_end(self.rootsbox, False, False, 0)
 
         self.store = Gtk.ListStore(int, str, str, str, str, str, str)
 
@@ -230,6 +227,10 @@ class Main(Gtk.Window):
             return
         self.scan()
 
+    def on_scan_profile(self, profile):
+        self.profile = profile
+        self.rootsbox.set_text('Dir 1: %s\nDir 2: %s' % (self.profile.get('root1', '--'), self.profile.get('root2', '--')))
+
     def on_apply(self, widget=None):
         if self.state != State.scanned:
             return
@@ -301,7 +302,7 @@ class Main(Gtk.Window):
         self.reset_applybox()
         self.store.clear()
         self.infobox.set_text('')
-        self.background.scan()
+        self.background.scan(self.profile)
 
     def on_scan_progress(self, progresses):
         for i in range(2):
@@ -396,10 +397,13 @@ class Main(Gtk.Window):
                 job['path']]
 
 def main():
-    if len(sys.argv) < 3:
-        print('need at least 2 arguments: root1 and root2')
+    if len(sys.argv) == 2:
+        win = Main({'name': sys.argv[1]})
+    elif len(sys.argv) == 3:
+        win = Main({'root1': sys.argv[1], 'root2': sys.argv[2]})
+    else:
+        print('need either a profile name or two roots')
         return
-    win = Main(sys.argv[1], sys.argv[2])
     win.connect('delete-event', Gtk.main_quit)
     win.show_all()
     Gtk.main()
