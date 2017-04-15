@@ -28,6 +28,20 @@ it.
 
     go get github.com/aykevl/dtsync/dtsync
 
+## Package overview
+
+To make the whole system a bit more modular, I've split the software in various
+packages:
+
+| package  | description |
+| -------- | ----------- |
+| `tree/memory`<br>`tree/file`<br>`tree/remote` | Abstraction layer to various types of filesystems. In practice, only `tree/file` and `tree/remote` will be used, but more might be added in the future (e.g. things like MTP, sftp/sshfs, or things I haven't even thought about). `tree/memory` is only used to speed up testing. |
+| `tree`   | Contains various interfaces and utility functions for the `tree/*` packages. |
+| `dtdiff` | Contains the current tree state. Saves it to a file, loads it from a file, and contains methods to stream to/from a remote host. It also scans using a `tree/*` interface, and updates the current state accordingly. |
+| `sync`   | Contains the actual algorithms for synchronization. It creates two `tree` interfaces, commands `dtsync` to scan it, and then compares both trees.  This results in a list of jobs that can be displayed to the user, changed in direction if necessary, and can be applied. |
+| `dtsync` | Contains the actual command (the main package). It contains both a command line client and a client using [msgpack](https://msgpack.org/) on stdin/stdout. The latter can be used to develop GUIs, or maybe other interesting interfaces. |
+| `gtk`    | A GTK3 frontend, using the msgpack interface. |
+
 ## Issues
 
 This tool seems to be stable, although unfinished. I am not aware of any issues
