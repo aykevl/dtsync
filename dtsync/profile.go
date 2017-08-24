@@ -29,6 +29,7 @@
 package main
 
 import (
+	"os"
 	"strconv"
 
 	"github.com/aykevl/dtsync/tree"
@@ -56,9 +57,36 @@ type Profile struct {
 // NewConfigProfile loads and parses the given profile config file and returns a
 // Profile including name and roots.
 func NewConfigProfile(name string) (*Profile, error) {
-	config, err := loadConfig(name)
+	loadedProfiles := map[string]struct{} {
+		name:      struct{}{},
+		"default": struct{}{},
+	}
+
+	config := make(map[string][]string)
+	err := loadConfig("default", config)
+	if err != nil && !os.IsNotExist(err) {
+		// Don't return an error when the default config does not exist.
+		return nil, err
+	}
+	err = loadConfig(name, config)
 	if err != nil {
 		return nil, err
+	}
+
+	for len(config["import"]) > 0 { // recursively do all imports
+		imports := config["import"]
+		delete(config, "import")
+		for _, name := range imports {
+			if _, ok := loadedProfiles[name]; ok {
+				// Don't import twice. And: don't create cycles
+				continue
+			}
+			loadedProfiles[name] = struct{}{}
+			err = loadConfig(name, config)
+			if err != nil {
+				return nil, err
+			}
+		}
 	}
 
 	options := &tree.ScanOptions{}

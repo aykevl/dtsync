@@ -59,26 +59,25 @@ const CONFIG_DIRECTORY = ".config/dtsync"
 const CONFIG_EXT = ".cfg"
 
 // loadConfig reads a config file and parses it in a map of string slices.
-func loadConfig(name string) (map[string][]string, error) {
+func loadConfig(name string, config map[string][]string) error {
 	if !validConfigName(name) {
-		return nil, ErrInvalidConfigName
+		return ErrInvalidConfigName
 	}
 
 	user, err := user.Current()
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	if user.HomeDir == "" {
-		return nil, ErrNoUserHome
+		return ErrNoUserHome
 	}
 
 	path := filepath.Join(user.HomeDir, CONFIG_DIRECTORY, name+CONFIG_EXT)
 
-	config := make(map[string][]string)
 	fp, err := os.Open(path)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer fp.Close()
 	reader := bufio.NewReader(fp)
@@ -90,7 +89,7 @@ func loadConfig(name string) (map[string][]string, error) {
 			if err == io.EOF {
 				break
 			}
-			return nil, err
+			return err
 		}
 		line := string(bline)
 		line = strings.TrimSpace(line)
@@ -114,25 +113,25 @@ func loadConfig(name string) (map[string][]string, error) {
 				// end of key
 				if i == 0 {
 					// not sure whether this is possible
-					return nil, ParseError{name, lineno, "empty key"}
+					return ParseError{name, lineno, "empty key"}
 				}
 				key = line[:i]
 				break
 			}
 			// Invalid character
-			return nil, ParseError{name, lineno, "invalid character in key: " + string(c)}
+			return ParseError{name, lineno, "invalid character in key: " + string(c)}
 		}
 
 		value := strings.TrimSpace(line[len(key)+1:])
 
 		if key == "" || value == "" {
-			return nil, ParseError{name, lineno, "key without value"}
+			return ParseError{name, lineno, "key without value"}
 		}
 
 		config[key] = append(config[key], value)
 	}
 
-	return config, nil
+	return nil
 }
 
 // validConfigName checks whether names adhere to [a-zA-Z0-9,_-] and don't start
