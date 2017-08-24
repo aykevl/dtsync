@@ -30,6 +30,8 @@ package main
 
 import (
 	"strconv"
+
+	"github.com/aykevl/dtsync/tree"
 )
 
 // ProfileError is returned when a non-syntax error appears in a config file,
@@ -45,9 +47,10 @@ func (e ProfileError) Error() string {
 
 // Profile contains two roots and optionally a profile name.
 type Profile struct {
-	name  string
-	root1 string
-	root2 string
+	name    string
+	root1   string
+	root2   string
+	options *tree.ScanOptions
 }
 
 // NewConfigProfile loads and parses the given profile config file and returns a
@@ -58,6 +61,8 @@ func NewConfigProfile(name string) (*Profile, error) {
 		return nil, err
 	}
 
+	options := &tree.ScanOptions{}
+
 	// Extract values from config file
 	var roots []string
 	for key, values := range config {
@@ -67,15 +72,22 @@ func NewConfigProfile(name string) (*Profile, error) {
 				return nil, ProfileError{name, "expected exactly 2 roots, got " + strconv.Itoa(len(values))}
 			}
 			roots = values
+		case "exclude":
+			options.Exclude = append(options.Exclude, values...)
+		case "include":
+			options.Include = append(options.Include, values...)
+		case "follow":
+			options.Follow = append(options.Follow, values...)
 		default:
 			return nil, ProfileError{name, "unknown key " + key}
 		}
 	}
 
 	return &Profile{
-		name:  name,
-		root1: roots[0],
-		root2: roots[1],
+		name:    name,
+		root1:   roots[0],
+		root2:   roots[1],
+		options: options,
 	}, nil
 }
 

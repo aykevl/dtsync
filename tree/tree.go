@@ -186,7 +186,7 @@ type RemoteTree interface {
 	// The sendOptions are sent to the remote scanner (scan will start once
 	// received), and recvOptions is a channel from which the options sent by
 	// the remote can be read.
-	RemoteScan(sendOptions, recvOptions chan *ScanOptions, progress chan<- *ScanProgress, cancel chan struct{}) (io.ReadCloser, error)
+	RemoteScan(extraOptions *ScanOptions, sendOptions, recvOptions chan *ScanOptions, progress chan<- *ScanProgress, cancel chan struct{}) (io.ReadCloser, error)
 
 	// SendStatus is used to overwrite the status file on the remote. Data (in
 	// e.g. protobuf format) can be written to the Copier.
@@ -711,6 +711,16 @@ type ScanOptions struct {
 	Follow  []string
 	Perms   Mode
 	Replica string
+}
+
+func (o *ScanOptions) Add(options *ScanOptions) {
+	if options == nil {
+		return
+	}
+	o.Exclude = append(o.Exclude, options.Exclude...)
+	o.Include = append(o.Include, options.Include...)
+	o.Follow = append(o.Follow, options.Follow...)
+	o.Perms &= options.Perms
 }
 
 // ScanProgress holds the current progress (total estimated number and current

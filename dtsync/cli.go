@@ -191,7 +191,7 @@ func editJobs(result *sync.Result, profile *Profile) bool {
 	return true
 }
 
-func cliScan(fs1, fs2 tree.Tree) *sync.Result {
+func cliScan(fs1, fs2 tree.Tree, options *tree.ScanOptions) *sync.Result {
 	progress, optionProgress := sync.Progress()
 	go func() {
 		for p := range progress {
@@ -229,7 +229,7 @@ func cliScan(fs1, fs2 tree.Tree) *sync.Result {
 		fmt.Print(ERASE_SOL + "progress: scan finished")
 	}()
 
-	result, err := sync.Scan(fs1, fs2, optionProgress)
+	result, err := sync.Scan(fs1, fs2, optionProgress, sync.ExtraOptions(options))
 	fmt.Print(ERASE_SOL)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Could not scan roots:", err)
@@ -281,7 +281,7 @@ func runCLI(profile *Profile) {
 		return
 	}
 
-	result := cliScan(fs1, fs2)
+	result := cliScan(fs1, fs2, profile.options)
 	if result == nil {
 		// something went wrong
 		return
@@ -309,7 +309,7 @@ func runCLI(profile *Profile) {
 		case "q", "quit", "n", "no":
 			action = actionQuit
 		case "r":
-			result = cliScan(fs1, fs2)
+			result = cliScan(fs1, fs2, profile.options)
 			if result == nil {
 				return
 			}

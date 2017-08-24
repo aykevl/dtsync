@@ -346,7 +346,7 @@ func (c *Client) Close() error {
 
 // RemoteScan runs a remote scan command and returns an io.Reader with the new
 // status file.
-func (c *Client) RemoteScan(sendOptions, recvOptions chan *tree.ScanOptions, recvProgress chan<- *tree.ScanProgress, cancel chan struct{}) (io.ReadCloser, error) {
+func (c *Client) RemoteScan(extraOptions *tree.ScanOptions, sendOptions, recvOptions chan *tree.ScanOptions, recvProgress chan<- *tree.ScanProgress, cancel chan struct{}) (io.ReadCloser, error) {
 	debugLog("\nC: RemoteScan")
 
 	job := &scanJob{
@@ -390,7 +390,9 @@ func (c *Client) RemoteScan(sendOptions, recvOptions chan *tree.ScanOptions, rec
 
 	go func() {
 		// Send excluded files from the other replica to the remote replica.
-		optionsData := serializeScanOptions(<-sendOptions)
+		options := <-sendOptions
+		options.Add(extraOptions)
+		optionsData := serializeScanOptions(options)
 		commandScanOptions := Command_SCANOPTS
 		statusRequest := &Request{
 			Command: &commandScanOptions,
@@ -408,6 +410,7 @@ func (c *Client) RemoteScan(sendOptions, recvOptions chan *tree.ScanOptions, rec
 			recvOptions <- nil
 			return
 		}
+		options.Add(extraOptions)
 		close(scanOptsFinished) // signal we're done
 		recvOptions <- options
 	}()

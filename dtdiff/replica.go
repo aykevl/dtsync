@@ -169,7 +169,7 @@ type Replica struct {
 	lock                sync.Mutex
 }
 
-func ScanTree(fs tree.LocalFileTree, recvOptionsChan, sendOptionsChan chan *tree.ScanOptions, progress chan<- *tree.ScanProgress, cancel chan struct{}) (*Replica, error) {
+func ScanTree(fs tree.LocalFileTree, extraOptions *tree.ScanOptions, recvOptionsChan, sendOptionsChan chan *tree.ScanOptions, progress chan<- *tree.ScanProgress, cancel chan struct{}) (*Replica, error) {
 	var replica *Replica
 	file, err := fs.GetFile(STATUS_FILE)
 	if tree.IsNotExist(err) {
@@ -183,6 +183,8 @@ func ScanTree(fs tree.LocalFileTree, recvOptionsChan, sendOptionsChan chan *tree
 	if err != nil {
 		return nil, err
 	}
+
+	replica.addScanOptions(extraOptions)
 
 	options := replica.scanOptions()
 	replica.addScanOptions(options)
@@ -908,6 +910,9 @@ func (r *Replica) scanOptions() *tree.ScanOptions {
 }
 
 func (r *Replica) addScanOptions(options *tree.ScanOptions) {
+	if options == nil {
+		return
+	}
 	r.exclude = append(r.exclude, options.Exclude...)
 	r.include = append(r.include, options.Include...)
 	r.follow = append(r.follow, options.Follow...)

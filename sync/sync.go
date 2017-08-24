@@ -49,20 +49,31 @@ var (
 // Result is returned by Scan on success. It contains the scan jobs that can
 // then be applied.
 type Result struct {
-	lock       gosync.Mutex
-	rs         *dtdiff.ReplicaSet
-	fs1        tree.Tree
-	fs2        tree.Tree
-	jobs       []*Job
-	countTotal int
-	countError int
-	progress   chan<- dtdiff.ScanProgress
+	lock         gosync.Mutex
+	rs           *dtdiff.ReplicaSet
+	fs1          tree.Tree
+	fs2          tree.Tree
+	jobs         []*Job
+	countTotal   int
+	countError   int
+	progress     chan<- dtdiff.ScanProgress
+	extraOptions *tree.ScanOptions
 }
 
+// Progress is an option parameter for Scan(). It gives callers a channel with
+// progress information.
 func Progress() (chan dtdiff.ScanProgress, func(*Result)) {
 	progress := make(chan dtdiff.ScanProgress)
 	return progress, func(r *Result) {
 		r.progress = progress
+	}
+}
+
+// ExtraOptions is an option parameter for Scan(). It specifies which extra
+// options (exclude/include files etc.) must be given to the sync.
+func ExtraOptions(options *tree.ScanOptions) func(*Result) {
+	return func(r *Result) {
+		r.extraOptions = options
 	}
 }
 
@@ -78,7 +89,7 @@ func Scan(fs1, fs2 tree.Tree, options ...func(*Result)) (*Result, error) {
 	}
 
 	var err error
-	r.rs, err = dtdiff.Scan(fs1, fs2, dtdiff.Progress(r.progress))
+	r.rs, err = dtdiff.Scan(fs1, fs2, dtdiff.Progress(r.progress), dtdiff.ExtraOptions(r.extraOptions))
 	if err != nil {
 		return nil, err
 	}

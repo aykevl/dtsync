@@ -698,7 +698,7 @@ func (s *Server) scan(requestId uint64, job *serverJob) {
 		}
 	}()
 
-	replica, err := dtdiff.ScanTree(s.fs, recvOptions, sendOptions, progressChan, cancel)
+	replica, err := dtdiff.ScanTree(s.fs, nil, recvOptions, sendOptions, progressChan, cancel)
 	<-progressDone
 	if err != nil {
 		close(cancel)

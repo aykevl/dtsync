@@ -334,7 +334,7 @@ func runMsgpack() {
 				close(progressExit)
 			}()
 
-			result, err = dtsync.Scan(fs1, fs2, optionProgress)
+			result, err = dtsync.Scan(fs1, fs2, optionProgress, dtsync.ExtraOptions(profile.options))
 
 			// Make sure the progress values have been fully sent before sending the
 			// status.

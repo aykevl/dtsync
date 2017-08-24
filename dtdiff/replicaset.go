@@ -34,13 +34,20 @@ import (
 
 // ReplicaSet is a combination of two replicas
 type ReplicaSet struct {
-	set      [2]*Replica
-	progress chan<- ScanProgress
+	set          [2]*Replica
+	progress     chan<- ScanProgress
+	extraOptions *tree.ScanOptions
 }
 
 func Progress(progress chan<- ScanProgress) func(*ReplicaSet) {
 	return func(rs *ReplicaSet) {
 		rs.progress = progress
+	}
+}
+
+func ExtraOptions(extraOptions *tree.ScanOptions) func(*ReplicaSet) {
+	return func(rs *ReplicaSet) {
+		rs.extraOptions = extraOptions
 	}
 }
 
@@ -75,14 +82,14 @@ func Scan(fs1, fs2 tree.Tree, options ...func(*ReplicaSet)) (*ReplicaSet, error)
 		go func() {
 			switch fs := trees[i].(type) {
 			case tree.LocalFileTree:
-				replica, err := ScanTree(fs, sendOptions[i], sendOptions[(i+1)%2], scanProgress[i], scanCancel[i])
+				replica, err := ScanTree(fs, rs.extraOptions, sendOptions[i], sendOptions[(i+1)%2], scanProgress[i], scanCancel[i])
 				if err == nil {
 					rs.set[i] = replica
 				}
 				scanErrors[i] <- err
 
 			case tree.RemoteTree:
-				reader, err := fs.RemoteScan(sendOptions[i], sendOptions[(i+1)%2], scanProgress[i], scanCancel[i])
+				reader, err := fs.RemoteScan(rs.extraOptions, sendOptions[i], sendOptions[(i+1)%2], scanProgress[i], scanCancel[i])
 				if err != nil {
 					scanErrors[i] <- err
 					return
