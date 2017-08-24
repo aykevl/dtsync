@@ -390,7 +390,7 @@ class Main(Gtk.Window):
             stateColor = COLOR_CHANGED
         return [i,
                 job['sides'][0]['status'],
-                {-1: '←', 0: '?', 1: '→'}.get(job['direction'], '!!!'),
+                {-1: '    ←', 0: '  ?  ', 1: '→    '}.get(job['direction'], ' !!! '),
                 stateColor,
                 job['sides'][1]['status'],
                 '',
